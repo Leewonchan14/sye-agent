@@ -340,13 +340,12 @@ const RotatingPhrase = () => {
   }, []);
 
   return (
-    <span
-      className="rounded-md px-2 py-0.5 text-[11px] font-medium transition-opacity duration-300"
-      style={{
-        backgroundColor: "var(--color-primary)",
-        color: "#fff",
-      }}
-    >
+    <span className="flex items-center gap-1.5 text-[12px] font-medium transition-opacity duration-300" style={{ color: "var(--color-muted)" }}>
+      <img
+        src="/munjackgui.webp"
+        alt="치이카와"
+        className="size-5 rounded-full object-cover"
+      />
       {phrases[idx]}
     </span>
   );
