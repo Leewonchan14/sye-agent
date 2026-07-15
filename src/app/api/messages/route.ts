@@ -1,7 +1,27 @@
 import { requireAuth } from "@/lib/auth";
-import { getMessages } from "@/lib/db";
+import { getMessages, saveMessage } from "@/lib/db";
 
 export const runtime = "nodejs";
+
+export const POST = async (req: Request) => {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
+  try {
+    const { sessionId, role, content, reasoning } = await req.json();
+    if (!sessionId || !role || !content) {
+      return Response.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (!["user", "assistant", "tool"].includes(role)) {
+      return Response.json({ error: "Invalid role" }, { status: 400 });
+    }
+    await saveMessage(sessionId, role, content, reasoning ?? null);
+    return Response.json({ success: true });
+  } catch (error) {
+    console.error("Failed to save message:", error);
+    return Response.json({ error: "Failed to save message" }, { status: 500 });
+  }
+};
 
 export const GET = async (req: Request) => {
   const authError = await requireAuth(req);

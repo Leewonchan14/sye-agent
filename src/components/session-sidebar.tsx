@@ -1,8 +1,8 @@
 "use client";
 
-import { PanelLeft, Plus } from "lucide-react";
-
 import { useQuery } from "@tanstack/react-query";
+import { PanelLeft, Plus } from "lucide-react";
+import useLocalStorageState from "use-local-storage-state";
 
 interface Session {
   id: string;
@@ -17,10 +17,10 @@ interface Props {
   onNew: () => void;
   isOpen: boolean;
   onToggle: () => void;
+  onUnauthed?: () => void;
 }
 
-const truncate = (t: string, n: number) =>
-  t.length > n ? t.slice(0, n) + "..." : t;
+const truncate = (t: string, n: number) => (t.length > n ? t.slice(0, n) + "..." : t);
 
 export const SessionSidebar = ({
   activeSessionId,
@@ -28,12 +28,18 @@ export const SessionSidebar = ({
   onNew,
   isOpen,
   onToggle,
+  onUnauthed,
 }: Props) => {
+  const [tk] = useLocalStorageState("auth_token", { defaultValue: "" });
+
   const { data: sessions = [], isLoading: loading } = useQuery({
     queryKey: ["sessions"],
     queryFn: async () => {
-      const tk = localStorage.getItem("auth_token") ?? "";
       const r = await fetch("/api/sessions", { headers: { "x-auth-token": tk } });
+      if (r.status === 401) {
+        onUnauthed?.();
+        return [];
+      }
       const d = await r.json();
       return (d.sessions ?? []) as Session[];
     },
@@ -94,15 +100,17 @@ export const SessionSidebar = ({
               onMouseEnter={btnHover}
               onMouseLeave={btnLeave}
             >
-              <Plus className="h-4 w-4" />
-              새 채팅
+              <Plus className="h-4 w-4" />새 채팅
             </button>
           </div>
 
           {/* Session list */}
           <nav className="flex-1 overflow-y-auto px-2 py-1">
             {!loading && !sessions.length && (
-              <div className="px-3 py-4 text-xs" style={{ color: css("color-muted-soft") }}>
+              <div
+                className="px-3 py-4 text-xs"
+                style={{ color: css("color-muted-soft") }}
+              >
                 아직 채팅이 없습니다
               </div>
             )}
@@ -119,7 +127,8 @@ export const SessionSidebar = ({
                     color: active ? css("color-ink") : css("color-muted"),
                   }}
                   onMouseEnter={(e) => {
-                    if (!active) e.currentTarget.style.backgroundColor = css("color-canvas-soft");
+                    if (!active)
+                      e.currentTarget.style.backgroundColor = css("color-canvas-soft");
                   }}
                   onMouseLeave={(e) => {
                     if (!active) e.currentTarget.style.backgroundColor = "transparent";
@@ -130,8 +139,6 @@ export const SessionSidebar = ({
               );
             })}
           </nav>
-
-
         </>
       ) : (
         /* Collapsed: Claude.ai-style icon-only strip */
@@ -159,7 +166,6 @@ export const SessionSidebar = ({
           >
             <Plus className="h-5 w-5" />
           </button>
-
         </div>
       )}
     </aside>

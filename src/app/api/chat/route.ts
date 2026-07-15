@@ -3,16 +3,10 @@ import { createAgentUIStreamResponse } from "ai";
 import { getAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
 import { saveMessage } from "@/lib/db";
+import { createMessageHelper } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const extractTextParts = (msg: { parts?: { type: string; text?: string }[] }): string =>
-  msg.parts
-    ?.filter((p) => p.type === "text")
-    .map((p) => p.text ?? "")
-    .join("")
-    .trim() || "";
 
 export const POST = async (req: Request) => {
   const authError = await requireAuth(req);
@@ -38,7 +32,7 @@ export const POST = async (req: Request) => {
   // Save user message to Neon DB (non-blocking)
   const lastMsg = messages[messages.length - 1];
   if (lastMsg?.role === "user" && sessionId) {
-    const userText = extractTextParts(lastMsg);
+    const userText = createMessageHelper(lastMsg).extractText().trim();
     if (userText) {
       saveMessage(sessionId, "user", userText).catch((err) =>
         console.error("Failed to save user message:", err)
@@ -53,18 +47,6 @@ export const POST = async (req: Request) => {
     uiMessages: messages,
     onStepEnd: async (step) => {
       if (!sessionId) return;
-
-      // Save assistant text + reasoning
-      if (step.text || step.reasoningText) {
-        saveMessage(
-          sessionId,
-          "assistant",
-          step.text ?? "",
-          step.reasoningText,
-        ).catch((err) =>
-          console.error("Failed to save assistant message:", err)
-        );
-      }
 
       // Save tool call + result pairs
       for (const tc of step.toolCalls) {

@@ -2,7 +2,6 @@
 
 import type { ToolUIPart, UIMessage } from "ai";
 
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import {
   Message,
   MessageContent,
@@ -20,6 +19,8 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { createMessageHelper } from "@/lib/utils";
 
 interface MessageItemProps {
   message: UIMessage;
@@ -36,12 +37,8 @@ export const MessageItem = ({
 
   if (!message.parts || message.parts.length === 0) return null;
 
-  // Consolidate all reasoning parts into one block
-  const reasoningParts = message.parts.filter((part) => part.type === "reasoning");
-  const reasoningText = reasoningParts
-    .map((p) => (p.type === "reasoning" ? p.text : ""))
-    .join("\n\n");
-  const hasReasoning = reasoningParts.length > 0;
+  const reasoningText = createMessageHelper(message).extractReasoning() ?? "";
+  const hasReasoning = reasoningText.length > 0;
 
   const lastPart = message.parts.at(-1);
   const isReasoningStreaming =

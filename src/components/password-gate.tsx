@@ -1,5 +1,7 @@
 "use client";
 
+import useLocalStorageState from "use-local-storage-state";
+
 import { useCallback, useRef, useState } from "react";
 
 import Image from "next/image";
@@ -16,6 +18,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   const [error, setError] = useState("");
   const [isShaking, setIsShaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [, setAuthToken] = useLocalStorageState("auth_token", { defaultValue: "" });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback(
@@ -36,8 +39,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         const data = await res.json();
 
         if (data.success) {
-          localStorage.setItem("auth_0411", "true");
-          localStorage.setItem("auth_token", data.token);
+          setAuthToken(data.token);
           onSuccess();
         } else {
           setError(data.error || "비밀번호가 틀렸습니다.");
@@ -54,7 +56,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         setIsLoading(false);
       }
     },
-    [password, onSuccess]
+    [password, onSuccess, setAuthToken]
   );
 
   const handleKeyDown = useCallback(

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Menu } from "lucide-react";
+import useLocalStorageState from "use-local-storage-state";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -30,6 +31,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { createMessageHelper } from "@/lib/utils";
 
 /* ── ChatShell ── */
 
@@ -37,23 +39,33 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("sidebar_open") === "true";
+  const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
+    defaultValue: false,
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setAuthed(localStorage.getItem("auth_0411") === "true");
-    setMounted(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  const [token] = useLocalStorageState("auth_token", { defaultValue: "" });
 
-  // Persist sidebar open state
+  const { data: isValid } = useQuery({
+    queryKey: ["auth-validate"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth", {
+        headers: { "x-auth-token": token },
+      });
+      const d = await res.json();
+      return d.valid === true;
+    },
+    enabled: !!token,
+    retry: false,
+  });
+
+  // Validate token on mount — setAuthed once we have a definitive answer
   useEffect(() => {
-    localStorage.setItem("sidebar_open", String(sidebarOpen));
-  }, [sidebarOpen]);
+    if (!token || isValid !== undefined) {
+      setAuthed(isValid ?? false);
+      setMounted(true);
+    }
+  }, [isValid, token]);
 
   const onNew = useCallback(() => {
     router.push(`/${crypto.randomUUID()}`);
@@ -90,6 +102,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
           onNew={onNew}
           isOpen={sidebarOpen}
           onToggle={toggle}
+          onUnauthed={() => setAuthed(false)}
         />
       </div>
 
@@ -136,6 +149,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
                 setMobileMenuOpen(false);
               }}
               isOpen={true}
+              onUnauthed={() => setAuthed(false)}
               onToggle={() => setMobileMenuOpen(false)}
             />
           </div>
@@ -152,7 +166,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 /* ── ChatInner ── */
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
-  const tk = localStorage.getItem("auth_token") ?? "";
+  const [tk] = useLocalStorageState("auth_token", { defaultValue: "" });
 
   const { data: savedMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
@@ -185,6 +199,27 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       body: { sessionId },
       headers: { "x-auth-token": tk },
     }),
+    onFinish: ({ message }) => {
+      const m = createMessageHelper(message);
+      const text = m.extractText();
+      if (!text) return;
+
+      const reasoning = m.extractReasoning() ?? null;
+
+      fetch("/api/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-auth-token": tk,
+        },
+        body: JSON.stringify({
+          sessionId,
+          role: "assistant",
+          content: text,
+          reasoning,
+        }),
+      }).catch((err) => console.error("Failed to save assistant message:", err));
+    },
   });
 
   useEffect(() => {
@@ -401,16 +436,16 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   onClick={() => {
                     if (status === "ready")
                       sendMessage({
-                        text: "춘천에서 데이트 코스 추천해줘…!",
+                        text: "데이트 코스 추천해줘…!",
                       });
                   }}
                 />
                 <SuggestionChip
                   icon="🗺️"
-                  label="춘천 데이트 일정"
+                  label="데이트 일정"
                   onClick={() => {
                     if (status === "ready")
-                      sendMessage({ text: "춘천 1박 2일 데이트 일정 짜줘…!" });
+                      sendMessage({ text: "1박 2일 데이트 일정 짜줘…!" });
                   }}
                 />
                 <SuggestionChip
@@ -418,7 +453,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   label="맛집 찾기"
                   onClick={() => {
                     if (status === "ready")
-                      sendMessage({ text: "춘천 근처 분위기 좋은 맛집 알려줘…!" });
+                      sendMessage({ text: "분위기 좋은 맛집 알려줘…!" });
                   }}
                 />
                 <SuggestionChip
@@ -426,7 +461,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   label="체크리스트"
                   onClick={() => {
                     if (status === "ready")
-                      sendMessage({ text: "둘이 함께 데이트 준비물 체크리스트 알려줘…!" });
+                      sendMessage({
+                        text: "둘이 함께 데이트 준비물 체크리스트 알려줘…!",
+                      });
                   }}
                 />
               </div>

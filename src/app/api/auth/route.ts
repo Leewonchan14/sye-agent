@@ -1,6 +1,23 @@
-import { createToken } from "@/lib/auth";
+import { createToken, verifyToken } from "@/lib/auth";
 
 export const runtime = "edge";
+
+export const GET = async (req: Request) => {
+  const token = req.headers.get("x-auth-token");
+  if (!token) {
+    return Response.json({ valid: false }, { status: 401 });
+  }
+
+  try {
+    const valid = await verifyToken(token);
+    if (!valid) {
+      return Response.json({ valid: false }, { status: 401 });
+    }
+    return Response.json({ valid: true });
+  } catch {
+    return Response.json({ valid: false }, { status: 401 });
+  }
+};
 
 export const POST = async (req: Request) => {
   try {
