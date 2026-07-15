@@ -85,7 +85,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
           alt="munjackgu"
           width={80}
           height={80}
-          className="rounded-full border-2 border-primary"
+          className="border-primary rounded-full border-2"
           priority
         />
 
@@ -113,14 +113,14 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            className="text-center tracking-widest focus-visible:ring-0 border-primary!"
+            className="border-primary! text-center tracking-widest focus-visible:ring-0"
             autoFocus
             autoComplete="off"
           />
 
           <Button
             type="submit"
-            className="w-full border border-primary"
+            className="border-primary w-full border"
             disabled={isLoading || !password.trim()}
           >
             {isLoading ? "확인 중..." : "입장하기"}

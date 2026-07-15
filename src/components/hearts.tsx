@@ -39,7 +39,7 @@ export const HeartsOverlay = ({ show, onDone }: HeartsOverlayProps) => {
       {HEARTS.map((h) => (
         <span
           key={h.id}
-          className="absolute animate-heart-float"
+          className="animate-heart-float absolute"
           style={{
             left: h.left,
             bottom: "-30px",

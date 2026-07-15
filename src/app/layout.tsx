@@ -22,9 +22,7 @@ const BASE_URL =
     ? process.env.VERCEL_PROJECT_PRODUCTION_URL
     : process.env.VERCEL_URL) ||
   "http://localhost:3000";
-const SITE_URL = BASE_URL.startsWith("http")
-  ? BASE_URL
-  : `https://${BASE_URL}`;
+const SITE_URL = BASE_URL.startsWith("http") ? BASE_URL : `https://${BASE_URL}`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -73,7 +71,7 @@ const RootLayout = ({
     lang="ko"
     className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
   >
-    <body className="h-full flex flex-col overflow-hidden">
+    <body className="flex h-full flex-col overflow-hidden">
       <Providers>
         <TooltipProvider>{children}</TooltipProvider>
       </Providers>

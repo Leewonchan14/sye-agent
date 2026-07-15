@@ -106,7 +106,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
   return (
     <div
-      className="flex h-dvh flex-col md:flex-row relative"
+      className="relative flex h-dvh flex-col md:flex-row"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       {/* Desktop sidebar */}
@@ -122,7 +122,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
       {/* Mobile top bar */}
       <div
-        className="md:hidden flex items-center gap-2 px-3 h-12 shrink-0"
+        className="flex h-12 shrink-0 items-center gap-2 px-3 md:hidden"
         style={{ borderBottom: "1px solid var(--color-hairline)" }}
       >
         <Button
@@ -378,7 +378,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           <div className="mx-auto max-w-180">
             <PromptInput
               onSubmit={handlePromptSubmit}
-              className="relative flex flex-col border rounded-2xl **:data-[slot=input-group]:focus-within:border **:data-[slot=input-group]:focus-within:ring-0"
+              className="relative flex flex-col rounded-2xl border **:data-[slot=input-group]:focus-within:border **:data-[slot=input-group]:focus-within:ring-0"
               style={{
                 borderColor: "var(--color-hairline)",
                 backgroundColor: "var(--color-canvas-soft)",
@@ -388,7 +388,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 <PromptInputTextarea
                   placeholder="어디로 데이트하러 갈까요…?"
                   disabled={streaming}
-                  className="min-h-13 max-h-32 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
+                  className="max-h-32 min-h-13 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
                 />
               </PromptInputBody>
               <PromptInputFooter>
@@ -536,7 +536,7 @@ const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void 
     return () => clearInterval(iv);
   }, []);
   return (
-    <div className="flex flex-col h-full justify-center items-center gap-1">
+    <div className="flex h-full flex-col items-center justify-center gap-1">
       {/* Character icon */}
       <div className="mb-5">
         <img
@@ -548,18 +548,18 @@ const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void 
         />
       </div>
       <h1
-        className="text-[22px] font-normal leading-snug"
+        className="text-[22px] leading-snug font-normal"
         style={{ color: "var(--color-ink)" }}
       >
         예은
         <span style={{ color: "var(--color-muted)" }}>님…!</span>
       </h1>
-      <p className="text-[15px] animate-fade-in" style={{ color: "var(--color-ink)" }}>
+      <p className="animate-fade-in text-[15px]" style={{ color: "var(--color-ink)" }}>
         {timeGreeting}
       </p>
       <p
         key={fadeKey}
-        className="text-[13px] mt-1 animate-bounce-fade-in"
+        className="animate-bounce-fade-in mt-1 text-[13px]"
         style={{ color: "var(--color-muted)" }}
       >
         {subPhrases[subIdx]}

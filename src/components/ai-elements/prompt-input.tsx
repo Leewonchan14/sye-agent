@@ -34,11 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
 import {
@@ -98,10 +94,7 @@ const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
 };
 
 const captureScreenshot = async (): Promise<File | null> => {
-  if (
-    typeof navigator === "undefined" ||
-    !navigator.mediaDevices?.getDisplayMedia
-  ) {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getDisplayMedia) {
     return null;
   }
 
@@ -203,12 +196,8 @@ export interface PromptInputControllerProps {
   ) => void;
 }
 
-const PromptInputController = createContext<PromptInputControllerProps | null>(
-  null
-);
-const ProviderAttachmentsContext = createContext<AttachmentsContext | null>(
-  null
-);
+const PromptInputController = createContext<PromptInputControllerProps | null>(null);
+const ProviderAttachmentsContext = createContext<AttachmentsContext | null>(null);
 
 export const usePromptInputController = () => {
   const ctx = useContext(PromptInputController);
@@ -221,8 +210,7 @@ export const usePromptInputController = () => {
 };
 
 // Optional variants (do NOT throw). Useful for dual-mode components.
-const useOptionalPromptInputController = () =>
-  useContext(PromptInputController);
+const useOptionalPromptInputController = () => useContext(PromptInputController);
 
 export const useProviderAttachments = () => {
   const ctx = useContext(ProviderAttachmentsContext);
@@ -234,8 +222,7 @@ export const useProviderAttachments = () => {
   return ctx;
 };
 
-const useOptionalProviderAttachments = () =>
-  useContext(ProviderAttachmentsContext);
+const useOptionalProviderAttachments = () => useContext(ProviderAttachmentsContext);
 
 export type PromptInputProviderProps = PropsWithChildren<{
   initialInput?: string;
@@ -254,9 +241,9 @@ export const PromptInputProvider = ({
   const clearInput = useCallback(() => setTextInput(""), []);
 
   // ----- attachments state (global when wrapped)
-  const [attachmentFiles, setAttachmentFiles] = useState<
-    (FileUIPart & { id: string })[]
-  >([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<(FileUIPart & { id: string })[]>(
+    []
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // oxlint-disable-next-line eslint(no-empty-function)
   const openRef = useRef<() => void>(() => {});
@@ -586,8 +573,7 @@ export const PromptInput = ({
         });
         return;
       }
-      const withinSize = (f: File) =>
-        maxFileSize ? f.size <= maxFileSize : true;
+      const withinSize = (f: File) => (maxFileSize ? f.size <= maxFileSize : true);
       const sized = accepted.filter(withinSize);
       if (accepted.length > 0 && sized.length === 0) {
         onError?.({
@@ -599,11 +585,8 @@ export const PromptInput = ({
 
       setItems((prev) => {
         const capacity =
-          typeof maxFiles === "number"
-            ? Math.max(0, maxFiles - prev.length)
-            : undefined;
-        const capped =
-          typeof capacity === "number" ? sized.slice(0, capacity) : sized;
+          typeof maxFiles === "number" ? Math.max(0, maxFiles - prev.length) : undefined;
+        const capped = typeof capacity === "number" ? sized.slice(0, capacity) : sized;
         if (typeof capacity === "number" && sized.length > capacity) {
           onError?.({
             code: "max_files",
@@ -650,8 +633,7 @@ export const PromptInput = ({
         });
         return;
       }
-      const withinSize = (f: File) =>
-        maxFileSize ? f.size <= maxFileSize : true;
+      const withinSize = (f: File) => (maxFileSize ? f.size <= maxFileSize : true);
       const sized = accepted.filter(withinSize);
       if (accepted.length > 0 && sized.length === 0) {
         onError?.({
@@ -663,11 +645,8 @@ export const PromptInput = ({
 
       const currentCount = files.length;
       const capacity =
-        typeof maxFiles === "number"
-          ? Math.max(0, maxFiles - currentCount)
-          : undefined;
-      const capped =
-        typeof capacity === "number" ? sized.slice(0, capacity) : sized;
+        typeof maxFiles === "number" ? Math.max(0, maxFiles - currentCount) : undefined;
+      const capped = typeof capacity === "number" ? sized.slice(0, capacity) : sized;
       if (typeof capacity === "number" && sized.length > capacity) {
         onError?.({
           code: "max_files",
@@ -697,10 +676,7 @@ export const PromptInput = ({
     [usingProvider, controller]
   );
 
-  const clearReferencedSources = useCallback(
-    () => setReferencedSources([]),
-    []
-  );
+  const clearReferencedSources = useCallback(() => setReferencedSources([]), []);
 
   const add = usingProvider ? addWithProviderValidation : addLocal;
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
@@ -942,16 +918,11 @@ export const PromptInput = ({
 
 export type PromptInputBodyProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputBody = ({
-  className,
-  ...props
-}: PromptInputBodyProps) => (
+export const PromptInputBody = ({ className, ...props }: PromptInputBodyProps) => (
   <div className={cn("contents", className)} {...props} />
 );
 
-export type PromptInputTextareaProps = ComponentProps<
-  typeof InputGroupTextarea
->;
+export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea>;
 
 export const PromptInputTextarea = ({
   onChange,
@@ -1073,10 +1044,7 @@ export type PromptInputHeaderProps = Omit<
   "align"
 >;
 
-export const PromptInputHeader = ({
-  className,
-  ...props
-}: PromptInputHeaderProps) => (
+export const PromptInputHeader = ({ className, ...props }: PromptInputHeaderProps) => (
   <InputGroupAddon
     align="block-end"
     className={cn("order-first flex-wrap gap-1", className)}
@@ -1089,10 +1057,7 @@ export type PromptInputFooterProps = Omit<
   "align"
 >;
 
-export const PromptInputFooter = ({
-  className,
-  ...props
-}: PromptInputFooterProps) => (
+export const PromptInputFooter = ({ className, ...props }: PromptInputFooterProps) => (
   <InputGroupAddon
     align="block-end"
     className={cn("justify-between gap-1", className)}
@@ -1102,14 +1067,8 @@ export const PromptInputFooter = ({
 
 export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputTools = ({
-  className,
-  ...props
-}: PromptInputToolsProps) => (
-  <div
-    className={cn("flex min-w-0 items-center gap-1", className)}
-    {...props}
-  />
+export const PromptInputTools = ({ className, ...props }: PromptInputToolsProps) => (
+  <div className={cn("flex min-w-0 items-center gap-1", className)} {...props} />
 );
 
 export type PromptInputButtonTooltip =
@@ -1131,8 +1090,7 @@ export const PromptInputButton = ({
   tooltip,
   ...props
 }: PromptInputButtonProps) => {
-  const newSize =
-    size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
+  const newSize = size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
 
   const button = (
     <InputGroupButton
@@ -1148,8 +1106,7 @@ export const PromptInputButton = ({
     return button;
   }
 
-  const tooltipContent =
-    typeof tooltip === "string" ? tooltip : tooltip.content;
+  const tooltipContent = typeof tooltip === "string" ? tooltip : tooltip.content;
   const shortcut = typeof tooltip === "string" ? undefined : tooltip.shortcut;
   const side = typeof tooltip === "string" ? "top" : (tooltip.side ?? "top");
 
@@ -1158,9 +1115,7 @@ export const PromptInputButton = ({
       <TooltipTrigger>{button}</TooltipTrigger>
       <TooltipContent side={side}>
         {tooltipContent}
-        {shortcut && (
-          <span className="ml-2 text-muted-foreground">{shortcut}</span>
-        )}
+        {shortcut && <span className="text-muted-foreground ml-2">{shortcut}</span>}
       </TooltipContent>
     </Tooltip>
   );
@@ -1178,7 +1133,9 @@ export const PromptInputActionMenuTrigger = ({
   children,
   ...props
 }: PromptInputActionMenuTriggerProps) => (
-  <DropdownMenuTrigger render={<PromptInputButton className={className} {...props} />}>{children ?? <PlusIcon className="size-4" />}</DropdownMenuTrigger>
+  <DropdownMenuTrigger render={<PromptInputButton className={className} {...props} />}>
+    {children ?? <PlusIcon className="size-4" />}
+  </DropdownMenuTrigger>
 );
 
 export type PromptInputActionMenuContentProps = ComponentProps<
@@ -1191,9 +1148,7 @@ export const PromptInputActionMenuContent = ({
   <DropdownMenuContent align="start" className={cn(className)} {...props} />
 );
 
-export type PromptInputActionMenuItemProps = ComponentProps<
-  typeof DropdownMenuItem
->;
+export type PromptInputActionMenuItemProps = ComponentProps<typeof DropdownMenuItem>;
 export const PromptInputActionMenuItem = ({
   className,
   ...props
@@ -1260,13 +1215,9 @@ export const PromptInputSubmit = ({
 
 export type PromptInputSelectProps = ComponentProps<typeof Select>;
 
-export const PromptInputSelect = (props: PromptInputSelectProps) => (
-  <Select {...props} />
-);
+export const PromptInputSelect = (props: PromptInputSelectProps) => <Select {...props} />;
 
-export type PromptInputSelectTriggerProps = ComponentProps<
-  typeof SelectTrigger
->;
+export type PromptInputSelectTriggerProps = ComponentProps<typeof SelectTrigger>;
 
 export const PromptInputSelectTrigger = ({
   className,
@@ -1274,7 +1225,7 @@ export const PromptInputSelectTrigger = ({
 }: PromptInputSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
-      "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
+      "text-muted-foreground border-none bg-transparent font-medium shadow-none transition-colors",
       "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
       className
     )}
@@ -1282,9 +1233,7 @@ export const PromptInputSelectTrigger = ({
   />
 );
 
-export type PromptInputSelectContentProps = ComponentProps<
-  typeof SelectContent
->;
+export type PromptInputSelectContentProps = ComponentProps<typeof SelectContent>;
 
 export const PromptInputSelectContent = ({
   className,
@@ -1298,18 +1247,14 @@ export type PromptInputSelectItemProps = ComponentProps<typeof SelectItem>;
 export const PromptInputSelectItem = ({
   className,
   ...props
-}: PromptInputSelectItemProps) => (
-  <SelectItem className={cn(className)} {...props} />
-);
+}: PromptInputSelectItemProps) => <SelectItem className={cn(className)} {...props} />;
 
 export type PromptInputSelectValueProps = ComponentProps<typeof SelectValue>;
 
 export const PromptInputSelectValue = ({
   className,
   ...props
-}: PromptInputSelectValueProps) => (
-  <SelectValue className={cn(className)} {...props} />
-);
+}: PromptInputSelectValueProps) => <SelectValue className={cn(className)} {...props} />;
 
 export type PromptInputHoverCardProps = ComponentProps<typeof HoverCard>;
 
@@ -1317,24 +1262,18 @@ export const PromptInputHoverCard = (props: PromptInputHoverCardProps) => (
   <HoverCard {...props} />
 );
 
-export type PromptInputHoverCardTriggerProps = ComponentProps<
-  typeof HoverCardTrigger
->;
+export type PromptInputHoverCardTriggerProps = ComponentProps<typeof HoverCardTrigger>;
 
-export const PromptInputHoverCardTrigger = (
-  props: PromptInputHoverCardTriggerProps
-) => <HoverCardTrigger {...props} />;
+export const PromptInputHoverCardTrigger = (props: PromptInputHoverCardTriggerProps) => (
+  <HoverCardTrigger {...props} />
+);
 
-export type PromptInputHoverCardContentProps = ComponentProps<
-  typeof HoverCardContent
->;
+export type PromptInputHoverCardContentProps = ComponentProps<typeof HoverCardContent>;
 
 export const PromptInputHoverCardContent = ({
   align = "start",
   ...props
-}: PromptInputHoverCardContentProps) => (
-  <HoverCardContent align={align} {...props} />
-);
+}: PromptInputHoverCardContentProps) => <HoverCardContent align={align} {...props} />;
 
 export type PromptInputTabsListProps = HTMLAttributes<HTMLDivElement>;
 
@@ -1345,10 +1284,9 @@ export const PromptInputTabsList = ({
 
 export type PromptInputTabProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputTab = ({
-  className,
-  ...props
-}: PromptInputTabProps) => <div className={cn(className)} {...props} />;
+export const PromptInputTab = ({ className, ...props }: PromptInputTabProps) => (
+  <div className={cn(className)} {...props} />
+);
 
 export type PromptInputTabLabelProps = HTMLAttributes<HTMLHeadingElement>;
 
@@ -1359,93 +1297,68 @@ export const PromptInputTabLabel = ({
   // Content provided via children in props
   // oxlint-disable-next-line eslint-plugin-jsx-a11y(heading-has-content)
   <h3
-    className={cn(
-      "mb-2 px-3 font-medium text-muted-foreground text-xs",
-      className
-    )}
+    className={cn("text-muted-foreground mb-2 px-3 text-xs font-medium", className)}
     {...props}
   />
 );
 
 export type PromptInputTabBodyProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputTabBody = ({
-  className,
-  ...props
-}: PromptInputTabBodyProps) => (
+export const PromptInputTabBody = ({ className, ...props }: PromptInputTabBodyProps) => (
   <div className={cn("space-y-1", className)} {...props} />
 );
 
 export type PromptInputTabItemProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputTabItem = ({
-  className,
-  ...props
-}: PromptInputTabItemProps) => (
+export const PromptInputTabItem = ({ className, ...props }: PromptInputTabItemProps) => (
   <div
-    className={cn(
-      "flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent",
-      className
-    )}
+    className={cn("hover:bg-accent flex items-center gap-2 px-3 py-2 text-xs", className)}
     {...props}
   />
 );
 
 export type PromptInputCommandProps = ComponentProps<typeof Command>;
 
-export const PromptInputCommand = ({
-  className,
-  ...props
-}: PromptInputCommandProps) => <Command className={cn(className)} {...props} />;
+export const PromptInputCommand = ({ className, ...props }: PromptInputCommandProps) => (
+  <Command className={cn(className)} {...props} />
+);
 
 export type PromptInputCommandInputProps = ComponentProps<typeof CommandInput>;
 
 export const PromptInputCommandInput = ({
   className,
   ...props
-}: PromptInputCommandInputProps) => (
-  <CommandInput className={cn(className)} {...props} />
-);
+}: PromptInputCommandInputProps) => <CommandInput className={cn(className)} {...props} />;
 
 export type PromptInputCommandListProps = ComponentProps<typeof CommandList>;
 
 export const PromptInputCommandList = ({
   className,
   ...props
-}: PromptInputCommandListProps) => (
-  <CommandList className={cn(className)} {...props} />
-);
+}: PromptInputCommandListProps) => <CommandList className={cn(className)} {...props} />;
 
 export type PromptInputCommandEmptyProps = ComponentProps<typeof CommandEmpty>;
 
 export const PromptInputCommandEmpty = ({
   className,
   ...props
-}: PromptInputCommandEmptyProps) => (
-  <CommandEmpty className={cn(className)} {...props} />
-);
+}: PromptInputCommandEmptyProps) => <CommandEmpty className={cn(className)} {...props} />;
 
 export type PromptInputCommandGroupProps = ComponentProps<typeof CommandGroup>;
 
 export const PromptInputCommandGroup = ({
   className,
   ...props
-}: PromptInputCommandGroupProps) => (
-  <CommandGroup className={cn(className)} {...props} />
-);
+}: PromptInputCommandGroupProps) => <CommandGroup className={cn(className)} {...props} />;
 
 export type PromptInputCommandItemProps = ComponentProps<typeof CommandItem>;
 
 export const PromptInputCommandItem = ({
   className,
   ...props
-}: PromptInputCommandItemProps) => (
-  <CommandItem className={cn(className)} {...props} />
-);
+}: PromptInputCommandItemProps) => <CommandItem className={cn(className)} {...props} />;
 
-export type PromptInputCommandSeparatorProps = ComponentProps<
-  typeof CommandSeparator
->;
+export type PromptInputCommandSeparatorProps = ComponentProps<typeof CommandSeparator>;
 
 export const PromptInputCommandSeparator = ({
   className,

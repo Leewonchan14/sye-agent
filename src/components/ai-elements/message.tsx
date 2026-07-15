@@ -2,10 +2,7 @@
 
 import { TableWrapper } from "@/components/ai-elements/table";
 import { Button } from "@/components/ui/button";
-import {
-  ButtonGroup,
-  ButtonGroupText,
-} from "@/components/ui/button-group";
+import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import {
   Tooltip,
   TooltipContent,
@@ -55,8 +52,8 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      "is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
+      "group-[.is-user]:bg-secondary group-[.is-user]:text-foreground group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:px-4 group-[.is-user]:py-3",
       "group-[.is-assistant]:text-foreground",
       className
     )}
@@ -123,17 +120,13 @@ interface MessageBranchContextType {
   setBranches: (branches: ReactElement[]) => void;
 }
 
-const MessageBranchContext = createContext<MessageBranchContextType | null>(
-  null
-);
+const MessageBranchContext = createContext<MessageBranchContextType | null>(null);
 
 const useMessageBranch = () => {
   const context = useContext(MessageBranchContext);
 
   if (!context) {
-    throw new Error(
-      "MessageBranch components must be used within MessageBranch"
-    );
+    throw new Error("MessageBranch components must be used within MessageBranch");
   }
 
   return context;
@@ -162,14 +155,12 @@ export const MessageBranch = ({
   );
 
   const goToPrevious = useCallback(() => {
-    const newBranch =
-      currentBranch > 0 ? currentBranch - 1 : branches.length - 1;
+    const newBranch = currentBranch > 0 ? currentBranch - 1 : branches.length - 1;
     handleBranchChange(newBranch);
   }, [currentBranch, branches.length, handleBranchChange]);
 
   const goToNext = useCallback(() => {
-    const newBranch =
-      currentBranch < branches.length - 1 ? currentBranch + 1 : 0;
+    const newBranch = currentBranch < branches.length - 1 ? currentBranch + 1 : 0;
     handleBranchChange(newBranch);
   }, [currentBranch, branches.length, handleBranchChange]);
 
@@ -187,10 +178,7 @@ export const MessageBranch = ({
 
   return (
     <MessageBranchContext.Provider value={contextValue}>
-      <div
-        className={cn("grid w-full gap-2 [&>div]:pb-0", className)}
-        {...props}
-      />
+      <div className={cn("grid w-full gap-2 [&>div]:pb-0", className)} {...props} />
     </MessageBranchContext.Provider>
   );
 };
@@ -278,10 +266,7 @@ export const MessageBranchPrevious = ({
 
 export type MessageBranchNextProps = ComponentProps<typeof Button>;
 
-export const MessageBranchNext = ({
-  children,
-  ...props
-}: MessageBranchNextProps) => {
+export const MessageBranchNext = ({ children, ...props }: MessageBranchNextProps) => {
   const { goToNext, totalBranches } = useMessageBranch();
 
   return (
@@ -301,16 +286,13 @@ export const MessageBranchNext = ({
 
 export type MessageBranchPageProps = HTMLAttributes<HTMLSpanElement>;
 
-export const MessageBranchPage = ({
-  className,
-  ...props
-}: MessageBranchPageProps) => {
+export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProps) => {
   const { currentBranch, totalBranches } = useMessageBranch();
 
   return (
     <ButtonGroupText
       className={cn(
-        "border-none bg-transparent text-muted-foreground shadow-none",
+        "text-muted-foreground border-none bg-transparent shadow-none",
         className
       )}
       {...props}
@@ -327,10 +309,7 @@ const streamdownPlugins = { cjk, code, math, mermaid };
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
-      className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
+      className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
       plugins={streamdownPlugins}
       components={{
         table: TableWrapper,
@@ -353,10 +332,7 @@ export const MessageToolbar = ({
   ...props
 }: MessageToolbarProps) => (
   <div
-    className={cn(
-      "mt-4 flex w-full items-center justify-between gap-4",
-      className
-    )}
+    className={cn("mt-4 flex w-full items-center justify-between gap-4", className)}
     {...props}
   >
     {children}

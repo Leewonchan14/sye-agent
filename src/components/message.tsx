@@ -1,7 +1,7 @@
 "use client";
 
-import { isDynamicToolUIPart, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
+import { isDynamicToolUIPart, isToolUIPart } from "ai";
 
 import {
   Message,

@@ -1,4 +1,5 @@
 <!-- BEGIN:nextjs-agent-rules -->
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
@@ -42,4 +43,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Formatting & Linting
 
 코드 수정 후 **반드시** `prettier`와 `eslint`를 실행하여 스타일 일관성을 유지하세요. (커밋 전에 자동으로 실행된다고 가정하지 말고 직접 수행)
-  - 프로젝트에 설정된 대로 `bun run format`, `bun run lint` 등을 실행하세요.
+
+- 프로젝트에 설정된 대로 `bun run format`, `bun run lint` 등을 실행하세요.

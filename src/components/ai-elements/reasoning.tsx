@@ -196,7 +196,7 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground/80 italic text-sm transition-colors hover:text-foreground/90",
+          "text-muted-foreground/80 hover:text-foreground/90 flex w-full items-center gap-2 text-sm italic transition-colors",
           className
         )}
         {...props}
@@ -224,8 +224,8 @@ export const ReasoningContent = memo(
     <CollapsibleContent
       className={cn(
         "mt-4 text-sm",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-        "[&_p]:italic [&_li]:italic opacity-70",
+        "text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:animate-in data-[state=open]:slide-in-from-top-2",
+        "opacity-70 [&_li]:italic [&_p]:italic",
         className
       )}
       {...props}

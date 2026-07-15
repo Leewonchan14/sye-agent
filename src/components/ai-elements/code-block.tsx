@@ -101,9 +101,7 @@ const LineSpan = ({
   <span className={showLineNumbers ? LINE_NUMBER_CLASSES : "block"}>
     {keyedLine.tokens.length === 0
       ? "\n"
-      : keyedLine.tokens.map(({ token, key }) => (
-          <TokenSpan key={key} token={token} />
-        ))}
+      : keyedLine.tokens.map(({ token, key }) => <TokenSpan key={key} token={token} />)}
   </span>
 );
 
@@ -271,7 +269,7 @@ const CodeBlockBody = memo(
     return (
       <pre
         className={cn(
-          "dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)] m-0 p-4 text-sm",
+          "m-0 p-4 text-sm dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]",
           className
         )}
         style={preStyle}
@@ -309,7 +307,7 @@ export const CodeBlockContainer = ({
 }: HTMLAttributes<HTMLDivElement> & { language: string }) => (
   <div
     className={cn(
-      "group relative w-full overflow-hidden rounded-md border bg-background text-foreground",
+      "group bg-background text-foreground relative w-full overflow-hidden rounded-md border",
       className
     )}
     data-language={language}
@@ -329,7 +327,7 @@ export const CodeBlockHeader = ({
 }: HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex items-center justify-between border-b bg-muted/80 px-3 py-2 text-muted-foreground text-xs",
+      "bg-muted/80 text-muted-foreground flex items-center justify-between border-b px-3 py-2 text-xs",
       className
     )}
     {...props}
@@ -363,10 +361,7 @@ export const CodeBlockActions = ({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) => (
-  <div
-    className={cn("-my-1 -mr-1 flex items-center gap-2", className)}
-    {...props}
-  >
+  <div className={cn("-my-1 -mr-1 flex items-center gap-2", className)} {...props}>
     {children}
   </div>
 );
@@ -394,10 +389,7 @@ export const CodeBlockContent = ({
   const asyncKeyRef = useRef({ code, language });
 
   // Invalidate stale async tokens synchronously during render
-  if (
-    asyncKeyRef.current.code !== code ||
-    asyncKeyRef.current.language !== language
-  ) {
+  if (asyncKeyRef.current.code !== code || asyncKeyRef.current.language !== language) {
     asyncKeyRef.current = { code, language };
     setAsyncTokens(null);
   }
@@ -478,10 +470,7 @@ export const CodeBlockCopyButton = ({
         await navigator.clipboard.writeText(code);
         setIsCopied(true);
         onCopy?.();
-        timeoutRef.current = window.setTimeout(
-          () => setIsCopied(false),
-          timeout
-        );
+        timeoutRef.current = window.setTimeout(() => setIsCopied(false), timeout);
       }
     } catch (error) {
       onError?.(error as Error);
@@ -512,50 +501,37 @@ export const CodeBlockCopyButton = ({
 
 export type CodeBlockLanguageSelectorProps = ComponentProps<typeof Select>;
 
-export const CodeBlockLanguageSelector = (
-  props: CodeBlockLanguageSelectorProps
-) => <Select {...props} />;
+export const CodeBlockLanguageSelector = (props: CodeBlockLanguageSelectorProps) => (
+  <Select {...props} />
+);
 
-export type CodeBlockLanguageSelectorTriggerProps = ComponentProps<
-  typeof SelectTrigger
->;
+export type CodeBlockLanguageSelectorTriggerProps = ComponentProps<typeof SelectTrigger>;
 
 export const CodeBlockLanguageSelectorTrigger = ({
   className,
   ...props
 }: CodeBlockLanguageSelectorTriggerProps) => (
   <SelectTrigger
-    className={cn(
-      "h-7 border-none bg-transparent px-2 text-xs shadow-none",
-      className
-    )}
+    className={cn("h-7 border-none bg-transparent px-2 text-xs shadow-none", className)}
     size="sm"
     {...props}
   />
 );
 
-export type CodeBlockLanguageSelectorValueProps = ComponentProps<
-  typeof SelectValue
->;
+export type CodeBlockLanguageSelectorValueProps = ComponentProps<typeof SelectValue>;
 
 export const CodeBlockLanguageSelectorValue = (
   props: CodeBlockLanguageSelectorValueProps
 ) => <SelectValue {...props} />;
 
-export type CodeBlockLanguageSelectorContentProps = ComponentProps<
-  typeof SelectContent
->;
+export type CodeBlockLanguageSelectorContentProps = ComponentProps<typeof SelectContent>;
 
 export const CodeBlockLanguageSelectorContent = ({
   align = "end",
   ...props
-}: CodeBlockLanguageSelectorContentProps) => (
-  <SelectContent align={align} {...props} />
-);
+}: CodeBlockLanguageSelectorContentProps) => <SelectContent align={align} {...props} />;
 
-export type CodeBlockLanguageSelectorItemProps = ComponentProps<
-  typeof SelectItem
->;
+export type CodeBlockLanguageSelectorItemProps = ComponentProps<typeof SelectItem>;
 
 export const CodeBlockLanguageSelectorItem = (
   props: CodeBlockLanguageSelectorItemProps
