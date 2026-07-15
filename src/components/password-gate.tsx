@@ -67,7 +67,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
 
   return (
     <div
-      className="flex min-h-screen flex-col items-center justify-center px-4 py-32"
+      className="flex min-h-dvh flex-col items-center justify-center px-4 py-32"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       <form

@@ -59,15 +59,16 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["auth-validate", token],
+    queryKey: ["auth-validate", token ?? ""],
     queryFn: async () => {
-      if (!token) return await new Promise((res) => setTimeout(res, 3000));
+      if (!token) return await new Promise((res) => setTimeout(() => res(false), 3000));
       const res = await fetch("/api/auth", {
         headers: { "x-auth-token": token },
       });
       const d = await res.json();
       return d.valid === true;
     },
+    enabled: !!token,
     retry: 1,
     staleTime: 0,
   });
@@ -90,7 +91,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
   if (isLoading) {
     return (
       <div
-        className="flex min-h-screen flex-col"
+        className="flex min-h-dvh flex-col"
         style={{ backgroundColor: "var(--color-canvas)" }}
       >
         <ChatLoading />
@@ -105,7 +106,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
   return (
     <div
-      className="flex h-screen flex-col md:flex-row relative"
+      className="flex h-dvh flex-col md:flex-row relative"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       {/* Desktop sidebar */}
@@ -148,12 +149,12 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
       {/* Mobile sidebar overlay */}
       {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <div className="fixed inset-0 z-50 flex md:hidden">
           <div
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="relative w-64 h-full">
+          <div className="relative h-full w-64">
             <SessionSidebar
               activeSessionId={sessionId}
               onSelect={(id) => {
@@ -171,7 +172,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ChatInner key={sessionId} sessionId={sessionId} />
       </div>
     </div>

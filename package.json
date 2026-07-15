@@ -2,6 +2,7 @@
   "name": "trable-agent",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -47,7 +48,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "@types/lodash": "^4.17.24",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -55,8 +55,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "prettier": "^3.9.5",
+    "prettier-plugin-organize-imports": "^4.3.0",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^6.0.3"
   }
 }

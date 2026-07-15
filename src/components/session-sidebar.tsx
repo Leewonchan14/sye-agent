@@ -50,7 +50,7 @@ export const SessionSidebar = ({
 
   return (
     <aside
-      className="flex h-screen shrink-0 flex-col transition-all duration-200 ease-out"
+      className="flex h-dvh shrink-0 flex-col transition-all duration-200 ease-out"
       style={{
         width: isOpen ? 256 : 52,
         backgroundColor: css("color-canvas"),
