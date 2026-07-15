@@ -1,8 +1,8 @@
 "use client";
 
-import { Heart } from "lucide-react";
-
 import { useCallback, useRef, useState } from "react";
+
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +65,10 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   );
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-32" style={{ backgroundColor: "var(--color-canvas)" }}>
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-4 py-32"
+      style={{ backgroundColor: "var(--color-canvas)" }}
+    >
       <form
         onSubmit={handleSubmit}
         className={`flex w-80 max-w-full flex-col items-center gap-5 rounded-xl border p-8 ${
@@ -76,18 +79,28 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
           backgroundColor: "var(--color-surface)",
         }}
       >
-        <Heart
-          className="h-8 w-8"
-          strokeWidth={1.2}
-          style={{ color: "var(--color-primary)" }}
+        <Image
+          src="/munjackgui.png"
+          alt="munjackgu"
+          width={80}
+          height={80}
+          className="rounded-full border-2 border-primary"
+          priority
         />
 
         <h1 className="text-lg font-medium" style={{ color: "var(--color-ink)" }}>
-          치이카와
+          치이카와 데이트 메이트
         </h1>
 
-        <p className="text-center text-sm" style={{ color: "var(--color-muted)" }}>
-          둘만의 공간에 오신 걸 환영합니다
+        <p
+          className="text-center text-xs leading-relaxed"
+          style={{ color: "var(--color-muted)" }}
+        >
+          알고 있어?〜 100일케이크 밑판에 적힌 문구…
+          <br />
+          그게 힌트…라는 거야!?
+          <br />
+          띄워쓰기 없이, 느낌표 없이 입력하는 거야…!
         </p>
 
         <div className="w-full space-y-3">
@@ -99,14 +112,14 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            className="text-center tracking-widest"
+            className="text-center tracking-widest focus-visible:ring-0 border-primary!"
             autoFocus
             autoComplete="off"
           />
 
           <Button
             type="submit"
-            className="w-full"
+            className="w-full border border-primary"
             disabled={isLoading || !password.trim()}
           >
             {isLoading ? "확인 중..." : "입장하기"}
@@ -118,16 +131,6 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
             {error}
           </p>
         )}
-
-        <p className="text-center text-xs" style={{ color: "var(--color-muted-soft)" }}>
-          원찬 & 예은의 특별한 데이트 플래너
-        </p>
-
-        <p className="text-center text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
-          알고 있어?〜 100일케이크 밑판에 적힌 문구…<br />
-          그게 힌트…라는 거야!?<br />
-          띄워쓰기 없이, 느낌표 없이 입력하는 거야…!
-        </p>
       </form>
     </div>
   );

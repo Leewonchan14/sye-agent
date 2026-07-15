@@ -66,7 +66,7 @@ export const SessionSidebar = ({
           <div className="flex h-14 items-center justify-between px-4">
             <div className="flex items-center gap-2">
               <img
-                src="/munjackgui.webp"
+                src="/munjackgui.png"
                 alt="치이카와"
                 className="size-6 rounded-full object-cover"
                 draggable={false}

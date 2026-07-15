@@ -107,7 +107,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
           <Menu className="h-5 w-5" />
         </button>
         <img
-          src="/munjackgui.webp"
+          src="/munjackgui.png"
           alt="치이카와"
           className="size-6 rounded-full object-cover"
           draggable={false}
@@ -458,7 +458,7 @@ const ChatLoading = () => {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4">
       <img
-        src="/munjackgui.webp"
+        src="/munjackgui.png"
         alt="치이카와"
         className="size-20 animate-bounce rounded-full object-cover"
         style={{ backgroundColor: "var(--color-canvas-soft)" }}
@@ -541,7 +541,7 @@ const RotatingPhrase = () => {
       style={{ color: "var(--color-muted)" }}
     >
       <img
-        src="/munjackgui.webp"
+        src="/munjackgui.png"
         alt="치이카와"
         className="size-5 rounded-full object-cover"
         draggable={false}
@@ -587,7 +587,7 @@ const EmptyState = () => {
       {/* Character icon */}
       <div className="mb-5">
         <img
-          src="/munjackgui.webp"
+          src="/munjackgui.png"
           alt="치이카와"
           className="size-16 rounded-full object-cover"
           style={{ backgroundColor: "var(--color-canvas-soft)" }}
