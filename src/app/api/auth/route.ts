@@ -1,6 +1,7 @@
 import { createToken, verifyToken } from "@/lib/auth";
 
 export const runtime = "edge";
+export const dynamic = "force-dynamic";
 
 export const GET = async (req: Request) => {
   const token = req.headers.get("x-auth-token");

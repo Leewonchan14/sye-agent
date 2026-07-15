@@ -2,6 +2,7 @@ import { requireAuth } from "@/lib/auth";
 import { listSessions } from "@/lib/db";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export const GET = async (req: Request) => {
   const authError = await requireAuth(req);
