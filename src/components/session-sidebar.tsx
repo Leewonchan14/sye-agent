@@ -2,7 +2,9 @@
 
 import { PanelLeft, Plus } from "lucide-react";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { useCallback } from "react";
 
 interface Session {
   id: string;
@@ -29,23 +31,16 @@ export const SessionSidebar = ({
   isOpen,
   onToggle,
 }: Props) => {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const tk = localStorage.getItem("auth_token") ?? "";
-        const r = await fetch("/api/sessions", { headers: { "x-auth-token": tk } });
-        const d = await r.json();
-        if (d.sessions) setSessions(d.sessions);
-      } catch {
-        /* noop */
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [activeSessionId]);
+  const { data: sessions = [], isLoading: loading } = useQuery({
+    queryKey: ["sessions"],
+    queryFn: async () => {
+      const tk = localStorage.getItem("auth_token") ?? "";
+      const r = await fetch("/api/sessions", { headers: { "x-auth-token": tk } });
+      const d = await r.json();
+      return (d.sessions ?? []) as Session[];
+    },
+    staleTime: 10_000,
+  });
 
   const css = (k: string) => `var(--${k})`;
 

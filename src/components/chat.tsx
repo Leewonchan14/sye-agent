@@ -6,7 +6,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
+import { useQuery } from "@tanstack/react-query";
+
 import { useChat } from "@ai-sdk/react";
+
 
 import { DefaultChatTransport } from "ai";
 
@@ -80,8 +83,19 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const [input, setInput] = useState("");
-  const [messagesLoading, setMessagesLoading] = useState(true);
   const tk = localStorage.getItem("auth_token") ?? "";
+
+  const { data: savedMessages, isLoading: messagesLoading } = useQuery({
+    queryKey: ["messages", sessionId],
+    queryFn: async () => {
+      const r = await fetch(`/api/messages?sessionId=${sessionId}`, {
+        headers: { "x-auth-token": tk },
+      });
+      const d = await r.json();
+      return (d.messages ?? []) as { id: string; role: string; content: string }[];
+    },
+    staleTime: 5_000,
+  });
 
   const { messages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
     {
@@ -94,28 +108,15 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   );
 
   useEffect(() => {
-    setMessagesLoading(true);
-    const start = Date.now();
-    fetch(`/api/messages?sessionId=${sessionId}`, { headers: { "x-auth-token": tk } })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.messages?.length)
-          setMessages(
-            d.messages.map((m: Record<string, unknown>) => ({
-              id: m.id,
-              role: m.role,
-              parts: [{ type: "text", text: m.content }],
-            }))
-          );
-      })
-      .catch(() => {})
-      .finally(() => {
-        const elapsed = Date.now() - start;
-        const minDelay = 400;
-        const remaining = Math.max(0, minDelay - elapsed);
-        setTimeout(() => setMessagesLoading(false), remaining);
-      });
-  }, [sessionId, setMessages, tk]);
+    if (!savedMessages?.length) return;
+    setMessages(
+      savedMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant" | "system",
+        parts: [{ type: "text" as const, text: m.content }],
+      }))
+    );
+  }, [savedMessages, setMessages]);
 
   const send = useCallback(
     (text: string) => {

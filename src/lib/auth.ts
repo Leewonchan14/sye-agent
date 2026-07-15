@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 const AUTH_SECRET_KEY = "trable-agent-session-v1";
 
 const encoder = new TextEncoder();
@@ -9,7 +11,7 @@ const sha256 = async (data: string): Promise<string> => {
 };
 
 export const createToken = async (password: string): Promise<string> => {
-  const payload = JSON.stringify({ authed: true, ts: Date.now() });
+  const payload = JSON.stringify({ authed: true, ts: dayjs().valueOf() });
   const payloadBase64 = btoa(payload);
   const signature = await sha256(`${payloadBase64}.${password}.${AUTH_SECRET_KEY}`);
   return `${payloadBase64}.${signature}`;
@@ -32,7 +34,7 @@ export const verifyToken = async (token: string): Promise<boolean> => {
     if (!payload.authed) return false;
 
     // Token expires after 24 hours
-    if (Date.now() - payload.ts > 24 * 60 * 60 * 1000) return false;
+    if (dayjs().valueOf() - payload.ts > 24 * 60 * 60 * 1000) return false;
 
     return true;
   } catch {
