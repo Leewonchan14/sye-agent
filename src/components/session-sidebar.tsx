@@ -71,7 +71,7 @@ export const SessionSidebar = ({
                 className="size-6 rounded-full object-cover"
                 draggable={false}
               />
-              <span className="text-sm font-medium">치이카와 여행 메이트</span>
+              <span className="text-sm font-medium">치이카와 데이트 메이트</span>
             </div>
             <button
               type="button"

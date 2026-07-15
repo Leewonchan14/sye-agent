@@ -26,17 +26,17 @@ const SITE_URL = BASE_URL.startsWith("http")
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "원찬 & 예은 — 둘만의 여행",
+  title: "원찬 & 예은 — 둘만의 데이트",
   description:
-    "이원찬과 성예은, 둘만의 특별한 여행을 함께 계획하는 공간이에요…♪ 작고 귀여운 치이카와가 여행 메이트로 함께해요.",
+    "이원찬과 성예은, 둘만의 특별한 데이트를 함께 계획하는 공간이에요…♪ 작고 귀여운 치이카와가 데이트 메이트로 함께해요.",
   icons: {
     icon: [{ url: "/munjackgui.webp", sizes: "384x384", type: "image/webp" }],
     apple: { url: "/munjackgui.webp", sizes: "384x384", type: "image/webp" },
   },
   openGraph: {
     url: SITE_URL,
-    title: "원찬 & 예은 — 둘만의 여행",
-    description: "이원찬과 성예은, 둘만의 특별한 여행을 함께 계획하는 공간이에요…♪",
+    title: "원찬 & 예은 — 둘만의 데이트",
+    description: "이원찬과 성예은, 둘만의 특별한 데이트를 함께 계획하는 공간이에요…♪",
     images: [
       {
         url: "/munjackgui.webp",
@@ -56,8 +56,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "원찬 & 예은 — 둘만의 여행",
-    description: "둘만의 특별한 여행 플래너…♪",
+    title: "원찬 & 예은 — 둘만의 데이트",
+    description: "둘만의 특별한 데이트 플래너…♪",
     images: ["/munjackgui.webp"],
   },
 };

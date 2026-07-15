@@ -113,7 +113,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
           draggable={false}
         />
         <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
-          치이카와 여행 메이트
+          치이카와 데이트 메이트
         </span>
       </div>
 
@@ -379,7 +379,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
             >
               <PromptInputBody>
                 <PromptInputTextarea
-                  placeholder="어디로 함께 떠나볼까요…?"
+                  placeholder="어디로 데이트하러 갈까요…?"
                   disabled={streaming}
                   className="min-h-[52px] max-h-32 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
                 />
@@ -401,16 +401,16 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   onClick={() => {
                     if (status === "ready")
                       sendMessage({
-                        text: "춘천에서 원찬님 예은님 데이트 코스 추천해줘…!",
+                        text: "춘천에서 데이트 코스 추천해줘…!",
                       });
                   }}
                 />
                 <SuggestionChip
                   icon="🗺️"
-                  label="춘천 여행 일정"
+                  label="춘천 데이트 일정"
                   onClick={() => {
                     if (status === "ready")
-                      sendMessage({ text: "춘천 1박 2일 여행 일정 짜줘…!" });
+                      sendMessage({ text: "춘천 1박 2일 데이트 일정 짜줘…!" });
                   }}
                 />
                 <SuggestionChip
@@ -426,7 +426,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   label="체크리스트"
                   onClick={() => {
                     if (status === "ready")
-                      sendMessage({ text: "둘이 함께 여행 준비물 체크리스트 알려줘…!" });
+                      sendMessage({ text: "둘이 함께 데이트 준비물 체크리스트 알려줘…!" });
                   }}
                 />
               </div>
@@ -447,7 +447,7 @@ const loadingPhrases = [
   "준비 중이야…♪",
   "거의 다 왔어…!",
   "데이터 불러오는 중…♪",
-  "원찬님 예은님… 기다려줘…!",
+  "예은님… 기다려줘…!",
   "좋은 정보 찾는 중…♪",
   "잠깐만…! 곧 갈게…!",
 ];
@@ -509,17 +509,18 @@ const phrases = [
   "같이 가자…!",
   "야호…!",
   "좋아…♪",
-  "원찬니임…!",
   "예은니임…!",
-  "여행 가쟈…!",
+  "데이트 가쟈…!",
   "맛난 거 먹쟈…!",
   "무섭지 않아…!",
   "둘이 함께…!",
   "즐거워…♪",
   "괜찮아…!",
-  "행복해…!",
+  "완전 최고…!",
   "내가 도와줄게…!",
   "잘 될 거야…!",
+  "…라는 거야…!",
+  "알고 있어?〜",
 ];
 
 const RotatingPhrase = () => {
@@ -555,18 +556,20 @@ const RotatingPhrase = () => {
 /* ── Empty State ── */
 
 const subPhrases = [
-  "뭔가 작고 귀여운 제가… 둘만의 여행을 도와드릴게요…♪",
+  "뭔가 작고 귀여운 내가… 둘만의 데이트를 도와줄게…!",
   "어떻게든 되겠지…!!",
   "서두르지 않아도 괜찮아…!",
-  "추억은… 계속… 남는 거야…!",
+  "즐거운 기분… 계속… 가져가자…!",
   "몇 번이라도… 계속 응원할게…!!",
   "괜찮아, 항상 어떻게든 됐잖아…!!",
   "그거 완전 최고잖아…!!",
   "둘이 함께라면… 뭐든 즐거워…♪",
-  "안 될 것 같으면… 그만둬도 되는 거야…!",
-  "알아… 지칠 때도 있는 거지…",
-  "원찬님 예은님이라면… 분명 행복할 거야…!",
+  "안 되면… 다른 방법… 찾아보자…!",
+  "쉬고 싶을 땐… 쉬는 게… 최고야…!",
+  "예은님이라면… 분명 행복할 거야…!",
   "오늘도 둘이서 즐겁게…♪",
+  "맛집…이라는 거야…!?",
+  "알고 있어?〜 그거 완전… 최고의 데이트 코스…라는 뜻이야!?",
 ];
 
 const EmptyState = () => {
@@ -595,7 +598,7 @@ const EmptyState = () => {
         className="text-[22px] font-normal leading-snug"
         style={{ color: "var(--color-ink)" }}
       >
-        원찬<span style={{ color: "var(--color-muted)" }}>님…!</span> 예은
+        예은
         <span style={{ color: "var(--color-muted)" }}>님…!</span>
       </h1>
       <p
