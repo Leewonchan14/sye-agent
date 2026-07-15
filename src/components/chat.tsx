@@ -50,7 +50,11 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
 
-  const { data: isValid, isLoading } = useQuery({
+  const {
+    data: isValid,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["auth-validate"],
     queryFn: async () => {
       const res = await fetch("/api/auth", {
@@ -60,7 +64,8 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
       return d.valid === true;
     },
     enabled: !!token,
-    retry: false,
+    retry: 1,
+    staleTime: 0,
   });
 
   const onNew = useCallback(() => {
@@ -77,7 +82,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
   // Loading: token present but validation pending
-  if (typeof isValid == "undefined" || isLoading) {
+  if (token && isLoading) {
     return (
       <div
         className="flex min-h-screen flex-col"
@@ -88,8 +93,8 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
     );
   }
 
-  // Not authenticated: no token or invalid token
-  if (!token || isValid === false) {
+  // Not authenticated: no token, invalid token, or query error
+  if (!token || isValid === false || isError) {
     return <PasswordGate onSuccess={() => {}} />;
   }
 
