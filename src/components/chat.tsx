@@ -82,7 +82,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
   // Loading: token present but validation pending
-  if (token && isLoading) {
+  if (!!token && isLoading) {
     return (
       <div
         className="flex min-h-screen flex-col"
