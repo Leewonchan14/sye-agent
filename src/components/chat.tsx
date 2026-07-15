@@ -4,6 +4,8 @@ import { Send, Square } from "lucide-react";
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useRouter } from "next/navigation";
+
 import { useChat } from "@ai-sdk/react";
 
 import { DefaultChatTransport } from "ai";
@@ -23,35 +25,26 @@ import { Textarea } from "@/components/ui/textarea";
 
 /* ── ChatShell ── */
 
-export const ChatShell = () => {
+export const ChatShell = ({ sessionId }: { sessionId: string }) => {
+  const router = useRouter();
   const [authed, setAuthed] = useState(false);
-  const [sid, setSid] = useState("");
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     setAuthed(localStorage.getItem("auth_0411") === "true");
-    let s = localStorage.getItem("sessionId");
-    if (!s) {
-      s = crypto.randomUUID();
-      localStorage.setItem("sessionId", s);
-    }
-    setSid(s);
     setMounted(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const onNew = useCallback(() => {
-    const ns = crypto.randomUUID();
-    localStorage.setItem("sessionId", ns);
-    setSid(ns);
-  }, []);
+    router.push(`/${crypto.randomUUID()}`);
+  }, [router]);
 
   const onSelect = useCallback((id: string) => {
-    localStorage.setItem("sessionId", id);
-    setSid(id);
-  }, []);
+    router.push(`/${id}`);
+  }, [router]);
 
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
@@ -70,14 +63,14 @@ export const ChatShell = () => {
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       <SessionSidebar
-        activeSessionId={sid}
+        activeSessionId={sessionId}
         onSelect={onSelect}
         onNew={onNew}
         isOpen={sidebarOpen}
         onToggle={toggle}
       />
       <div className="flex min-w-0 flex-1 flex-col min-h-0">
-        <ChatInner key={sid} sessionId={sid} />
+        <ChatInner key={sessionId} sessionId={sessionId} />
       </div>
     </div>
   );
@@ -102,6 +95,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
   useEffect(() => {
     setMessagesLoading(true);
+    const start = Date.now();
     fetch(`/api/messages?sessionId=${sessionId}`, { headers: { "x-auth-token": tk } })
       .then((r) => r.json())
       .then((d) => {
@@ -115,7 +109,12 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           );
       })
       .catch(() => {})
-      .finally(() => setMessagesLoading(false));
+      .finally(() => {
+        const elapsed = Date.now() - start;
+        const minDelay = 400;
+        const remaining = Math.max(0, minDelay - elapsed);
+        setTimeout(() => setMessagesLoading(false), remaining);
+      });
   }, [sessionId, setMessages, tk]);
 
   const send = useCallback(

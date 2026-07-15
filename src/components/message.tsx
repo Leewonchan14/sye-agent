@@ -80,12 +80,12 @@ const UserBubble = ({ text }: { text: string }) => (
 
 const ReasoningBubble = ({ text }: { text: string }) => (
   <div className="flex items-start gap-3">
-    <div
-      className="flex size-8 shrink-0 items-center justify-center rounded-full text-base opacity-60"
+    <img
+      src="/munjackgui-thinking.png"
+      alt="thinking"
+      className="size-8 shrink-0 rounded-full object-cover opacity-80"
       style={{ backgroundColor: "var(--color-canvas-soft)" }}
-    >
-      💭
-    </div>
+    />
     <div
       className="min-w-0 flex-1 rounded-lg px-3 py-2 text-[14px] leading-relaxed"
       style={{

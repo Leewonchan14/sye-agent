@@ -1,5 +1,7 @@
-import { ChatShell } from "@/components/chat";
+import { redirect } from "next/navigation";
 
-export default function HomePage() {
-  return <ChatShell />;
-}
+const HomePage = () => {
+  redirect(`/${crypto.randomUUID()}`);
+};
+
+export default HomePage;

@@ -7,6 +7,13 @@ import { saveMessage } from "@/lib/db";
 export const runtime = "edge";
 export const maxDuration = 60;
 
+const extractTextParts = (msg: { parts?: { type: string; text?: string }[] }): string =>
+  msg.parts
+    ?.filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("")
+    .trim() || "";
+
 export const POST = async (req: Request) => {
   const authError = await requireAuth(req);
   if (authError) return authError;
@@ -31,10 +38,7 @@ export const POST = async (req: Request) => {
   // Save user message to Neon DB (non-blocking)
   const lastMsg = messages[messages.length - 1];
   if (lastMsg?.role === "user" && sessionId) {
-    const userText = lastMsg.parts
-      ?.filter((p: Record<string, unknown>) => p.type === "text")
-      .map((p: Record<string, unknown>) => String(p.text ?? ""))
-      .join("");
+    const userText = extractTextParts(lastMsg);
     if (userText) {
       saveMessage(sessionId, "user", userText).catch((err) =>
         console.error("Failed to save user message:", err)
@@ -49,10 +53,31 @@ export const POST = async (req: Request) => {
     uiMessages: messages,
     onStepEnd: async (step) => {
       if (!sessionId) return;
-      const text = step.text;
-      if (text) {
-        saveMessage(sessionId, "assistant", text).catch((err) =>
+
+      // Save assistant text
+      if (step.text) {
+        saveMessage(sessionId, "assistant", step.text).catch((err) =>
           console.error("Failed to save assistant message:", err)
+        );
+      }
+
+      // Save tool call + result pairs
+      for (const tc of step.toolCalls) {
+        const result = step.toolResults.find(
+          (r) => r.toolCallId === tc.toolCallId
+        );
+        let errorContent: unknown = null;
+        if (result && typeof result === "object" && "error" in result) {
+          errorContent = (result as { error: unknown }).error;
+        }
+        const content = JSON.stringify({
+          toolName: tc.toolName,
+          input: tc.input,
+          output: result?.output ?? null,
+          error: errorContent,
+        });
+        saveMessage(sessionId, "tool", content).catch((err) =>
+          console.error("Failed to save tool message:", err)
         );
       }
     },
