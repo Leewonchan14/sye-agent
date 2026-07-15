@@ -1,15 +1,13 @@
 "use client";
 
-import { Send, Square } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Menu, Send, Square } from "lucide-react";
 
 import { useCallback, useEffect, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
-import { useQuery } from "@tanstack/react-query";
-
 import { useChat } from "@ai-sdk/react";
-
 
 import { DefaultChatTransport } from "ai";
 
@@ -32,7 +30,8 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -45,9 +44,12 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
     router.push(`/${crypto.randomUUID()}`);
   }, [router]);
 
-  const onSelect = useCallback((id: string) => {
-    router.push(`/${id}`);
-  }, [router]);
+  const onSelect = useCallback(
+    (id: string) => {
+      router.push(`/${id}`);
+    },
+    [router]
+  );
 
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
@@ -62,16 +64,68 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 
   return (
     <div
-      className="flex h-screen flex-row"
+      className="flex h-screen flex-col md:flex-row relative"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
-      <SessionSidebar
-        activeSessionId={sessionId}
-        onSelect={onSelect}
-        onNew={onNew}
-        isOpen={sidebarOpen}
-        onToggle={toggle}
-      />
+      {/* Desktop sidebar */}
+      <div className="hidden md:block">
+        <SessionSidebar
+          activeSessionId={sessionId}
+          onSelect={onSelect}
+          onNew={onNew}
+          isOpen={sidebarOpen}
+          onToggle={toggle}
+        />
+      </div>
+
+      {/* Mobile top bar */}
+      <div
+        className="md:hidden flex items-center gap-2 px-3 h-12 shrink-0"
+        style={{ borderBottom: "1px solid var(--color-hairline)" }}
+      >
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          className="rounded-md p-1.5"
+          style={{ color: "var(--color-muted)" }}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <img
+          src="/munjackgui.webp"
+          alt="치이카와"
+          className="size-6 rounded-full object-cover"
+        />
+        <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+          치이카와 여행 메이트
+        </span>
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="relative w-64 h-full">
+            <SessionSidebar
+              activeSessionId={sessionId}
+              onSelect={(id) => {
+                onSelect(id);
+                setMobileMenuOpen(false);
+              }}
+              onNew={() => {
+                onNew();
+                setMobileMenuOpen(false);
+              }}
+              isOpen={true}
+              onToggle={() => setMobileMenuOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex min-w-0 flex-1 flex-col min-h-0">
         <ChatInner key={sessionId} sessionId={sessionId} />
       </div>
@@ -109,13 +163,51 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
   useEffect(() => {
     if (!savedMessages?.length) return;
-    setMessages(
-      savedMessages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant" | "system",
-        parts: [{ type: "text" as const, text: m.content }],
-      }))
-    );
+
+    const uiMessages: Array<{
+      id: string;
+      role: "user" | "assistant";
+      parts: Array<Record<string, unknown>>;
+    }> = [];
+
+    for (const m of savedMessages) {
+      if (m.role === "user") {
+        uiMessages.push({
+          id: m.id,
+          role: "user",
+          parts: [{ type: "text", text: m.content }],
+        });
+      } else if (m.role === "assistant") {
+        uiMessages.push({
+          id: m.id,
+          role: "assistant",
+          parts: [{ type: "text", text: m.content }],
+        });
+      } else if (m.role === "tool") {
+        try {
+          const toolData = JSON.parse(m.content);
+          const lastMsg = uiMessages[uiMessages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            lastMsg.parts.push({
+              type: `tool-${toolData.toolName}`,
+              toolCallId: m.id,
+              state: toolData.error
+                ? "output-error"
+                : toolData.output != null
+                  ? "output-available"
+                  : "input-available",
+              input: toolData.input,
+              output: toolData.output ?? undefined,
+              errorText: toolData.error ? String(toolData.error) : undefined,
+            });
+          }
+        } catch {
+          // skip malformed tool messages
+        }
+      }
+    }
+
+    setMessages(uiMessages as Parameters<typeof setMessages>[0]);
   }, [savedMessages, setMessages]);
 
   const send = useCallback(
@@ -195,13 +287,17 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
               <MessageScrollerContent className="mx-auto max-w-[720px] px-4">
-                {messages.map((m) => (
+                {messages.map((m, idx) => (
                   <MessageScrollerItem
                     key={m.id}
                     messageId={m.id}
                     scrollAnchor={m.role === "user"}
                   >
-                    <MessageItem message={m} />
+                    <MessageItem
+                      message={m}
+                      isLastMessage={idx === messages.length - 1}
+                      isStreaming={streaming}
+                    />
                   </MessageScrollerItem>
                 ))}
                 {streaming && (
@@ -225,60 +321,76 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       {/* Input area */}
       {!messagesLoading && (
-      <div className="shrink-0 px-4 pb-6">
-        <div className="mx-auto max-w-[720px]">
-          <form
-            onSubmit={onInputSubmit}
-            className="relative flex flex-col rounded-2xl border"
-            style={{
-              borderColor: "var(--color-hairline)",
-              backgroundColor: "var(--color-canvas-soft)",
-            }}
-          >
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKey}
-              placeholder="어디로 함께 떠나볼까요…?"
-              disabled={streaming}
-              rows={1}
-              className="min-h-[52px] max-h-32 resize-none rounded-2xl border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
-            />
-            {/* Toolbar-style bottom bar */}
-            <div className="flex items-center justify-between px-2 pb-2">
-              <div className="flex items-center gap-1">
-                <RotatingPhrase />
+        <div className="shrink-0 px-4 pb-6">
+          <div className="mx-auto max-w-[720px]">
+            <form
+              onSubmit={onInputSubmit}
+              className="relative flex flex-col rounded-2xl border"
+              style={{
+                borderColor: "var(--color-hairline)",
+                backgroundColor: "var(--color-canvas-soft)",
+              }}
+            >
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKey}
+                placeholder="어디로 함께 떠나볼까요…?"
+                disabled={streaming}
+                rows={1}
+                className="min-h-[52px] max-h-32 resize-none rounded-2xl border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
+              />
+              {/* Toolbar-style bottom bar */}
+              <div className="flex items-center justify-between px-2 pb-2">
+                <div className="flex items-center gap-1">
+                  <RotatingPhrase />
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="submit"
+                    disabled={streaming || !input.trim()}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+                    style={{
+                      backgroundColor:
+                        streaming || !input.trim()
+                          ? "var(--color-hairline)"
+                          : "var(--color-primary)",
+                      color: streaming || !input.trim() ? "var(--color-muted)" : "#fff",
+                    }}
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="submit"
-                  disabled={streaming || !input.trim()}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors"
-                  style={{
-                    backgroundColor:
-                      streaming || !input.trim()
-                        ? "var(--color-hairline)"
-                        : "var(--color-primary)",
-                    color: streaming || !input.trim() ? "var(--color-muted)" : "#fff",
-                  }}
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </form>
+            </form>
 
-          {/* Suggestion chips — BELOW input (Claude.ai pattern) */}
-          {!hasMsgs && (
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
-              <SuggestionChip icon="🌸" label="데이트 코스 추천" onClick={() => send("춘천에서 원찬님 예은님 데이트 코스 추천해줘…!")} />
-              <SuggestionChip icon="🗺️" label="춘천 여행 일정" onClick={() => send("춘천 1박 2일 여행 일정 짜줘…!")} />
-              <SuggestionChip icon="🍽️" label="맛집 찾기" onClick={() => send("춘천 근처 분위기 좋은 맛집 알려줘…!")} />
-              <SuggestionChip icon="💝" label="체크리스트" onClick={() => send("둘이 함께 여행 준비물 체크리스트 알려줘…!")} />
-            </div>
-          )}
+            {/* Suggestion chips — BELOW input (Claude.ai pattern) */}
+            {!hasMsgs && (
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
+                <SuggestionChip
+                  icon="🌸"
+                  label="데이트 코스 추천"
+                  onClick={() => send("춘천에서 원찬님 예은님 데이트 코스 추천해줘…!")}
+                />
+                <SuggestionChip
+                  icon="🗺️"
+                  label="춘천 여행 일정"
+                  onClick={() => send("춘천 1박 2일 여행 일정 짜줘…!")}
+                />
+                <SuggestionChip
+                  icon="🍽️"
+                  label="맛집 찾기"
+                  onClick={() => send("춘천 근처 분위기 좋은 맛집 알려줘…!")}
+                />
+                <SuggestionChip
+                  icon="💝"
+                  label="체크리스트"
+                  onClick={() => send("둘이 함께 여행 준비물 체크리스트 알려줘…!")}
+                />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
@@ -375,7 +487,10 @@ const RotatingPhrase = () => {
   }, []);
 
   return (
-    <span className="flex items-center gap-1.5 text-[12px] font-medium transition-opacity duration-300" style={{ color: "var(--color-muted)" }}>
+    <span
+      className="flex items-center gap-1.5 text-[12px] font-medium transition-opacity duration-300"
+      style={{ color: "var(--color-muted)" }}
+    >
       <img
         src="/munjackgui.webp"
         alt="치이카와"
@@ -410,26 +525,29 @@ const EmptyState = () => {
     return () => clearInterval(iv);
   }, []);
   return (
-  <div className="flex flex-col items-center gap-1 pt-32 pb-4">
-    {/* Character icon */}
-    <div className="mb-5">
-      <img
-        src="/munjackgui.webp"
-        alt="치이카와"
-        className="size-16 rounded-full object-cover"
-        style={{ backgroundColor: "var(--color-canvas-soft)" }}
-      />
+    <div className="flex flex-col items-center gap-1 pt-32 pb-4">
+      {/* Character icon */}
+      <div className="mb-5">
+        <img
+          src="/munjackgui.webp"
+          alt="치이카와"
+          className="size-16 rounded-full object-cover"
+          style={{ backgroundColor: "var(--color-canvas-soft)" }}
+        />
+      </div>
+      <h1
+        className="text-[22px] font-normal leading-snug"
+        style={{ color: "var(--color-ink)" }}
+      >
+        원찬<span style={{ color: "var(--color-muted)" }}>님…!</span> 예은
+        <span style={{ color: "var(--color-muted)" }}>님…!</span>
+      </h1>
+      <p
+        className="text-[15px] transition-opacity duration-300"
+        style={{ color: "var(--color-muted)" }}
+      >
+        {subPhrases[subIdx]}
+      </p>
     </div>
-    <h1
-      className="text-[22px] font-normal leading-snug"
-      style={{ color: "var(--color-ink)" }}
-    >
-      원찬<span style={{ color: "var(--color-muted)" }}>님…!</span>{" "}
-      예은<span style={{ color: "var(--color-muted)" }}>님…!</span>
-    </h1>
-    <p className="text-[15px] transition-opacity duration-300" style={{ color: "var(--color-muted)" }}>
-      {subPhrases[subIdx]}
-    </p>
-  </div>
   );
 };

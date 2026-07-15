@@ -1,249 +1,161 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkBreaks from "remark-breaks";
-import remarkGfm from "remark-gfm";
+import type { ToolUIPart, UIMessage } from "ai";
 
-import { useCallback, useState } from "react";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 
-import type { UIMessage } from "@ai-sdk/react";
+interface MessageItemProps {
+  message: UIMessage;
+  isLastMessage?: boolean;
+  isStreaming?: boolean;
+}
 
-import { ToolCallCard } from "@/components/tool-call-card";
-
-export const MessageItem = ({ message }: { message: UIMessage }) => {
+export const MessageItem = ({
+  message,
+  isLastMessage = false,
+  isStreaming = false,
+}: MessageItemProps) => {
   const isUser = message.role === "user";
 
   if (!message.parts || message.parts.length === 0) return null;
 
-  return (
-    <div className="flex flex-col gap-2 py-1.5">
-      {message.parts.map((part, idx) => {
-        switch (part.type) {
-          case "text": {
-            if (!part.text) return null;
-            return isUser ? (
-              <UserBubble key={idx} text={part.text} />
-            ) : (
-              <AssistantMessage key={idx} text={part.text} />
-            );
-          }
-          case "reasoning": {
-            if (!part.text) return null;
-            return (
-              <ReasoningBubble key={idx} text={part.text} />
-            );
-          }
-          default: {
-            const t = part as Record<string, unknown>;
-            if (t.type === "dynamic-tool" || String(t.type).startsWith("tool-")) {
+  // Consolidate all reasoning parts into one block
+  const reasoningParts = message.parts.filter((part) => part.type === "reasoning");
+  const reasoningText = reasoningParts
+    .map((p) => (p.type === "reasoning" ? p.text : ""))
+    .join("\n\n");
+  const hasReasoning = reasoningParts.length > 0;
+
+  const lastPart = message.parts.at(-1);
+  const isReasoningStreaming =
+    isLastMessage && isStreaming && lastPart?.type === "reasoning";
+
+  // User messages: simple bubble
+  if (isUser) {
+    return (
+      <Message from="user">
+        <MessageContent>
+          {message.parts.map((part, idx) => {
+            if (part.type === "text" && part.text) {
               return (
-                <ToolCallCard
-                  key={(t.toolCallId as string) ?? idx}
-                  toolName={
-                    t.type === "dynamic-tool"
-                      ? (t.toolName as string)
-                      : String(t.type).slice(5)
-                  }
-                  state={t.state as string}
-                  input={t.input}
-                  output={t.output}
-                  errorText={t.errorText as string}
-                  title={t.title as string}
-                />
+                <MessageResponse key={`${message.id}-${idx}`}>
+                  {part.text}
+                </MessageResponse>
               );
             }
             return null;
-          }
-        }
-      })}
-    </div>
+          })}
+        </MessageContent>
+      </Message>
+    );
+  }
+
+  // Assistant messages: avatar + content (reasoning, text, tool calls)
+  return (
+    <Message from="assistant">
+      <div className="flex items-start gap-3">
+        <img
+          src="/munjackgui.webp"
+          alt="치이카와"
+          className="size-8 shrink-0 rounded-full object-cover"
+          style={{ backgroundColor: "var(--color-canvas-soft)" }}
+        />
+        <div className="min-w-0 flex-1">
+          <MessageContent>
+            {hasReasoning && (
+              <Reasoning isStreaming={isReasoningStreaming}>
+                <ReasoningTrigger />
+                <ReasoningContent>{reasoningText}</ReasoningContent>
+              </Reasoning>
+            )}
+            {message.parts.map((part, idx) => {
+              if (part.type === "text" && part.text) {
+                return (
+                  <MessageResponse key={`${message.id}-${idx}`}>
+                    {part.text}
+                  </MessageResponse>
+                );
+              }
+              if (part.type === "reasoning") return null; // consolidated above
+              if (part.type === "step-start") return null;
+
+              // Tool parts: validated at runtime
+              const toolProps = extractToolPartProps(part);
+              if (toolProps) {
+                return (
+                  <Tool key={toolProps.toolCallId ?? idx} defaultOpen={false}>
+                    <ToolHeader
+                      type={toolProps.type}
+                      state={toolProps.state as ToolUIPart["state"]}
+                    />
+                    <ToolContent>
+                      {toolProps.input != null && <ToolInput input={toolProps.input} />}
+                      {(toolProps.output != null || toolProps.errorText != null) && (
+                        <ToolOutput
+                          output={toolProps.output}
+                          errorText={toolProps.errorText}
+                        />
+                      )}
+                    </ToolContent>
+                  </Tool>
+                );
+              }
+              return null;
+            })}
+          </MessageContent>
+        </div>
+      </div>
+    </Message>
   );
 };
 
-// === User bubble — DESIGN.md §6.4 ===
+/* ── Tool part extraction ── */
 
-const UserBubble = ({ text }: { text: string }) => (
-  <div className="flex justify-end">
-    <div
-      className="max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-[--color-ink]"
-      style={{ backgroundColor: "var(--color-canvas-card)" }}
-    >
-      {text}
-    </div>
-  </div>
-);
-
-// === Assistant message — Chiikawa character bubble ===
-
-// === Reasoning bubble — Chiikawa thinking aloud ===
-
-const ReasoningBubble = ({ text }: { text: string }) => (
-  <div className="flex items-start gap-3">
-    <img
-      src="/munjackgui-thinking.png"
-      alt="thinking"
-      className="size-8 shrink-0 rounded-full object-cover opacity-80"
-      style={{ backgroundColor: "var(--color-canvas-soft)" }}
-    />
-    <div
-      className="min-w-0 flex-1 rounded-lg px-3 py-2 text-[14px] leading-relaxed"
-      style={{
-        backgroundColor: "var(--color-canvas-soft)",
-        color: "var(--color-muted)",
-      }}
-    >
-      {text}
-    </div>
-  </div>
-);
-
-// === Assistant message — Chiikawa character bubble ===
-
-const AssistantMessage = ({ text }: { text: string }) => (
-  <div className="flex items-start gap-3">
-    {/* Character avatar */}
-    <img
-      src="/munjackgui.webp"
-      alt="치이카와"
-      className="size-8 shrink-0 rounded-full object-cover"
-      style={{ backgroundColor: "var(--color-canvas-soft)" }}
-    />
-    <div className="min-w-0 flex-1 pt-1 text-[16px] leading-relaxed text-[--color-ink]">
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkBreaks]}
-      components={{
-        code({ className, children }) {
-          const match = /language-(\w+)/.exec(className ?? "");
-          const isInline = !match && !className;
-          const codeStr = String(children).replace(/\n$/, "");
-          if (isInline) {
-            return (
-              <code
-                className="rounded px-1.5 py-0.5 font-mono text-sm"
-                style={{
-                  backgroundColor: "var(--color-canvas-soft)",
-                  color: "var(--color-ink)",
-                }}
-              >
-                {children}
-              </code>
-            );
-          }
-          return <CodeBlock language={match?.[1]} code={codeStr} />;
-        },
-        a({ href, children }) {
-          return (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-              style={{ color: "var(--color-primary)" }}
-            >
-              {children}
-            </a>
-          );
-        },
-        table({ children }) {
-          return (
-            <div className="my-3 overflow-x-auto rounded-lg border" style={{ borderColor: "var(--color-hairline)" }}>
-              <table className="min-w-full text-sm">{children}</table>
-            </div>
-          );
-        },
-        thead({ children }) {
-          return (
-            <thead style={{ borderBottom: `2px solid var(--color-hairline)` }}>
-              {children}
-            </thead>
-          );
-        },
-        tbody({ children }) {
-          return <tbody>{children}</tbody>;
-        },
-        tr({ children }) {
-          return (
-            <tr style={{ borderBottom: `1px solid var(--color-hairline-soft)` }}>
-              {children}
-            </tr>
-          );
-        },
-        th({ children }) {
-          return (
-            <th
-              className="px-3 py-2 text-left text-xs font-medium"
-              style={{ color: "var(--color-muted)" }}
-            >
-              {children}
-            </th>
-          );
-        },
-        td({ children }) {
-          return (
-            <td className="px-3 py-2" style={{ color: "var(--color-ink)" }}>
-              {children}
-            </td>
-          );
-        },
-        hr() {
-          return (
-            <hr className="my-4" style={{ borderColor: "var(--color-hairline)" }} />
-          );
-        },
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-    </div>
-  </div>
-);
-
-// === Code block — DESIGN.md §6.8 dark theme ===
-
-interface CodeBlockProps {
-  code: string;
-  language?: string;
+interface ToolPartProps {
+  type: `tool-${string}`;
+  state: string;
+  toolCallId: string;
+  input: unknown;
+  output: unknown;
+  errorText?: string;
 }
 
-const CodeBlock = ({ code, language }: CodeBlockProps) => {
-  const [copied, setCopied] = useState(false);
-  const onCopy = useCallback(() => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [code]);
-
-  return (
-    <div
-      className="relative mt-3 overflow-hidden rounded-lg"
-      style={{ backgroundColor: "var(--color-dark)" }}
-    >
-      <div className="flex items-center justify-between px-4 py-2">
-        <span className="text-xs" style={{ color: "var(--color-on-dark-soft)" }}>
-          {language ?? "code"}
-        </span>
-        <button
-          type="button"
-          onClick={onCopy}
-          className="flex items-center gap-1 text-xs transition-colors"
-          style={{ color: "var(--color-on-dark-soft)" }}
-        >
-          {copied ? (
-            <>
-              <Check className="h-3 w-3" /> 복사됨
-            </>
-          ) : (
-            <>
-              <Copy className="h-3 w-3" /> 복사
-            </>
-          )}
-        </button>
-      </div>
-      <pre className="overflow-x-auto px-4 pb-4 font-mono text-sm leading-relaxed">
-        <code style={{ color: "var(--color-on-dark)" }}>{code}</code>
-      </pre>
-    </div>
-  );
+const extractToolPartProps = (part: Record<string, unknown>): ToolPartProps | null => {
+  if (
+    typeof part.type !== "string" ||
+    !part.type.startsWith("tool-") ||
+    typeof part.state !== "string" ||
+    typeof part.toolCallId !== "string"
+  ) {
+    return null;
+  }
+  // Runtime check guarantees type starts with "tool-"
+  const type = part.type as `tool-${string}`;
+  return {
+    type,
+    state: part.state,
+    toolCallId: part.toolCallId,
+    input: "input" in part ? part.input : undefined,
+    output: "output" in part ? part.output : undefined,
+    errorText:
+      "errorText" in part && typeof part.errorText === "string"
+        ? part.errorText
+        : undefined,
+  };
 };
