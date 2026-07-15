@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth";
-import { getMessages, saveMessage } from "@/lib/db";
+import { getMessages, getSessionState, saveMessage } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -35,6 +35,13 @@ export const GET = async (req: Request) => {
   }
 
   try {
+    // Try loading complete session state first (UIMessage[] — preserves exact SSE structure)
+    const state = await getSessionState(sessionId);
+    if (state) {
+      return Response.json({ state });
+    }
+
+    // Fall back to individual messages
     const messages = await getMessages(sessionId);
     return Response.json({
       messages: messages.map((m) => ({

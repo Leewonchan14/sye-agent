@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 
 import { useChat } from "@ai-sdk/react";
 
+import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 
 import {
@@ -31,7 +32,6 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { createMessageHelper } from "@/lib/utils";
 
 /* ── ChatShell ── */
 
@@ -168,19 +168,16 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const [tk] = useLocalStorageState("auth_token", { defaultValue: "" });
 
-  const { data: savedMessages, isLoading: messagesLoading } = useQuery({
+  const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: async () => {
       const r = await fetch(`/api/messages?sessionId=${sessionId}`, {
         headers: { "x-auth-token": tk },
       });
       const d = await r.json();
-      return (d.messages ?? []) as {
-        id: string;
-        role: string;
-        content: string;
-        reasoning?: string;
-      }[];
+      // Prefer complete session state (preserves exact SSE structure)
+      if (d.state) return d.state as UIMessage[];
+      return [];
     },
     staleTime: 5_000,
   });
@@ -199,82 +196,27 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       body: { sessionId },
       headers: { "x-auth-token": tk },
     }),
-    onFinish: ({ message }) => {
-      const m = createMessageHelper(message);
-      const text = m.extractText();
-      if (!text) return;
-
-      const reasoning = m.extractReasoning() ?? null;
-
-      fetch("/api/messages", {
+    onFinish: ({ messages: allMessages }) => {
+      // Save complete session state from frontend
+      fetch("/api/messages/session-state", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-auth-token": tk,
         },
-        body: JSON.stringify({
-          sessionId,
-          role: "assistant",
-          content: text,
-          reasoning,
-        }),
-      }).catch((err) => console.error("Failed to save assistant message:", err));
+        body: JSON.stringify({ sessionId, messages: allMessages }),
+      }).catch((err) =>
+        console.error("Failed to save session state from frontend:", err)
+      );
     },
   });
 
+  // Load saved messages into useChat once query resolves
   useEffect(() => {
-    if (!savedMessages?.length) return;
-
-    const uiMessages: Array<{
-      id: string;
-      role: "user" | "assistant";
-      parts: Array<Record<string, unknown>>;
-    }> = [];
-
-    for (const m of savedMessages) {
-      if (m.role === "user") {
-        uiMessages.push({
-          id: m.id,
-          role: "user",
-          parts: [{ type: "text", text: m.content }],
-        });
-      } else if (m.role === "assistant") {
-        const parts: Array<Record<string, unknown>> = [];
-        if (m.reasoning) {
-          parts.push({ type: "reasoning", text: m.reasoning });
-        }
-        parts.push({ type: "text", text: m.content });
-        uiMessages.push({
-          id: m.id,
-          role: "assistant",
-          parts,
-        });
-      } else if (m.role === "tool") {
-        try {
-          const toolData = JSON.parse(m.content);
-          const lastMsg = uiMessages[uiMessages.length - 1];
-          if (lastMsg && lastMsg.role === "assistant") {
-            lastMsg.parts.push({
-              type: `tool-${toolData.toolName}`,
-              toolCallId: m.id,
-              state: toolData.error
-                ? "output-error"
-                : toolData.output != null
-                  ? "output-available"
-                  : "input-available",
-              input: toolData.input,
-              output: toolData.output ?? undefined,
-              errorText: toolData.error ? String(toolData.error) : undefined,
-            });
-          }
-        } catch {
-          // skip malformed tool messages
-        }
-      }
+    if (initialMessages && initialMessages.length > 0) {
+      setMessages(initialMessages as Parameters<typeof setMessages>[0]);
     }
-
-    setMessages(uiMessages as Parameters<typeof setMessages>[0]);
-  }, [savedMessages, setMessages]);
+  }, [initialMessages, setMessages]);
 
   const handlePromptSubmit = useCallback(
     (message: { text: string }) => {

@@ -2,7 +2,7 @@ import { createAgentUIStreamResponse } from "ai";
 
 import { getAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
-import { saveMessage } from "@/lib/db";
+import { saveMessage, saveSessionState } from "@/lib/db";
 import { createMessageHelper } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -48,24 +48,29 @@ export const POST = async (req: Request) => {
     onStepEnd: async (step) => {
       if (!sessionId) return;
 
-      // Save tool call + result pairs
+      // Save tool calls to chat_messages for sidebar session list accuracy
       for (const tc of step.toolCalls) {
-        const result = step.toolResults.find(
-          (r) => r.toolCallId === tc.toolCallId
-        );
-        let errorContent: unknown = null;
-        if (result && typeof result === "object" && "error" in result) {
-          errorContent = (result as { error: unknown }).error;
-        }
+        const result = step.toolResults.find((r) => r.toolCallId === tc.toolCallId);
         const content = JSON.stringify({
           toolName: tc.toolName,
           input: tc.input,
           output: result?.output ?? null,
-          error: errorContent,
+          error:
+            result && typeof result === "object" && "error" in result
+              ? (result as { error: unknown }).error
+              : null,
         });
         saveMessage(sessionId, "tool", content).catch((err) =>
           console.error("Failed to save tool message:", err)
         );
+      }
+    },
+    onEnd: async ({ messages: allMessages }) => {
+      if (!sessionId || !allMessages) return;
+      try {
+        await saveSessionState(sessionId, allMessages);
+      } catch (err) {
+        console.error("Failed to save session state:", err);
       }
     },
   });

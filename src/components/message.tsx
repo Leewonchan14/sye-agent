@@ -1,6 +1,6 @@
 "use client";
 
-import type { ToolUIPart, UIMessage } from "ai";
+import type { DynamicToolUIPart, ToolUIPart, UIMessage } from "ai";
 
 import {
   Message,
@@ -112,10 +112,22 @@ export const MessageItem = ({
               <div className="mt-4 space-y-1">
                 {toolItems.map(({ key, props }) => (
                   <Tool key={props.toolCallId ?? key} defaultOpen={false}>
-                    <ToolHeader
-                      type={props.type}
-                      state={props.state as ToolUIPart["state"]}
-                    />
+                    {(() => {
+                      const isDynamic = props.type === "dynamic-tool";
+                      // Build header JSX directly, avoiding union type narrowing issues
+                      return isDynamic ? (
+                        <ToolHeader
+                          type="dynamic-tool"
+                          state={props.state as DynamicToolUIPart["state"]}
+                          toolName={props.toolName ?? ""}
+                        />
+                      ) : (
+                        <ToolHeader
+                          type={props.type as `tool-${string}`}
+                          state={props.state as ToolUIPart["state"]}
+                        />
+                      );
+                    })()}
                     <ToolContent>
                       {props.input != null && <ToolInput input={props.input} />}
                       {(props.output != null || props.errorText != null) && (
@@ -136,9 +148,10 @@ export const MessageItem = ({
 /* ── Tool part extraction ── */
 
 interface ToolPartProps {
-  type: `tool-${string}`;
+  type: `tool-${string}` | "dynamic-tool";
   state: string;
   toolCallId: string;
+  toolName?: string;
   input: unknown;
   output: unknown;
   errorText?: string;
@@ -147,18 +160,21 @@ interface ToolPartProps {
 const extractToolPartProps = (part: Record<string, unknown>): ToolPartProps | null => {
   if (
     typeof part.type !== "string" ||
-    !part.type.startsWith("tool-") ||
     typeof part.state !== "string" ||
     typeof part.toolCallId !== "string"
   ) {
     return null;
   }
-  // Runtime check guarantees type starts with "tool-"
-  const type = part.type as `tool-${string}`;
+  // Accept both static tool-xxx and dynamic-tool from SDK
+  if (part.type !== "dynamic-tool" && !part.type.startsWith("tool-")) {
+    return null;
+  }
+  const type = part.type as `tool-${string}` | "dynamic-tool";
   return {
     type,
     state: part.state,
     toolCallId: part.toolCallId,
+    toolName: "toolName" in part ? (part.toolName as string) : undefined,
     input: "input" in part ? part.input : undefined,
     output: "output" in part ? part.output : undefined,
     errorText:

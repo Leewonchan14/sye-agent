@@ -6,12 +6,12 @@ let sql:
   | ((strings: TemplateStringsArray, ...values: unknown[]) => Promise<SqlQueryResult>)
   | undefined;
 
-let initPromise: Promise<void> | undefined;
+let tableInitPromise: Promise<void> | undefined;
 
 const ensureTable = async (): Promise<void> => {
-  if (initPromise) return initPromise;
+  if (tableInitPromise) return tableInitPromise;
 
-  initPromise = (async () => {
+  tableInitPromise = (async () => {
     try {
       await getSql()`CREATE TABLE IF NOT EXISTS chat_messages (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,7 +27,27 @@ const ensureTable = async (): Promise<void> => {
     }
   })();
 
-  return initPromise;
+  return tableInitPromise;
+};
+
+let stateInitPromise: Promise<void> | undefined;
+
+const ensureStateTable = async (): Promise<void> => {
+  if (stateInitPromise) return stateInitPromise;
+
+  stateInitPromise = (async () => {
+    try {
+      await getSql()`CREATE TABLE IF NOT EXISTS session_state (
+          session_id TEXT PRIMARY KEY,
+          messages JSONB NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )`;
+    } catch (err) {
+      console.error("Failed to initialize session_state table:", err);
+    }
+  })();
+
+  return stateInitPromise;
 };
 
 const getSql = () => {
@@ -82,6 +102,35 @@ export const saveMessage = async (
     INSERT INTO chat_messages (session_id, role, content, reasoning)
     VALUES (${sessionId}, ${role}, ${content}, ${reasoning ?? null})
   `;
+};
+
+/** 세션의 전체 UIMessage[] 상태를 JSONB로 저장합니다. */
+export const saveSessionState = async (
+  sessionId: string,
+  messages: unknown[]
+): Promise<void> => {
+  await ensureStateTable();
+  await getSql()`
+    INSERT INTO session_state (session_id, messages, updated_at)
+    VALUES (${sessionId}, ${JSON.stringify(messages)}, NOW())
+    ON CONFLICT (session_id)
+    DO UPDATE SET messages = ${JSON.stringify(messages)}, updated_at = NOW()
+  `;
+};
+
+/** 세션의 전체 UIMessage[] 상태를 불러옵니다. 없으면 null을 반환합니다. */
+export const getSessionState = async (
+  sessionId: string
+): Promise<unknown[] | null> => {
+  await ensureStateTable();
+  const rows = await getSql()`
+    SELECT messages FROM session_state WHERE session_id = ${sessionId}
+  `;
+  const row = rows[0] as { messages: unknown } | undefined;
+  if (!row) return null;
+  // neon returns JSONB columns as already-parsed objects (not strings)
+  const msgs = row.messages;
+  return (typeof msgs === "string" ? JSON.parse(msgs) : msgs) as unknown[];
 };
 
 export interface SessionInfo {
