@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Designer — 원찬 & 예은",
-  description: "둘만의 여행 플래너. 이원찬 & 성예은의 특별한 여행을 함께 계획합니다.",
+  title: "치이카와 — 원찬 & 예은",
+  description: "작고 귀여운 치이카와가 둘만의 여행을 도와드려요…! 이원찬 & 성예은의 특별한 여행 플래너.",
 };
 
 const RootLayout = ({

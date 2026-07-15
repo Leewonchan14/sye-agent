@@ -83,7 +83,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         />
 
         <h1 className="text-lg font-medium" style={{ color: "var(--color-ink)" }}>
-          Designer
+          치이카와
         </h1>
 
         <p className="text-center text-sm" style={{ color: "var(--color-muted)" }}>

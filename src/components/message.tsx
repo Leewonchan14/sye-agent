@@ -30,10 +30,7 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
           case "reasoning": {
             if (!part.text) return null;
             return (
-              <div key={idx} className="flex flex-col gap-1">
-                <span className="text-xs italic text-[--color-muted]">Thinking</span>
-                <AssistantMessage text={part.text} />
-              </div>
+              <ReasoningBubble key={idx} text={part.text} />
             );
           }
           default: {
@@ -76,10 +73,43 @@ const UserBubble = ({ text }: { text: string }) => (
   </div>
 );
 
-// === Assistant message — DESIGN.md §6.5 ===
+// === Assistant message — Chiikawa character bubble ===
+
+// === Reasoning bubble — Chiikawa thinking aloud ===
+
+const ReasoningBubble = ({ text }: { text: string }) => (
+  <div className="flex items-start gap-3">
+    <div
+      className="flex size-8 shrink-0 items-center justify-center rounded-full text-base opacity-60"
+      style={{ backgroundColor: "var(--color-canvas-soft)" }}
+    >
+      💭
+    </div>
+    <div
+      className="min-w-0 flex-1 rounded-lg px-3 py-2 text-[14px] leading-relaxed"
+      style={{
+        backgroundColor: "var(--color-canvas-soft)",
+        color: "var(--color-muted)",
+      }}
+    >
+      {text}
+    </div>
+  </div>
+);
+
+// === Assistant message — Chiikawa character bubble ===
 
 const AssistantMessage = ({ text }: { text: string }) => (
-  <div className="max-w-none text-[16px] leading-relaxed text-[--color-ink]">
+  <div className="flex items-start gap-3">
+    {/* Chiikawa avatar */}
+    <div
+      className="flex size-8 shrink-0 items-center justify-center rounded-full text-base"
+      style={{ backgroundColor: "var(--color-canvas-soft)" }}
+      title="치이카와"
+    >
+      🐹
+    </div>
+    <div className="min-w-0 flex-1 pt-1 text-[16px] leading-relaxed text-[--color-ink]">
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
@@ -115,10 +145,57 @@ const AssistantMessage = ({ text }: { text: string }) => (
             </a>
           );
         },
+        table({ children }) {
+          return (
+            <div className="my-3 overflow-x-auto rounded-lg border" style={{ borderColor: "var(--color-hairline)" }}>
+              <table className="min-w-full text-sm">{children}</table>
+            </div>
+          );
+        },
+        thead({ children }) {
+          return (
+            <thead style={{ borderBottom: `2px solid var(--color-hairline)` }}>
+              {children}
+            </thead>
+          );
+        },
+        tbody({ children }) {
+          return <tbody>{children}</tbody>;
+        },
+        tr({ children }) {
+          return (
+            <tr style={{ borderBottom: `1px solid var(--color-hairline-soft)` }}>
+              {children}
+            </tr>
+          );
+        },
+        th({ children }) {
+          return (
+            <th
+              className="px-3 py-2 text-left text-xs font-medium"
+              style={{ color: "var(--color-muted)" }}
+            >
+              {children}
+            </th>
+          );
+        },
+        td({ children }) {
+          return (
+            <td className="px-3 py-2" style={{ color: "var(--color-ink)" }}>
+              {children}
+            </td>
+          );
+        },
+        hr() {
+          return (
+            <hr className="my-4" style={{ borderColor: "var(--color-hairline)" }} />
+          );
+        },
       }}
     >
       {text}
     </ReactMarkdown>
+    </div>
   </div>
 );
 

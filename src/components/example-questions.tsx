@@ -7,10 +7,10 @@ interface Props {
 }
 
 const suggestions = [
-  { icon: "🌸", label: "데이트 코스 추천", prompt: "춘천에서 이원찬과 성예은의 데이트 코스 추천해줘" },
-  { icon: "🗺️", label: "춘천 여행 일정", prompt: "춘천 1박 2일 여행 일정 짜줘" },
-  { icon: "🍽️", label: "맛집 검색", prompt: "춘천 근처 분위기 좋은 맛집 추천해줘" },
-  { icon: "📝", label: "체크리스트", prompt: "커플 여행 준비물 체크리스트 알려줘" },
+  { icon: "🌸", label: "데이트 코스 추천", prompt: "춘천에서 원찬님 예은님 데이트 코스 추천해줘…!" },
+  { icon: "🗺️", label: "춘천 여행 일정", prompt: "춘천 1박 2일 여행 일정 짜줘…!" },
+  { icon: "🍽️", label: "맛집 찾기", prompt: "춘천 근처 분위기 좋은 맛집 알려줘…!" },
+  { icon: "💝", label: "체크리스트", prompt: "둘이 함께 여행 준비물 체크리스트 알려줘…!" },
 ];
 
 export const ExampleQuestions = ({ onQuestionClick }: Props) => {

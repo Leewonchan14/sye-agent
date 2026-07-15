@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, Send, Square } from "lucide-react";
+import { Send, Square } from "lucide-react";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -122,7 +122,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     [status, sendMessage]
   );
 
-  const onSubmit = useCallback(
+  const onInputSubmit = useCallback(
     (e: React.SyntheticEvent) => {
       e.preventDefault();
       send(input);
@@ -202,7 +202,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                     className="px-3 py-2 text-sm"
                     style={{ color: "var(--color-muted)" }}
                   >
-                    생각 중...
+                    생각 중이에요…♪
                   </div>
                 )}
               </MessageScrollerContent>
@@ -216,11 +216,11 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         </div>
       )}
 
-      {/* Input area — Claude.ai layout: textarea with toolbar + suggestion chips below */}
-      <div className="shrink-0 px-4">
+      {/* Input area */}
+      <div className="shrink-0 px-4 pb-6">
         <div className="mx-auto max-w-[720px]">
           <form
-            onSubmit={onSubmit}
+            onSubmit={onInputSubmit}
             className="relative flex flex-col rounded-2xl border"
             style={{
               borderColor: "var(--color-hairline)",
@@ -231,7 +231,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder="어떤 여행을 함께 계획해볼까요?"
+              placeholder="어디로 함께 떠나볼까요…?"
               disabled={streaming}
               rows={1}
               className="min-h-[52px] max-h-32 resize-none rounded-2xl border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
@@ -246,7 +246,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                     color: "#fff",
                   }}
                 >
-                  Designer
+                  치이카와
                 </span>
               </div>
               <div className="flex items-center gap-1">
@@ -270,11 +270,11 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
           {/* Suggestion chips — BELOW input (Claude.ai pattern) */}
           {!hasMsgs && (
-            <div className="flex flex-wrap items-center justify-center gap-2 pb-4 pt-3">
-              <SuggestionChip icon="🌸" label="데이트 코스 추천" onClick={() => send("춘천에서 이원찬과 성예은의 데이트 코스 추천해줘")} />
-              <SuggestionChip icon="🗺️" label="춘천 여행 일정" onClick={() => send("춘천 1박 2일 여행 일정 짜줘")} />
-              <SuggestionChip icon="🍽️" label="맛집 검색" onClick={() => send("춘천 근처 맛집 추천해줘")} />
-              <SuggestionChip icon="📝" label="체크리스트" onClick={() => send("여행 준비물 체크리스트 알려줘")} />
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
+              <SuggestionChip icon="🌸" label="데이트 코스 추천" onClick={() => send("춘천에서 원찬님 예은님 데이트 코스 추천해줘…!")} />
+              <SuggestionChip icon="🗺️" label="춘천 여행 일정" onClick={() => send("춘천 1박 2일 여행 일정 짜줘…!")} />
+              <SuggestionChip icon="🍽️" label="맛집 찾기" onClick={() => send("춘천 근처 분위기 좋은 맛집 알려줘…!")} />
+              <SuggestionChip icon="💝" label="체크리스트" onClick={() => send("둘이 함께 여행 준비물 체크리스트 알려줘…!")} />
             </div>
           )}
         </div>
@@ -321,21 +321,19 @@ const SuggestionChip = ({
 
 const EmptyState = () => (
   <div className="flex flex-col items-center gap-1 pt-32 pb-4">
-    <Heart
-      className="mb-6"
-      size={36}
-      strokeWidth={1.2}
-      style={{ color: "var(--color-primary)" }}
-    />
+    {/* Chiikawa-style character icon */}
+    <div className="mb-5 flex size-12 items-center justify-center rounded-full" style={{ backgroundColor: "var(--color-canvas-soft)" }}>
+      <span className="text-2xl">🐹</span>
+    </div>
     <h1
       className="text-[22px] font-normal leading-snug"
       style={{ color: "var(--color-ink)" }}
     >
-      원찬<span style={{ color: "var(--color-muted)" }}>님,</span>{" "}
-      예은<span style={{ color: "var(--color-muted)" }}>님</span>
+      원찬<span style={{ color: "var(--color-muted)" }}>님…!</span>{" "}
+      예은<span style={{ color: "var(--color-muted)" }}>님…!</span>
     </h1>
     <p className="text-[15px]" style={{ color: "var(--color-muted)" }}>
-      둘만의 여행을 Designer가 함께할게요
+      뭔가 작고 귀여운 제가… 둘만의 여행을 도와드릴게요…♪
     </p>
   </div>
 );
