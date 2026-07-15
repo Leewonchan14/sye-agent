@@ -321,9 +321,14 @@ const SuggestionChip = ({
 
 const EmptyState = () => (
   <div className="flex flex-col items-center gap-1 pt-32 pb-4">
-    {/* Chiikawa-style character icon */}
-    <div className="mb-5 flex size-12 items-center justify-center rounded-full" style={{ backgroundColor: "var(--color-canvas-soft)" }}>
-      <span className="text-2xl">🐹</span>
+    {/* Character icon */}
+    <div className="mb-5">
+      <img
+        src="/munjackgui.webp"
+        alt="치이카와"
+        className="size-16 rounded-full object-cover"
+        style={{ backgroundColor: "var(--color-canvas-soft)" }}
+      />
     </div>
     <h1
       className="text-[22px] font-normal leading-snug"

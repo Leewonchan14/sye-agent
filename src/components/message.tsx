@@ -2,6 +2,7 @@
 
 import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 
 import { useCallback, useState } from "react";
@@ -101,17 +102,16 @@ const ReasoningBubble = ({ text }: { text: string }) => (
 
 const AssistantMessage = ({ text }: { text: string }) => (
   <div className="flex items-start gap-3">
-    {/* Chiikawa avatar */}
-    <div
-      className="flex size-8 shrink-0 items-center justify-center rounded-full text-base"
+    {/* Character avatar */}
+    <img
+      src="/munjackgui.webp"
+      alt="치이카와"
+      className="size-8 shrink-0 rounded-full object-cover"
       style={{ backgroundColor: "var(--color-canvas-soft)" }}
-      title="치이카와"
-    >
-      🐹
-    </div>
+    />
     <div className="min-w-0 flex-1 pt-1 text-[16px] leading-relaxed text-[--color-ink]">
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkBreaks]}
       components={{
         code({ className, children }) {
           const match = /language-(\w+)/.exec(className ?? "");

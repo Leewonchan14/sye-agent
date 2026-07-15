@@ -143,28 +143,7 @@ export const SessionSidebar = ({
             })}
           </nav>
 
-          {/* Profile footer */}
-          <div
-            className="px-3 py-3"
-            style={{ borderTop: `1px solid ${css("color-hairline")}` }}
-          >
-            <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
-              <div
-                className="flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-medium text-white"
-                style={{ backgroundColor: css("color-primary") }}
-              >
-                W
-              </div>
-              <div className="flex flex-col overflow-hidden">
-                <span className="truncate text-xs font-medium" style={{ color: css("color-ink") }}>
-                  원찬 & 예은
-                </span>
-                <span className="text-[11px]" style={{ color: css("color-muted-soft") }}>
-                  여행 메이트
-                </span>
-              </div>
-            </div>
-          </div>
+
         </>
       ) : (
         /* Collapsed: Claude.ai-style icon-only strip */
@@ -222,16 +201,7 @@ export const SessionSidebar = ({
             })}
           </nav>
 
-          {/* Profile avatar */}
-          <div className="flex h-9 w-full items-center justify-center">
-            <div
-              className="flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-medium text-white"
-              style={{ backgroundColor: css("color-primary") }}
-              title="원찬 & 예은"
-            >
-              W
-            </div>
-          </div>
+
         </div>
       )}
     </aside>
