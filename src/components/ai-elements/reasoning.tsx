@@ -1,17 +1,14 @@
 "use client";
 
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
+import sample from "lodash/sample";
 import { ChevronDownIcon } from "lucide-react";
+import { Streamdown } from "streamdown";
+
 import type { ComponentProps, ReactNode } from "react";
 import {
   createContext,
@@ -23,9 +20,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Streamdown } from "streamdown";
 
 import { TableWrapper } from "@/components/ai-elements/table";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 import { Shimmer } from "./shimmer";
 
@@ -108,12 +110,7 @@ export const Reasoning = memo(
 
     // Auto-close when streaming ends (once only, and only if it ever streamed)
     useEffect(() => {
-      if (
-        hasEverStreamedRef.current &&
-        !isStreaming &&
-        isOpen &&
-        !hasAutoClosed
-      ) {
+      if (hasEverStreamedRef.current && !isStreaming && isOpen && !hasAutoClosed) {
         const timer = setTimeout(() => {
           setIsOpen(false);
           setHasAutoClosed(true);
@@ -150,9 +147,7 @@ export const Reasoning = memo(
   }
 );
 
-export type ReasoningTriggerProps = ComponentProps<
-  typeof CollapsibleTrigger
-> & {
+export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
   getThinkingMessage?: (isStreaming: boolean, duration?: number) => ReactNode;
 };
 
@@ -176,21 +171,12 @@ const donePhrases = [
   "다시 생각해봤는데... 맞는 것 같아...!",
 ];
 
-const defaultGetThinkingMessage = (
-  isStreaming: boolean,
-  duration?: number,
-) => {
+const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
   if (!isStreaming) {
-    const phrase =
-      donePhrases[
-        Math.floor(duration ?? Date.now()) % donePhrases.length
-      ];
-    return <span>{phrase}</span>;
+    return <span>{sample(donePhrases) ?? ""}</span>;
   }
 
-  const phrase =
-    thinkingPhrases[Math.floor(Date.now() / 1000) % thinkingPhrases.length];
-  return <Shimmer duration={1}>{phrase}</Shimmer>;
+  return <Shimmer duration={1}>{sample(thinkingPhrases) ?? ""}</Shimmer>;
 };
 
 export const ReasoningTrigger = memo(
@@ -204,7 +190,7 @@ export const ReasoningTrigger = memo(
 
     const thinkingMessage = useMemo(
       () => getThinkingMessage(isStreaming, duration),
-      [isStreaming, duration, getThinkingMessage],
+      [isStreaming, duration, getThinkingMessage]
     );
 
     return (
@@ -215,25 +201,19 @@ export const ReasoningTrigger = memo(
         )}
         {...props}
       >
-        {children ?? (
-          <>
-            {thinkingMessage}
-            <ChevronDownIcon
-              className={cn(
-                "size-4 transition-transform",
-                isOpen ? "rotate-180" : "rotate-0"
-              )}
-            />
-          </>
-        )}
+        {thinkingMessage}
+        <ChevronDownIcon
+          className={cn(
+            "size-4 transition-transform",
+            isOpen ? "rotate-180" : "rotate-0"
+          )}
+        />
       </CollapsibleTrigger>
     );
   }
 );
 
-export type ReasoningContentProps = ComponentProps<
-  typeof CollapsibleContent
-> & {
+export type ReasoningContentProps = ComponentProps<typeof CollapsibleContent> & {
   children: string;
 };
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Menu, Send, Square } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -11,6 +11,14 @@ import { useChat } from "@ai-sdk/react";
 
 import { DefaultChatTransport } from "ai";
 
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
 import { MessageItem } from "@/components/message";
 import { PasswordGate } from "@/components/password-gate";
 import { SessionSidebar } from "@/components/session-sidebar";
@@ -22,7 +30,6 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Textarea } from "@/components/ui/textarea";
 
 /* ── ChatShell ── */
 
@@ -103,6 +110,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
           src="/munjackgui.webp"
           alt="치이카와"
           className="size-6 rounded-full object-cover"
+          draggable={false}
         />
         <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
           치이카와 여행 메이트
@@ -144,7 +152,6 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 /* ── ChatInner ── */
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
-  const [input, setInput] = useState("");
   const tk = localStorage.getItem("auth_token") ?? "";
 
   const { data: savedMessages, isLoading: messagesLoading } = useQuery({
@@ -164,15 +171,21 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     staleTime: 5_000,
   });
 
-  const { messages: rawMessages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
-    {
-      transport: new DefaultChatTransport({
-        api: "/api/chat",
-        body: { sessionId },
-        headers: { "x-auth-token": tk },
-      }),
-    }
-  );
+  const {
+    messages: rawMessages,
+    status,
+    setMessages,
+    sendMessage,
+    stop,
+    error,
+    clearError,
+  } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: { sessionId },
+      headers: { "x-auth-token": tk },
+    }),
+  });
 
   useEffect(() => {
     if (!savedMessages?.length) return;
@@ -228,31 +241,26 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     setMessages(uiMessages as Parameters<typeof setMessages>[0]);
   }, [savedMessages, setMessages]);
 
-  const send = useCallback(
-    (text: string) => {
-      if (!text.trim() || status !== "ready") return;
-      sendMessage({ text: text.trim() });
-      setInput("");
+  const handlePromptSubmit = useCallback(
+    (message: { text: string }) => {
+      if (!message.text.trim() || status !== "ready") return;
+      sendMessage({ text: message.text.trim() });
     },
     [status, sendMessage]
   );
 
-  const onInputSubmit = useCallback(
-    (e: React.SyntheticEvent) => {
-      e.preventDefault();
-      send(input);
-    },
-    [input, send]
-  );
-  const onKey = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        send(input);
-      }
-    },
-    [input, send]
-  );
+  /* ── Debounced loading: show ChatLoading only after 300ms ── */
+  const [debounceLoading, setDebounceLoading] = useState(false);
+  const showLoading = messagesLoading || debounceLoading;
+
+  useEffect(() => {
+    if (messagesLoading) {
+      setDebounceLoading(true);
+      return;
+    }
+    const timer = setTimeout(() => setDebounceLoading(false), 300);
+    return () => clearTimeout(timer);
+  }, [messagesLoading]);
 
   /* ── Split multi-step assistant messages at step boundaries ── */
   const messages = useMemo(() => {
@@ -296,20 +304,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       className="flex min-h-0 flex-1 flex-col"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center justify-end px-4">
-        {streaming && (
-          <button
-            type="button"
-            onClick={stop}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:opacity-70"
-            style={{ color: "var(--color-muted)" }}
-          >
-            <Square className="h-3.5 w-3.5" /> 중지
-          </button>
-        )}
-      </header>
-
       {/* Error alert */}
       {error && (
         <div
@@ -332,7 +326,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       )}
 
       {/* Messages */}
-      {messagesLoading ? (
+      {showLoading ? (
         <ChatLoading />
       ) : hasMsgs || streaming ? (
         <MessageScrollerProvider autoScroll>
@@ -372,49 +366,31 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       )}
 
       {/* Input area */}
-      {!messagesLoading && (
+      {!showLoading && (
         <div className="shrink-0 px-4 pb-6">
           <div className="mx-auto max-w-[720px]">
-            <form
-              onSubmit={onInputSubmit}
-              className="relative flex flex-col rounded-2xl border"
+            <PromptInput
+              onSubmit={handlePromptSubmit}
+              className="relative flex flex-col border rounded-2xl [&_[data-slot=input-group]]:focus-within:border [&_[data-slot=input-group]]:focus-within:ring-0"
               style={{
                 borderColor: "var(--color-hairline)",
                 backgroundColor: "var(--color-canvas-soft)",
               }}
             >
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKey}
-                placeholder="어디로 함께 떠나볼까요…?"
-                disabled={streaming}
-                rows={1}
-                className="min-h-[52px] max-h-32 resize-none rounded-2xl border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
-              />
-              {/* Toolbar-style bottom bar */}
-              <div className="flex items-center justify-between px-2 pb-2">
-                <div className="flex items-center gap-1">
+              <PromptInputBody>
+                <PromptInputTextarea
+                  placeholder="어디로 함께 떠나볼까요…?"
+                  disabled={streaming}
+                  className="min-h-[52px] max-h-32 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
+                />
+              </PromptInputBody>
+              <PromptInputFooter>
+                <PromptInputTools>
                   <RotatingPhrase />
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="submit"
-                    disabled={streaming || !input.trim()}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors"
-                    style={{
-                      backgroundColor:
-                        streaming || !input.trim()
-                          ? "var(--color-hairline)"
-                          : "var(--color-primary)",
-                      color: streaming || !input.trim() ? "var(--color-muted)" : "#fff",
-                    }}
-                  >
-                    <Send className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </form>
+                </PromptInputTools>
+                <PromptInputSubmit status={status} onStop={stop} />
+              </PromptInputFooter>
+            </PromptInput>
 
             {/* Suggestion chips — BELOW input (Claude.ai pattern) */}
             {!hasMsgs && (
@@ -422,22 +398,36 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 <SuggestionChip
                   icon="🌸"
                   label="데이트 코스 추천"
-                  onClick={() => send("춘천에서 원찬님 예은님 데이트 코스 추천해줘…!")}
+                  onClick={() => {
+                    if (status === "ready")
+                      sendMessage({
+                        text: "춘천에서 원찬님 예은님 데이트 코스 추천해줘…!",
+                      });
+                  }}
                 />
                 <SuggestionChip
                   icon="🗺️"
                   label="춘천 여행 일정"
-                  onClick={() => send("춘천 1박 2일 여행 일정 짜줘…!")}
+                  onClick={() => {
+                    if (status === "ready")
+                      sendMessage({ text: "춘천 1박 2일 여행 일정 짜줘…!" });
+                  }}
                 />
                 <SuggestionChip
                   icon="🍽️"
                   label="맛집 찾기"
-                  onClick={() => send("춘천 근처 분위기 좋은 맛집 알려줘…!")}
+                  onClick={() => {
+                    if (status === "ready")
+                      sendMessage({ text: "춘천 근처 분위기 좋은 맛집 알려줘…!" });
+                  }}
                 />
                 <SuggestionChip
                   icon="💝"
                   label="체크리스트"
-                  onClick={() => send("둘이 함께 여행 준비물 체크리스트 알려줘…!")}
+                  onClick={() => {
+                    if (status === "ready")
+                      sendMessage({ text: "둘이 함께 여행 준비물 체크리스트 알려줘…!" });
+                  }}
                 />
               </div>
             )}
@@ -449,6 +439,36 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 };
 
 /* ── Suggestion Chip ── */
+
+/* ── Chat Loading ── */
+
+const loadingPhrases = [
+  "잠시만 기다려줘…!",
+  "준비 중이야…♪",
+  "거의 다 왔어…!",
+  "데이터 불러오는 중…♪",
+  "원찬님 예은님… 기다려줘…!",
+  "좋은 정보 찾는 중…♪",
+  "잠깐만…! 곧 갈게…!",
+];
+
+const ChatLoading = () => {
+  const [phraseIdx] = useState(() => Math.floor(Math.random() * loadingPhrases.length));
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4">
+      <img
+        src="/munjackgui.webp"
+        alt="치이카와"
+        className="size-20 animate-bounce rounded-full object-cover"
+        style={{ backgroundColor: "var(--color-canvas-soft)" }}
+      />
+      <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+        {loadingPhrases[phraseIdx]}
+      </p>
+    </div>
+  );
+};
 
 const SuggestionChip = ({
   icon,
@@ -480,32 +500,6 @@ const SuggestionChip = ({
     <span className="text-sm leading-none">{icon}</span>
     {label}
   </button>
-);
-
-/* ── Chat Loading ── */
-
-const loadingPhrases = [
-  "잠시만 기다려줘…!",
-  "준비 중이야…♪",
-  "거의 다 왔어…!",
-  "데이터 불러오는 중…♪",
-  "원찬님 예은님… 기다려줘…!",
-  "좋은 정보 찾는 중…♪",
-  "잠깐만…! 곧 갈게…!",
-];
-
-const ChatLoading = () => (
-  <div className="flex flex-1 flex-col items-center justify-center gap-4">
-    <img
-      src="/munjackgui.webp"
-      alt="치이카와"
-      className="size-20 animate-bounce rounded-full object-cover"
-      style={{ backgroundColor: "var(--color-canvas-soft)" }}
-    />
-    <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-      {loadingPhrases[Math.floor(Math.random() * loadingPhrases.length)]}
-    </p>
-  </div>
 );
 
 /* ── Rotating Phrase Badge ── */
@@ -549,6 +543,7 @@ const RotatingPhrase = () => {
         src="/munjackgui.webp"
         alt="치이카와"
         className="size-5 rounded-full object-cover"
+        draggable={false}
       />
       <span key={fadeKey} className="animate-bounce-fade-in">
         {phrases[idx]}
@@ -576,8 +571,12 @@ const subPhrases = [
 
 const EmptyState = () => {
   const [subIdx, setSubIdx] = useState(0);
+  const [fadeKey, setFadeKey] = useState(0);
   useEffect(() => {
-    const iv = setInterval(() => setSubIdx((p) => (p + 1) % subPhrases.length), 3000);
+    const iv = setInterval(() => {
+      setSubIdx((p) => (p + 1) % subPhrases.length);
+      setFadeKey((p) => p + 1);
+    }, 3000);
     return () => clearInterval(iv);
   }, []);
   return (
@@ -589,6 +588,7 @@ const EmptyState = () => {
           alt="치이카와"
           className="size-16 rounded-full object-cover"
           style={{ backgroundColor: "var(--color-canvas-soft)" }}
+          draggable={false}
         />
       </div>
       <h1
@@ -599,7 +599,8 @@ const EmptyState = () => {
         <span style={{ color: "var(--color-muted)" }}>님…!</span>
       </h1>
       <p
-        className="text-[15px] transition-opacity duration-300"
+        key={fadeKey}
+        className="text-[15px] animate-bounce-fade-in"
         style={{ color: "var(--color-muted)" }}
       >
         {subPhrases[subIdx]}

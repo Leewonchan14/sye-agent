@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# lockfiles (npm only — npm ci uses package-lock.json)
+bun.lock
+
 # env files (can opt-in for committing if needed)
 .env*
 

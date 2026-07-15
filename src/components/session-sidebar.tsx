@@ -69,6 +69,7 @@ export const SessionSidebar = ({
                 src="/munjackgui.webp"
                 alt="치이카와"
                 className="size-6 rounded-full object-cover"
+                draggable={false}
               />
               <span className="text-sm font-medium">치이카와 여행 메이트</span>
             </div>
