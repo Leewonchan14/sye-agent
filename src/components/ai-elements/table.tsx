@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-
+import { CheckIcon, CopyIcon, DownloadIcon, ExpandIcon, XIcon } from "lucide-react";
 import type { ExtraProps } from "streamdown";
-import { CheckIcon, CopyIcon, DownloadIcon, ExpandIcon } from "lucide-react";
 import {
   extractTableDataFromElement,
   tableDataToCSV,
@@ -11,13 +9,9 @@ import {
   tableDataToTSV,
 } from "streamdown";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useCallback, useRef, useState } from "react";
+
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,21 +26,13 @@ export type TableWrapperProps = React.DetailedHTMLProps<
 > &
   ExtraProps;
 
-const triggerClass =
-  "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer";
-
-export const TableWrapper = ({
-  children,
-  className,
-}: TableWrapperProps) => {
+export const TableWrapper = ({ children, className }: TableWrapperProps) => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   const getTableData = useCallback(() => {
-    const el = tableContainerRef.current?.querySelector(
-      'table[data-streamdown="table"]',
-    );
+    const el = tableContainerRef.current?.querySelector('table[data-streamdown="table"]');
     if (!el) return null;
     return extractTableDataFromElement(el as HTMLElement);
   }, []);
@@ -77,7 +63,7 @@ export const TableWrapper = ({
         // clipboard unavailable
       }
     },
-    [getTableData],
+    [getTableData]
   );
 
   const handleDownload = useCallback(
@@ -85,8 +71,7 @@ export const TableWrapper = ({
       const data = getTableData();
       if (!data) return;
 
-      const text =
-        format === "csv" ? tableDataToCSV(data) : tableDataToMarkdown(data);
+      const text = format === "csv" ? tableDataToCSV(data) : tableDataToMarkdown(data);
       const blob = new Blob([text], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -95,7 +80,7 @@ export const TableWrapper = ({
       a.click();
       URL.revokeObjectURL(url);
     },
-    [getTableData],
+    [getTableData]
   );
 
   return (
@@ -104,20 +89,24 @@ export const TableWrapper = ({
       data-streamdown="table-wrapper"
       className={cn(
         "my-4 flex flex-col gap-2 rounded-lg border border-border bg-sidebar p-2",
-        className,
+        className
       )}
     >
-      {/* Toolbar — shadcn DropdownMenu uses @base-ui with built-in portal */}
+      {/* Toolbar */}
       <div className="flex items-center justify-end gap-1">
+        {/* Copy dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger className={triggerClass} aria-label="Copy table">
+          <DropdownMenuTrigger
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
+            aria-label="Copy table"
+          >
             {copied ? (
               <CheckIcon className="size-4 text-green-500" />
             ) : (
               <CopyIcon className="size-4" />
             )}
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4}>
+          <DropdownMenuContent align="end" sideOffset={4} className="bg-canvas-card">
             <DropdownMenuItem onClick={() => handleCopy("md")}>
               Copy as Markdown
             </DropdownMenuItem>
@@ -130,14 +119,15 @@ export const TableWrapper = ({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Download dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger
-            className={triggerClass}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
             aria-label="Download table"
           >
             <DownloadIcon className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4}>
+          <DropdownMenuContent align="end" sideOffset={4} className="bg-canvas-card">
             <DropdownMenuItem onClick={() => handleDownload("csv")}>
               Download as CSV
             </DropdownMenuItem>
@@ -147,9 +137,10 @@ export const TableWrapper = ({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Fullscreen trigger */}
         <button
           type="button"
-          className={triggerClass}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
           aria-label="View fullscreen"
           onClick={() => setFullscreenOpen(true)}
         >
@@ -158,31 +149,25 @@ export const TableWrapper = ({
       </div>
 
       {/* Table container */}
-      <div className="overflow-x-auto overflow-y-auto rounded-md border border-border bg-background">
-        <table
-          data-streamdown="table"
-          className="w-full divide-y divide-border"
-        >
+      <div className="overflow-x-auto overflow-y-auto rounded-md border border-border bg-canvas-card">
+        <table data-streamdown="table" className="w-full divide-y divide-border">
           {children}
         </table>
       </div>
 
-      {/* Fullscreen Dialog — shadcn Dialog uses @base-ui with built-in portal */}
+      {/* Fullscreen dialog */}
       <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
-        <DialogPortal>
-          <DialogOverlay />
-          <DialogContent
-            className="flex max-h-[95vh] max-w-[95vw] flex-col"
-            showCloseButton
-          >
-            <DialogTitle className="sr-only">Table fullscreen view</DialogTitle>
-            <div className="flex-1 overflow-auto p-4">
-              <table className="w-full divide-y divide-border border-collapse">
-                {children}
-              </table>
-            </div>
-          </DialogContent>
-        </DialogPortal>
+        <DialogContent className="flex max-h-[95vh] max-w-[95vw] flex-col bg-canvas-card">
+          <DialogTitle className="sr-only">Table fullscreen view</DialogTitle>
+          <DialogClose className="absolute top-2 right-2 z-10 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer outline-none">
+            <XIcon className="size-4" />
+          </DialogClose>
+          <div className="flex-1 overflow-auto rounded-md p-4">
+            <table className="w-full divide-y divide-border border-collapse">
+              {children}
+            </table>
+          </div>
+        </DialogContent>
       </Dialog>
     </div>
   );

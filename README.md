@@ -24,7 +24,7 @@ npm install
 
 # .env 파일 생성
 cp .env.example .env
-# → SITE_PASSWORD, DEEPSEEK_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
+# → SITE_PASSWORD, OPENCODE_GO_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
 
 # Neon DB 스키마 생성 (SQL Editor에서 아래 실행)
 # CREATE TABLE chat_messages (...);
@@ -38,19 +38,24 @@ npm run dev
 | 변수 | 필수 | 설명 |
 |---|---|---|
 | `SITE_PASSWORD` | ✅ | 웹사이트 접속 비밀번호 (예: 0411) |
-| `DEEPSEEK_API_KEY` | ✅ | Deepseek Chat API 키 |
+| `OPENCODE_GO_API_KEY` | ✅ | OpenCode Go API 키 (Deepseek API 호출용 Bearer 토큰) |
+
 | `DATABASE_URL` | ✅ | Neon DB 연결 문자열 |
 | `NAVER_CLIENT_ID` | ✅ | 네이버 검색 API Client ID |
 | `NAVER_CLIENT_SECRET` | ✅ | 네이버 검색 API Client Secret |
+| `NEXT_PUBLIC_SITE_URL` | 배포 시 | OG 태그 이미지 URL에 사용되는 사이트 도메인 (예: `https://trable-agent.vercel.app`). 설정하지 않으면 Vercel 배포 시 `VERCEL_URL`을, 로컬 개발 시 `localhost:3000`을 자동으로 사용합니다.
 
 ### .env 파일 예시
 
 ```env
 SITE_PASSWORD=0411
-DEEPSEEK_API_KEY=sk-...
+OPENCODE_GO_API_KEY=sk-...
 DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 NAVER_CLIENT_ID=your_naver_client_id
 NAVER_CLIENT_SECRET=your_naver_client_secret
+
+# 선택: OG 태그 이미지 URL의 도메인을 고정하려면 설정 (기본값: VERCEL_URL 또는 localhost)
+# NEXT_PUBLIC_SITE_URL=https://trable-agent.vercel.app
 ```
 
 ## Neon DB 설정

@@ -2,6 +2,7 @@
 
 import type { ToolUIPart, UIMessage } from "ai";
 
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import {
   Message,
   MessageContent,
@@ -70,15 +71,12 @@ export const MessageItem = ({
   return (
     <Message from="assistant">
       <div className="flex items-start gap-3">
-        <img
-          src="/munjackgui.webp"
-          alt="치이카와"
-          className="size-8 shrink-0 rounded-full object-cover"
-          style={{ backgroundColor: "var(--color-canvas-soft)" }}
-        />
+        <Avatar size="default">
+          <AvatarImage src="/munjackgui.webp" alt="치이카와" />
+        </Avatar>
         <div className="min-w-0 flex-1">
           {/* Text & reasoning: overflow-visible so table popups/tooltips aren't clipped */}
-          <MessageContent className="overflow-visible">
+          <MessageContent className="w-full overflow-visible">
             {hasReasoning && (
               <Reasoning isStreaming={isReasoningStreaming}>
                 <ReasoningTrigger />

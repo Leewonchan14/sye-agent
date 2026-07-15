@@ -4,7 +4,7 @@ import { getAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
 import { saveMessage } from "@/lib/db";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const extractTextParts = (msg: { parts?: { type: string; text?: string }[] }): string =>

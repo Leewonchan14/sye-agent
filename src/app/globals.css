@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --color-canvas-card: hsl(355 25% 92%);
+}
+
 /* ─── DESIGN.md: Warm Pink Boudoir palette ─── */
 :root {
   /* Brand — dried rose */
@@ -114,6 +118,7 @@
   --color-ink: hsl(355 20% 97%);
   --color-hairline: hsl(355 10% 22%);
   --color-muted: hsl(355 10% 60%);
+  --color-canvas-card: hsl(355 8% 14%);
 }
 
 /* ─── Base ─── */
@@ -132,5 +137,15 @@ body {
   10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
   20%, 40%, 60%, 80% { transform: translateX(4px); }
 }
+@keyframes bounce-fade-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  40% { opacity: 1; transform: translateY(-5px); }
+  60% { transform: translateY(0); }
+  75% { transform: translateY(-2px); }
+  88% { transform: translateY(0); }
+  96% { transform: translateY(-1px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
 .animate-fade-in { animation: fade-in 200ms ease-out; }
 .animate-shake { animation: shake 0.5s ease-in-out; }
+.animate-bounce-fade-in { animation: bounce-fade-in 400ms ease-out; }

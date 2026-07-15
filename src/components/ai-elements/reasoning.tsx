@@ -138,7 +138,7 @@ export const Reasoning = memo(
     return (
       <ReasoningContext.Provider value={contextValue}>
         <Collapsible
-          className={cn("not-prose mb-4", className)}
+          className={cn("not-prose mb-4 italic opacity-80", className)}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
@@ -156,14 +156,41 @@ export type ReasoningTriggerProps = ComponentProps<
   getThinkingMessage?: (isStreaming: boolean, duration?: number) => ReactNode;
 };
 
-const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
-  if (isStreaming || duration === 0) {
-    return <Shimmer duration={1}>Thinking...</Shimmer>;
+const thinkingPhrases = [
+  "생각 중이야... 조금만 기다려줘...!",
+  "음... 생각 중...!",
+  "곰곰이 생각해볼게...!",
+  "기억을 더듬는 중... 잠시만...!",
+  "머리를 굴려볼게... 조금만...!",
+  "아... 그거 말이지...!",
+  "응... 생각나려나...?",
+];
+
+const donePhrases = [
+  "음... 곰곰이 생각해봤어...!",
+  "생각났다...!!",
+  "아... 그런 거였구나...!",
+  "응... 아마 그럴 거야...!",
+  "흐음... 그런 느낌인 건가...!",
+  "아하... 알 것 같아...!",
+  "다시 생각해봤는데... 맞는 것 같아...!",
+];
+
+const defaultGetThinkingMessage = (
+  isStreaming: boolean,
+  duration?: number,
+) => {
+  if (!isStreaming) {
+    const phrase =
+      donePhrases[
+        Math.floor(duration ?? Date.now()) % donePhrases.length
+      ];
+    return <span>{phrase}</span>;
   }
-  if (duration === undefined) {
-    return <p>Thought for a few seconds</p>;
-  }
-  return <p>Thought for {duration} seconds</p>;
+
+  const phrase =
+    thinkingPhrases[Math.floor(Date.now() / 1000) % thinkingPhrases.length];
+  return <Shimmer duration={1}>{phrase}</Shimmer>;
 };
 
 export const ReasoningTrigger = memo(
@@ -175,20 +202,22 @@ export const ReasoningTrigger = memo(
   }: ReasoningTriggerProps) => {
     const { isStreaming, isOpen, duration } = useReasoning();
 
+    const thinkingMessage = useMemo(
+      () => getThinkingMessage(isStreaming, duration),
+      [isStreaming, duration, getThinkingMessage],
+    );
+
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+          "flex w-full items-center gap-2 text-muted-foreground/80 italic text-sm transition-colors hover:text-foreground/90",
           className
         )}
         {...props}
       >
         {children ?? (
           <>
-            {isStreaming && (
-              <span className="size-2 rounded-full bg-primary animate-pulse" />
-            )}
-            {getThinkingMessage(isStreaming, duration)}
+            {thinkingMessage}
             <ChevronDownIcon
               className={cn(
                 "size-4 transition-transform",
@@ -216,6 +245,7 @@ export const ReasoningContent = memo(
       className={cn(
         "mt-4 text-sm",
         "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+        "[&_p]:italic [&_li]:italic opacity-70",
         className
       )}
       {...props}

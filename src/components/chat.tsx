@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Menu, Send, Square } from "lucide-react";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -164,7 +164,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     staleTime: 5_000,
   });
 
-  const { messages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
+  const { messages: rawMessages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
     {
       transport: new DefaultChatTransport({
         api: "/api/chat",
@@ -253,6 +253,40 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     },
     [input, send]
   );
+
+  /* ── Split multi-step assistant messages at step boundaries ── */
+  const messages = useMemo(() => {
+    const result: typeof rawMessages = [];
+    for (const msg of rawMessages) {
+      if (msg.role !== "assistant") {
+        result.push(msg);
+        continue;
+      }
+
+      const stepIndices: number[] = [];
+      for (let i = 0; i < msg.parts.length; i++) {
+        if (msg.parts[i]?.type === "step-start") {
+          stepIndices.push(i);
+        }
+      }
+
+      if (stepIndices.length === 0) {
+        result.push(msg);
+        continue;
+      }
+
+      let prev = 0;
+      for (let s = 0; s <= stepIndices.length; s++) {
+        const end = s < stepIndices.length ? stepIndices[s] : msg.parts.length;
+        const segment = msg.parts.slice(prev, end);
+        if (segment.length > 0) {
+          result.push({ ...msg, id: `${msg.id}__s${s}`, parts: segment });
+        }
+        prev = end + 1;
+      }
+    }
+    return result;
+  }, [rawMessages]);
 
   const streaming = status === "submitted" || status === "streaming";
   const hasMsgs = messages.length > 0;
@@ -496,17 +530,19 @@ const phrases = [
 
 const RotatingPhrase = () => {
   const [idx, setIdx] = useState(0);
+  const [fadeKey, setFadeKey] = useState(0);
 
   useEffect(() => {
     const iv = setInterval(() => {
       setIdx((p) => (p + 1) % phrases.length);
+      setFadeKey((p) => p + 1);
     }, 3000);
     return () => clearInterval(iv);
   }, []);
 
   return (
     <span
-      className="flex items-center gap-1.5 text-[12px] font-medium transition-opacity duration-300"
+      className="flex items-center gap-1.5 text-[12px] font-medium"
       style={{ color: "var(--color-muted)" }}
     >
       <img
@@ -514,7 +550,9 @@ const RotatingPhrase = () => {
         alt="치이카와"
         className="size-5 rounded-full object-cover"
       />
-      {phrases[idx]}
+      <span key={fadeKey} className="animate-bounce-fade-in">
+        {phrases[idx]}
+      </span>
     </span>
   );
 };
