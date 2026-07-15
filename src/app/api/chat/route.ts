@@ -54,9 +54,14 @@ export const POST = async (req: Request) => {
     onStepEnd: async (step) => {
       if (!sessionId) return;
 
-      // Save assistant text
-      if (step.text) {
-        saveMessage(sessionId, "assistant", step.text).catch((err) =>
+      // Save assistant text + reasoning
+      if (step.text || step.reasoningText) {
+        saveMessage(
+          sessionId,
+          "assistant",
+          step.text ?? "",
+          step.reasoningText,
+        ).catch((err) =>
           console.error("Failed to save assistant message:", err)
         );
       }

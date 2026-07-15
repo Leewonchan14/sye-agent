@@ -16,7 +16,14 @@ export const GET = async (req: Request) => {
 
   try {
     const messages = await getMessages(sessionId);
-    return Response.json({ messages });
+    return Response.json({
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        ...(m.reasoning ? { reasoning: m.reasoning } : {}),
+      })),
+    });
   } catch (error) {
     console.error("Failed to fetch messages:", error);
     return Response.json({ messages: [] });

@@ -30,7 +30,10 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sidebar_open") === "true";
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -39,6 +42,11 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
     setMounted(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  // Persist sidebar open state
+  useEffect(() => {
+    localStorage.setItem("sidebar_open", String(sidebarOpen));
+  }, [sidebarOpen]);
 
   const onNew = useCallback(() => {
     router.push(`/${crypto.randomUUID()}`);
@@ -146,7 +154,12 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         headers: { "x-auth-token": tk },
       });
       const d = await r.json();
-      return (d.messages ?? []) as { id: string; role: string; content: string }[];
+      return (d.messages ?? []) as {
+        id: string;
+        role: string;
+        content: string;
+        reasoning?: string;
+      }[];
     },
     staleTime: 5_000,
   });
@@ -178,10 +191,15 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           parts: [{ type: "text", text: m.content }],
         });
       } else if (m.role === "assistant") {
+        const parts: Array<Record<string, unknown>> = [];
+        if (m.reasoning) {
+          parts.push({ type: "reasoning", text: m.reasoning });
+        }
+        parts.push({ type: "text", text: m.content });
         uiMessages.push({
           id: m.id,
           role: "assistant",
-          parts: [{ type: "text", text: m.content }],
+          parts,
         });
       } else if (m.role === "tool") {
         try {

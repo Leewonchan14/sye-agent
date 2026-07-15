@@ -77,7 +77,8 @@ export const MessageItem = ({
           style={{ backgroundColor: "var(--color-canvas-soft)" }}
         />
         <div className="min-w-0 flex-1">
-          <MessageContent>
+          {/* Text & reasoning: overflow-visible so table popups/tooltips aren't clipped */}
+          <MessageContent className="overflow-visible">
             {hasReasoning && (
               <Reasoning isStreaming={isReasoningStreaming}>
                 <ReasoningTrigger />
@@ -94,31 +95,43 @@ export const MessageItem = ({
               }
               if (part.type === "reasoning") return null; // consolidated above
               if (part.type === "step-start") return null;
-
-              // Tool parts: validated at runtime
-              const toolProps = extractToolPartProps(part);
-              if (toolProps) {
-                return (
-                  <Tool key={toolProps.toolCallId ?? idx} defaultOpen={false}>
-                    <ToolHeader
-                      type={toolProps.type}
-                      state={toolProps.state as ToolUIPart["state"]}
-                    />
-                    <ToolContent>
-                      {toolProps.input != null && <ToolInput input={toolProps.input} />}
-                      {(toolProps.output != null || toolProps.errorText != null) && (
-                        <ToolOutput
-                          output={toolProps.output}
-                          errorText={toolProps.errorText}
-                        />
-                      )}
-                    </ToolContent>
-                  </Tool>
-                );
-              }
               return null;
             })}
           </MessageContent>
+
+          {/* Tool cards outside MessageContent for full width (not constrained by w-fit) */}
+          {(() => {
+            const toolItems = message.parts
+              .map((part, idx) => ({
+                key: idx,
+                props: extractToolPartProps(part),
+              }))
+              .filter(
+                (item): item is { key: number; props: ToolPartProps } =>
+                  item.props != null
+              );
+
+            if (toolItems.length === 0) return null;
+
+            return (
+              <div className="mt-4 space-y-1">
+                {toolItems.map(({ key, props }) => (
+                  <Tool key={props.toolCallId ?? key} defaultOpen={false}>
+                    <ToolHeader
+                      type={props.type}
+                      state={props.state as ToolUIPart["state"]}
+                    />
+                    <ToolContent>
+                      {props.input != null && <ToolInput input={props.input} />}
+                      {(props.output != null || props.errorText != null) && (
+                        <ToolOutput output={props.output} errorText={props.errorText} />
+                      )}
+                    </ToolContent>
+                  </Tool>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </Message>

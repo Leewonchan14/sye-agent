@@ -11,7 +11,7 @@ import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {
   createContext,
@@ -24,6 +24,8 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+
+import { TableWrapper } from "@/components/ai-elements/table";
 
 import { Shimmer } from "./shimmer";
 
@@ -183,7 +185,9 @@ export const ReasoningTrigger = memo(
       >
         {children ?? (
           <>
-            <BrainIcon className="size-4" />
+            {isStreaming && (
+              <span className="size-2 rounded-full bg-primary animate-pulse" />
+            )}
             {getThinkingMessage(isStreaming, duration)}
             <ChevronDownIcon
               className={cn(
@@ -216,7 +220,14 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
+      <Streamdown
+        plugins={streamdownPlugins}
+        components={{
+          table: TableWrapper,
+        }}
+      >
+        {children}
+      </Streamdown>
     </CollapsibleContent>
   )
 );

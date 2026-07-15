@@ -21,6 +21,7 @@ const ensureTable = async (): Promise<void> => {
           created_at TIMESTAMPTZ DEFAULT NOW()
         )`;
       await getSql()`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at)`;
+      await getSql()`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reasoning TEXT`;
     } catch (err) {
       console.error("Failed to initialize database table:", err);
     }
@@ -40,6 +41,7 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  reasoning?: string;
   createdAt: string;
 }
 
@@ -47,13 +49,14 @@ interface DbRow {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  reasoning: string | null;
   created_at: string;
 }
 
 export const getMessages = async (sessionId: string): Promise<ChatMessage[]> => {
   await ensureTable();
   const rows = await getSql()`
-    SELECT id, role, content, created_at
+    SELECT id, role, content, reasoning, created_at
     FROM chat_messages
     WHERE session_id = ${sessionId}
     ORDER BY created_at ASC
@@ -63,6 +66,7 @@ export const getMessages = async (sessionId: string): Promise<ChatMessage[]> => 
     id: r.id,
     role: r.role,
     content: r.content,
+    reasoning: r.reasoning ?? undefined,
     createdAt: r.created_at,
   }));
 };
@@ -70,12 +74,13 @@ export const getMessages = async (sessionId: string): Promise<ChatMessage[]> => 
 export const saveMessage = async (
   sessionId: string,
   role: string,
-  content: string
+  content: string,
+  reasoning?: string | null
 ): Promise<void> => {
   await ensureTable();
   await getSql()`
-    INSERT INTO chat_messages (session_id, role, content)
-    VALUES (${sessionId}, ${role}, ${content})
+    INSERT INTO chat_messages (session_id, role, content, reasoning)
+    VALUES (${sessionId}, ${role}, ${content}, ${reasoning ?? null})
   `;
 };
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { TableWrapper } from "@/components/ai-elements/table";
 import { Button } from "@/components/ui/button";
 import {
   ButtonGroup,
@@ -331,6 +332,9 @@ export const MessageResponse = memo(
         className
       )}
       plugins={streamdownPlugins}
+      components={{
+        table: TableWrapper,
+      }}
       {...props}
     />
   ),

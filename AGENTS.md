@@ -17,6 +17,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **shadcn/ui**를 적극 사용하세요. 컴포넌트 추가, 검색, 설치 등은 `shadcn` MCP 도구를 통해 수행할 수 있습니다.
 - UI 관련 질문이 있으면 먼저 `shadcn` MCP를 검색(`search_tool_bm25`)하여 필요한 도구가 있는지 확인하세요.
 
+# Development server rule
+
+- **직접 개발 서버를 실행하지 마세요.**
+- 현재 `localhost:3000`에 개발 서버가 이미 실행 중입니다.
+- 만약 3000 포트가 열려 있지 않다면, 직접 실행하지 말고 **내게 열어달라고 요청**하세요.
+
+# Package manager
+
+**`npm`**, **`npx`** 만 사용하세요. `bun`, `yarn`, `pnpm` 등 다른 패키지 매니저는 사용하지 마세요.
+
 # Library preference
 
 코드를 직접 구현하기 전에, 해당 기능을 해결해주는 라이브러리가 있는지 먼저 조사하세요. 라이브러리로 해결 가능한 코드는 라이브러리를 적극 사용하고 직접 구현을 피하세요.
