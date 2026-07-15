@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Menu } from "lucide-react";
+import { sample } from "lodash";
+import { LogOut, Menu } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -32,21 +33,21 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { useAuthStore } from "@/lib/auth-store";
 
 /* ── ChatShell ── */
 
 export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const router = useRouter();
-  const [authed, setAuthed] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
     defaultValue: false,
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [token] = useLocalStorageState("auth_token", { defaultValue: "" });
+  const token = useAuthStore((s) => s.token);
+  const logout = useAuthStore((s) => s.logout);
 
-  const { data: isValid } = useQuery({
+  const { data: isValid, isLoading } = useQuery({
     queryKey: ["auth-validate"],
     queryFn: async () => {
       const res = await fetch("/api/auth", {
@@ -58,14 +59,6 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
     enabled: !!token,
     retry: false,
   });
-
-  // Validate token on mount — setAuthed once we have a definitive answer
-  useEffect(() => {
-    if (!token || isValid !== undefined) {
-      setAuthed(isValid ?? false);
-      setMounted(true);
-    }
-  }, [isValid, token]);
 
   const onNew = useCallback(() => {
     router.push(`/${crypto.randomUUID()}`);
@@ -80,14 +73,22 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
-  if (!mounted)
+  // Loading: token present but validation pending
+  if (typeof isValid == "undefined" || isLoading) {
     return (
       <div
-        className="flex min-h-screen items-center justify-center"
+        className="flex min-h-screen flex-col"
         style={{ backgroundColor: "var(--color-canvas)" }}
-      />
+      >
+        <ChatLoading />
+      </div>
     );
-  if (!authed) return <PasswordGate onSuccess={() => setAuthed(true)} />;
+  }
+
+  // Not authenticated: no token or invalid token
+  if (!token || isValid === false) {
+    return <PasswordGate onSuccess={() => {}} />;
+  }
 
   return (
     <div
@@ -102,7 +103,6 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
           onNew={onNew}
           isOpen={sidebarOpen}
           onToggle={toggle}
-          onUnauthed={() => setAuthed(false)}
         />
       </div>
 
@@ -125,9 +125,21 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
           className="size-6 rounded-full object-cover"
           draggable={false}
         />
-        <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
+        <span
+          className="flex-1 text-sm font-medium"
+          style={{ color: "var(--color-ink)" }}
+        >
           치이카와 데이트 메이트
         </span>
+        <button
+          type="button"
+          onClick={logout}
+          className="rounded-md p-1.5"
+          style={{ color: "var(--color-muted)" }}
+          aria-label="Logout"
+        >
+          <LogOut className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -149,7 +161,6 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
                 setMobileMenuOpen(false);
               }}
               isOpen={true}
-              onUnauthed={() => setAuthed(false)}
               onToggle={() => setMobileMenuOpen(false)}
             />
           </div>
@@ -166,7 +177,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
 /* ── ChatInner ── */
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
-  const [tk] = useLocalStorageState("auth_token", { defaultValue: "" });
+  const tk = useAuthStore((s) => s.token);
 
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
@@ -432,7 +443,7 @@ const loadingPhrases = [
 ];
 
 const ChatLoading = () => {
-  const [phraseIdx] = useState(() => Math.floor(Math.random() * loadingPhrases.length));
+  const phrase = useMemo(() => sample(loadingPhrases)!, []);
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4">
@@ -442,8 +453,12 @@ const ChatLoading = () => {
         className="size-20 animate-bounce rounded-full object-cover"
         style={{ backgroundColor: "var(--color-canvas-soft)" }}
       />
-      <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-        {loadingPhrases[phraseIdx]}
+      <p
+        className="text-sm"
+        style={{ color: "var(--color-muted)" }}
+        suppressHydrationWarning
+      >
+        {phrase}
       </p>
     </div>
   );

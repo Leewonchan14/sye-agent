@@ -1,13 +1,12 @@
 "use client";
 
-import useLocalStorageState from "use-local-storage-state";
-
 import { useCallback, useRef, useState } from "react";
 
 import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthStore } from "@/lib/auth-store";
 
 interface PasswordGateProps {
   onSuccess: () => void;
@@ -18,7 +17,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   const [error, setError] = useState("");
   const [isShaking, setIsShaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [, setAuthToken] = useLocalStorageState("auth_token", { defaultValue: "" });
+  const login = useAuthStore((s) => s.login);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback(
@@ -39,7 +38,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         const data = await res.json();
 
         if (data.success) {
-          setAuthToken(data.token);
+          login(data.token);
           onSuccess();
         } else {
           setError(data.error || "비밀번호가 틀렸습니다.");
@@ -56,7 +55,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         setIsLoading(false);
       }
     },
-    [password, onSuccess, setAuthToken]
+    [password, onSuccess, login]
   );
 
   const handleKeyDown = useCallback(
@@ -108,7 +107,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         <div className="w-full space-y-3">
           <Input
             ref={inputRef}
-            type="password"
+            type="text"
             placeholder="비밀번호"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { PanelLeft, Plus } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
+import { LogOut, PanelLeft, Plus } from "lucide-react";
+
+import { useAuthStore } from "@/lib/auth-store";
 
 interface Session {
   id: string;
@@ -17,7 +18,6 @@ interface Props {
   onNew: () => void;
   isOpen: boolean;
   onToggle: () => void;
-  onUnauthed?: () => void;
 }
 
 const truncate = (t: string, n: number) => (t.length > n ? t.slice(0, n) + "..." : t);
@@ -28,23 +28,20 @@ export const SessionSidebar = ({
   onNew,
   isOpen,
   onToggle,
-  onUnauthed,
 }: Props) => {
-  const [tk] = useLocalStorageState("auth_token", { defaultValue: "" });
+  const tk = useAuthStore((s) => s.token);
 
   const { data: sessions = [], isLoading: loading } = useQuery({
     queryKey: ["sessions"],
     queryFn: async () => {
       const r = await fetch("/api/sessions", { headers: { "x-auth-token": tk } });
-      if (r.status === 401) {
-        onUnauthed?.();
-        return [];
-      }
       const d = await r.json();
       return (d.sessions ?? []) as Session[];
     },
     staleTime: 10_000,
   });
+
+  const logout = useAuthStore((s) => s.logout);
 
   const css = (k: string) => `var(--${k})`;
 
@@ -139,6 +136,21 @@ export const SessionSidebar = ({
               );
             })}
           </nav>
+
+          {/* Logout */}
+          <div className="px-3 pb-3">
+            <button
+              type="button"
+              onClick={logout}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
+              style={{ color: css("color-muted") }}
+              onMouseEnter={btnHover}
+              onMouseLeave={btnLeave}
+            >
+              <LogOut className="h-4 w-4" />
+              로그아웃
+            </button>
+          </div>
         </>
       ) : (
         /* Collapsed: Claude.ai-style icon-only strip */
@@ -165,6 +177,22 @@ export const SessionSidebar = ({
             aria-label="New chat"
           >
             <Plus className="h-5 w-5" />
+          </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Logout */}
+          <button
+            type="button"
+            onClick={logout}
+            className="flex h-9 w-full items-center justify-center rounded-md transition-colors"
+            style={{ color: css("color-muted") }}
+            onMouseEnter={btnHover}
+            onMouseLeave={btnLeave}
+            aria-label="Logout"
+          >
+            <LogOut className="h-5 w-5" />
           </button>
         </div>
       )}
