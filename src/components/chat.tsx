@@ -76,7 +76,9 @@ export const ChatShell = () => {
         isOpen={sidebarOpen}
         onToggle={toggle}
       />
-      <ChatInner key={sid} sessionId={sid} />
+      <div className="flex min-w-0 flex-1 flex-col min-h-0">
+        <ChatInner key={sid} sessionId={sid} />
+      </div>
     </div>
   );
 };
@@ -85,6 +87,7 @@ export const ChatShell = () => {
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const [input, setInput] = useState("");
+  const [messagesLoading, setMessagesLoading] = useState(true);
   const tk = localStorage.getItem("auth_token") ?? "";
 
   const { messages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
@@ -98,6 +101,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   );
 
   useEffect(() => {
+    setMessagesLoading(true);
     fetch(`/api/messages?sessionId=${sessionId}`, { headers: { "x-auth-token": tk } })
       .then((r) => r.json())
       .then((d) => {
@@ -110,7 +114,8 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
             }))
           );
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setMessagesLoading(false));
   }, [sessionId, setMessages, tk]);
 
   const send = useCallback(
@@ -144,7 +149,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
   return (
     <div
-      className="flex flex-1 flex-col"
+      className="flex min-h-0 flex-1 flex-col"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       {/* Header */}
@@ -183,7 +188,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       )}
 
       {/* Messages */}
-      {hasMsgs || streaming ? (
+      {messagesLoading ? (
+        <ChatLoading />
+      ) : hasMsgs || streaming ? (
         <MessageScrollerProvider autoScroll>
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
@@ -217,6 +224,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       )}
 
       {/* Input area */}
+      {!messagesLoading && (
       <div className="shrink-0 px-4 pb-6">
         <div className="mx-auto max-w-[720px]">
           <form
@@ -271,6 +279,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };
@@ -307,6 +316,32 @@ const SuggestionChip = ({
     <span className="text-sm leading-none">{icon}</span>
     {label}
   </button>
+);
+
+/* ── Chat Loading ── */
+
+const loadingPhrases = [
+  "잠시만 기다려줘…!",
+  "준비 중이야…♪",
+  "거의 다 왔어…!",
+  "데이터 불러오는 중…♪",
+  "원찬님 예은님… 기다려줘…!",
+  "좋은 정보 찾는 중…♪",
+  "잠깐만…! 곧 갈게…!",
+];
+
+const ChatLoading = () => (
+  <div className="flex flex-1 flex-col items-center justify-center gap-4">
+    <img
+      src="/munjackgui.webp"
+      alt="치이카와"
+      className="size-20 animate-bounce rounded-full object-cover"
+      style={{ backgroundColor: "var(--color-canvas-soft)" }}
+    />
+    <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+      {loadingPhrases[Math.floor(Math.random() * loadingPhrases.length)]}
+    </p>
+  </div>
 );
 
 /* ── Rotating Phrase Badge ── */
@@ -353,7 +388,28 @@ const RotatingPhrase = () => {
 
 /* ── Empty State ── */
 
-const EmptyState = () => (
+const subPhrases = [
+  "뭔가 작고 귀여운 제가… 둘만의 여행을 도와드릴게요…♪",
+  "어떻게든 되겠지…!!",
+  "서두르지 않아도 괜찮아…!",
+  "추억은… 계속… 남는 거야…!",
+  "몇 번이라도… 계속 응원할게…!!",
+  "괜찮아, 항상 어떻게든 됐잖아…!!",
+  "그거 완전 최고잖아…!!",
+  "둘이 함께라면… 뭐든 즐거워…♪",
+  "안 될 것 같으면… 그만둬도 되는 거야…!",
+  "알아… 지칠 때도 있는 거지…",
+  "원찬님 예은님이라면… 분명 행복할 거야…!",
+  "오늘도 둘이서 즐겁게…♪",
+];
+
+const EmptyState = () => {
+  const [subIdx, setSubIdx] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setSubIdx((p) => (p + 1) % subPhrases.length), 3000);
+    return () => clearInterval(iv);
+  }, []);
+  return (
   <div className="flex flex-col items-center gap-1 pt-32 pb-4">
     {/* Character icon */}
     <div className="mb-5">
@@ -371,8 +427,9 @@ const EmptyState = () => (
       원찬<span style={{ color: "var(--color-muted)" }}>님…!</span>{" "}
       예은<span style={{ color: "var(--color-muted)" }}>님…!</span>
     </h1>
-    <p className="text-[15px]" style={{ color: "var(--color-muted)" }}>
-      뭔가 작고 귀여운 제가… 둘만의 여행을 도와드릴게요…♪
+    <p className="text-[15px] transition-opacity duration-300" style={{ color: "var(--color-muted)" }}>
+      {subPhrases[subIdx]}
     </p>
   </div>
-);
+  );
+};

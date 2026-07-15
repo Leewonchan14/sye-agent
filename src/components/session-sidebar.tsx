@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, PanelLeft, Plus } from "lucide-react";
+import { PanelLeft, Plus } from "lucide-react";
 
 import { useEffect, useState } from "react";
 
@@ -58,7 +58,7 @@ export const SessionSidebar = ({
 
   return (
     <aside
-      className="flex h-screen shrink-0 flex-col transition-all duration-200 ease-out"
+      className="hidden md:flex h-screen shrink-0 flex-col transition-all duration-200 ease-out"
       style={{
         width: isOpen ? 256 : 52,
         backgroundColor: css("color-canvas"),
@@ -136,7 +136,6 @@ export const SessionSidebar = ({
                     if (!active) e.currentTarget.style.backgroundColor = "transparent";
                   }}
                 >
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
                   <span className="flex-1 truncate">{truncate(s.title, 28)}</span>
                 </button>
               );
