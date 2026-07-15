@@ -77,7 +77,7 @@ export const SessionSidebar = ({
                 alt="치이카와"
                 className="size-6 rounded-full object-cover"
               />
-              <span className="text-sm font-medium">치이카와</span>
+              <span className="text-sm font-medium">치이카와 여행 메이트</span>
             </div>
             <button
               type="button"
@@ -171,36 +171,6 @@ export const SessionSidebar = ({
           >
             <Plus className="h-5 w-5" />
           </button>
-
-          {/* Session icons */}
-          <nav className="flex flex-1 flex-col items-center gap-2 overflow-y-auto py-1">
-            {sessions.map((s) => {
-              const active = s.id === activeSessionId;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onSelect(s.id)}
-                  className="flex h-9 w-full items-center justify-center rounded-md transition-colors"
-                  style={{
-                    backgroundColor: active ? css("color-canvas-card") : "transparent",
-                    color: active ? css("color-ink") : css("color-muted"),
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!active) e.currentTarget.style.backgroundColor = css("color-canvas-soft");
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) e.currentTarget.style.backgroundColor = "transparent";
-                  }}
-                  aria-label={truncate(s.title, 28)}
-                  title={s.title}
-                >
-                  <MessageSquare className="h-4 w-4 shrink-0" />
-                </button>
-              );
-            })}
-          </nav>
-
 
         </div>
       )}
