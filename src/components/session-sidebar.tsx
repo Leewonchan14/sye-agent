@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { LogOut, PanelLeft, Plus } from "lucide-react";
 
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
 
 interface Session {
@@ -45,13 +47,6 @@ export const SessionSidebar = ({
 
   const css = (k: string) => `var(--${k})`;
 
-  const btnHover = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.currentTarget.style.backgroundColor = css("color-canvas-soft");
-  };
-  const btnLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.currentTarget.style.backgroundColor = "transparent";
-  };
-
   return (
     <aside
       className="flex h-screen shrink-0 flex-col transition-all duration-200 ease-out"
@@ -68,37 +63,26 @@ export const SessionSidebar = ({
           {/* Header */}
           <div className="flex h-14 items-center justify-between px-4">
             <div className="flex items-center gap-2">
-              <img
-                src="/munjackgui.png"
-                alt="치이카와"
-                className="size-6 rounded-full object-cover"
-                draggable={false}
-              />
+              <Avatar size="sm">
+                <AvatarImage src="/munjackgui.png" alt="치이카와" />
+              </Avatar>
               <span className="text-sm font-medium">치이카와 데이트 메이트</span>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onToggle}
-              className="rounded-md p-1.5 hover:opacity-70"
-              style={{ color: css("color-muted") }}
               aria-label="Close sidebar"
             >
               <PanelLeft className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
 
           {/* New Chat */}
           <div className="px-3 pb-3">
-            <button
-              type="button"
-              onClick={onNew}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
-              style={{ color: css("color-body") }}
-              onMouseEnter={btnHover}
-              onMouseLeave={btnLeave}
-            >
+            <Button variant="ghost" className="w-full justify-start" onClick={onNew}>
               <Plus className="h-4 w-4" />새 채팅
-            </button>
+            </Button>
           </div>
 
           {/* Session list */}
@@ -139,61 +123,37 @@ export const SessionSidebar = ({
 
           {/* Logout */}
           <div className="px-3 pb-3">
-            <button
-              type="button"
-              onClick={logout}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
-              style={{ color: css("color-muted") }}
-              onMouseEnter={btnHover}
-              onMouseLeave={btnLeave}
-            >
+            <Button variant="ghost" className="w-full justify-start" onClick={logout}>
               <LogOut className="h-4 w-4" />
               로그아웃
-            </button>
+            </Button>
           </div>
         </>
       ) : (
         /* Collapsed: Claude.ai-style icon-only strip */
         <div className="flex h-full flex-col items-center gap-2 py-3">
           {/* Open toggle */}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-lg"
             onClick={onToggle}
-            className="flex h-9 w-full items-center justify-center rounded-md hover:opacity-70"
-            style={{ color: css("color-muted") }}
             aria-label="Open sidebar"
           >
             <PanelLeft className="h-5 w-5" />
-          </button>
+          </Button>
 
           {/* New Chat */}
-          <button
-            type="button"
-            onClick={onNew}
-            className="flex h-9 w-full items-center justify-center rounded-md transition-colors"
-            style={{ color: css("color-body") }}
-            onMouseEnter={btnHover}
-            onMouseLeave={btnLeave}
-            aria-label="New chat"
-          >
+          <Button variant="ghost" size="icon-lg" onClick={onNew} aria-label="New chat">
             <Plus className="h-5 w-5" />
-          </button>
+          </Button>
 
           {/* Spacer */}
           <div className="flex-1" />
 
           {/* Logout */}
-          <button
-            type="button"
-            onClick={logout}
-            className="flex h-9 w-full items-center justify-center rounded-md transition-colors"
-            style={{ color: css("color-muted") }}
-            onMouseEnter={btnHover}
-            onMouseLeave={btnLeave}
-            aria-label="Logout"
-          >
+          <Button variant="ghost" size="icon-lg" onClick={logout} aria-label="Logout">
             <LogOut className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
       )}
     </aside>

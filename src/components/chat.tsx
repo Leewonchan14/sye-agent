@@ -22,9 +22,12 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { ExampleQuestions } from "@/components/example-questions";
 import { MessageItem } from "@/components/message";
 import { PasswordGate } from "@/components/password-gate";
 import { SessionSidebar } from "@/components/session-sidebar";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -111,35 +114,26 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
         className="md:hidden flex items-center gap-2 px-3 h-12 shrink-0"
         style={{ borderBottom: "1px solid var(--color-hairline)" }}
       >
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setMobileMenuOpen(true)}
-          className="rounded-md p-1.5"
-          style={{ color: "var(--color-muted)" }}
+          aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
-        </button>
-        <img
-          src="/munjackgui.png"
-          alt="치이카와"
-          className="size-6 rounded-full object-cover"
-          draggable={false}
-        />
+        </Button>
+        <Avatar size="sm">
+          <AvatarImage src="/munjackgui.png" alt="치이카와" />
+        </Avatar>
         <span
           className="flex-1 text-sm font-medium"
           style={{ color: "var(--color-ink)" }}
         >
           치이카와 데이트 메이트
         </span>
-        <button
-          type="button"
-          onClick={logout}
-          className="rounded-md p-1.5"
-          style={{ color: "var(--color-muted)" }}
-          aria-label="Logout"
-        >
+        <Button variant="ghost" size="icon" onClick={logout} aria-label="Logout">
           <LogOut className="h-5 w-5" />
-        </button>
+        </Button>
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -237,6 +231,13 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     [status, sendMessage]
   );
 
+  const handleQuestionClick = useCallback(
+    (text: string) => {
+      if (status === "ready") sendMessage({ text });
+    },
+    [status, sendMessage]
+  );
+
   /* ── Debounced loading: show ChatLoading only after 300ms ── */
   const [debounceLoading, setDebounceLoading] = useState(false);
   const showLoading = messagesLoading || debounceLoading;
@@ -295,7 +296,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       {/* Error alert */}
       {error && (
         <div
-          className="mx-auto mb-2 flex max-w-[720px] items-center justify-between rounded-md border px-4 py-2 text-sm"
+          className="mx-auto mb-2 flex max-w-180 items-center justify-between rounded-md border px-4 py-2 text-sm"
           style={{
             borderColor: "var(--color-error)",
             backgroundColor: "var(--color-canvas-soft)",
@@ -303,13 +304,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           }}
         >
           <span>{error.message}</span>
-          <button
-            type="button"
-            onClick={clearError}
-            className="ml-2 shrink-0 leading-none hover:opacity-70"
-          >
+          <Button variant="ghost" size="icon-xs" onClick={clearError} className="ml-2">
             ✕
-          </button>
+          </Button>
         </div>
       )}
 
@@ -320,7 +317,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         <MessageScrollerProvider autoScroll>
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
-              <MessageScrollerContent className="mx-auto max-w-[720px] px-4">
+              <MessageScrollerContent className="mx-auto max-w-180 px-4">
                 {messages.map((m, idx) => (
                   <MessageScrollerItem
                     key={m.id}
@@ -349,17 +346,17 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         </MessageScrollerProvider>
       ) : (
         <div className="flex flex-1 flex-col items-center">
-          <EmptyState />
+          <EmptyState onQuestionClick={handleQuestionClick} />
         </div>
       )}
 
       {/* Input area */}
       {!showLoading && (
         <div className="shrink-0 px-4 pb-6">
-          <div className="mx-auto max-w-[720px]">
+          <div className="mx-auto max-w-180">
             <PromptInput
               onSubmit={handlePromptSubmit}
-              className="relative flex flex-col border rounded-2xl [&_[data-slot=input-group]]:focus-within:border [&_[data-slot=input-group]]:focus-within:ring-0"
+              className="relative flex flex-col border rounded-2xl **:data-[slot=input-group]:focus-within:border **:data-[slot=input-group]:focus-within:ring-0"
               style={{
                 borderColor: "var(--color-hairline)",
                 backgroundColor: "var(--color-canvas-soft)",
@@ -369,7 +366,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 <PromptInputTextarea
                   placeholder="어디로 데이트하러 갈까요…?"
                   disabled={streaming}
-                  className="min-h-[52px] max-h-32 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
+                  className="min-h-13 max-h-32 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
                 />
               </PromptInputBody>
               <PromptInputFooter>
@@ -379,48 +376,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 <PromptInputSubmit status={status} onStop={stop} />
               </PromptInputFooter>
             </PromptInput>
-
-            {/* Suggestion chips — BELOW input (Claude.ai pattern) */}
-            {!hasMsgs && (
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
-                <SuggestionChip
-                  icon="🌸"
-                  label="데이트 코스 추천"
-                  onClick={() => {
-                    if (status === "ready")
-                      sendMessage({
-                        text: "데이트 코스 추천해줘…!",
-                      });
-                  }}
-                />
-                <SuggestionChip
-                  icon="🗺️"
-                  label="데이트 일정"
-                  onClick={() => {
-                    if (status === "ready")
-                      sendMessage({ text: "1박 2일 데이트 일정 짜줘…!" });
-                  }}
-                />
-                <SuggestionChip
-                  icon="🍽️"
-                  label="맛집 찾기"
-                  onClick={() => {
-                    if (status === "ready")
-                      sendMessage({ text: "분위기 좋은 맛집 알려줘…!" });
-                  }}
-                />
-                <SuggestionChip
-                  icon="💝"
-                  label="체크리스트"
-                  onClick={() => {
-                    if (status === "ready")
-                      sendMessage({
-                        text: "둘이 함께 데이트 준비물 체크리스트 알려줘…!",
-                      });
-                  }}
-                />
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -463,38 +418,6 @@ const ChatLoading = () => {
     </div>
   );
 };
-
-const SuggestionChip = ({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors"
-    style={{
-      borderColor: "var(--color-hairline)",
-      backgroundColor: "var(--color-surface)",
-      color: "var(--color-body)",
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = "var(--color-canvas-soft)";
-      e.currentTarget.style.color = "var(--color-ink)";
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.backgroundColor = "var(--color-surface)";
-      e.currentTarget.style.color = "var(--color-body)";
-    }}
-  >
-    <span className="text-sm leading-none">{icon}</span>
-    {label}
-  </button>
-);
 
 /* ── Rotating Phrase Badge ── */
 
@@ -566,7 +489,7 @@ const subPhrases = [
   "알고 있어?〜 그거 완전… 최고의 데이트 코스…라는 뜻이야!?",
 ];
 
-const EmptyState = () => {
+const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void }) => {
   const [subIdx, setSubIdx] = useState(0);
   const [fadeKey, setFadeKey] = useState(0);
   useEffect(() => {
@@ -577,7 +500,7 @@ const EmptyState = () => {
     return () => clearInterval(iv);
   }, []);
   return (
-    <div className="flex flex-col items-center gap-1 pt-32 pb-4">
+    <div className="flex flex-col h-full justify-center items-center gap-1">
       {/* Character icon */}
       <div className="mb-5">
         <img
@@ -602,6 +525,9 @@ const EmptyState = () => {
       >
         {subPhrases[subIdx]}
       </p>
+      <div className="mt-5">
+        <ExampleQuestions onQuestionClick={onQuestionClick} />
+      </div>
     </div>
   );
 };
