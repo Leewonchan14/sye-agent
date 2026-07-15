@@ -6,26 +6,33 @@ interface Props {
   onQuestionClick: (q: string) => void;
 }
 
+const suggestions = [
+  { icon: "🌸", label: "데이트 코스 추천", prompt: "춘천에서 이원찬과 성예은의 데이트 코스 추천해줘" },
+  { icon: "🗺️", label: "춘천 여행 일정", prompt: "춘천 1박 2일 여행 일정 짜줘" },
+  { icon: "🍽️", label: "맛집 검색", prompt: "춘천 근처 분위기 좋은 맛집 추천해줘" },
+  { icon: "📝", label: "체크리스트", prompt: "커플 여행 준비물 체크리스트 알려줘" },
+];
+
 export const ExampleQuestions = ({ onQuestionClick }: Props) => {
   const handleClick = useCallback(
-    (q: string) => {
-      onQuestionClick(q);
+    (prompt: string) => {
+      onQuestionClick(prompt);
     },
     [onQuestionClick]
   );
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      {["작성하기", "학습하기", "코드", "일상"].map((q) => (
+      {suggestions.map((s) => (
         <button
-          key={q}
+          key={s.label}
           type="button"
-          onClick={() => handleClick(q)}
-          className="rounded-full border px-4 py-1.5 text-sm transition-colors"
+          onClick={() => handleClick(s.prompt)}
+          className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors"
           style={{
             borderColor: "var(--color-hairline)",
             backgroundColor: "var(--color-surface)",
-            color: "var(--color-muted)",
+            color: "var(--color-body)",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = "var(--color-canvas-soft)";
@@ -33,10 +40,11 @@ export const ExampleQuestions = ({ onQuestionClick }: Props) => {
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = "var(--color-surface)";
-            e.currentTarget.style.color = "var(--color-muted)";
+            e.currentTarget.style.color = "var(--color-body)";
           }}
         >
-          {q}
+          <span className="text-sm leading-none">{s.icon}</span>
+          {s.label}
         </button>
       ))}
     </div>

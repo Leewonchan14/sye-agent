@@ -1,6 +1,6 @@
 "use client";
 
-import { Compass } from "lucide-react";
+import { Heart } from "lucide-react";
 
 import { useCallback, useRef, useState } from "react";
 
@@ -19,7 +19,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback(
-    async (e?: React.FormEvent) => {
+    async (e?: React.SyntheticEvent) => {
       e?.preventDefault();
       if (!password.trim()) return;
 
@@ -65,22 +65,29 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   );
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-32">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-32" style={{ backgroundColor: "var(--color-canvas)" }}>
       <form
         onSubmit={handleSubmit}
-        className={`flex w-80 max-w-full flex-col items-center gap-5 rounded-xl border bg-card p-8 shadow-sm ${
+        className={`flex w-80 max-w-full flex-col items-center gap-5 rounded-xl border p-8 ${
           isShaking ? "animate-shake" : ""
         }`}
+        style={{
+          borderColor: "var(--color-hairline)",
+          backgroundColor: "var(--color-surface)",
+        }}
       >
-        {/* Decorative icon — terracotta */}
-        <div className="text-warm-accent">
-          <Compass className="h-8 w-8" strokeWidth={1.2} />
-        </div>
+        <Heart
+          className="h-8 w-8"
+          strokeWidth={1.2}
+          style={{ color: "var(--color-primary)" }}
+        />
 
-        <h1 className="text-lg font-medium text-foreground">Designer</h1>
+        <h1 className="text-lg font-medium" style={{ color: "var(--color-ink)" }}>
+          Designer
+        </h1>
 
-        <p className="text-center text-sm text-muted-foreground">
-          비밀번호를 입력해주세요
+        <p className="text-center text-sm" style={{ color: "var(--color-muted)" }}>
+          둘만의 공간에 오신 걸 환영합니다
         </p>
 
         <div className="w-full space-y-3">
@@ -106,10 +113,14 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
           </Button>
         </div>
 
-        {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+        {error && (
+          <p className="text-sm font-medium" style={{ color: "var(--color-error)" }}>
+            {error}
+          </p>
+        )}
 
-        <p className="text-center text-xs text-muted-foreground">
-          우리의 첫 만남일을 기념하는 특별한 여행 플래너
+        <p className="text-center text-xs" style={{ color: "var(--color-muted-soft)" }}>
+          원찬 & 예은의 특별한 여행 플래너
         </p>
       </form>
     </div>

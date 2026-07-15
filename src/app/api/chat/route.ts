@@ -47,21 +47,13 @@ export const POST = async (req: Request) => {
   return createAgentUIStreamResponse({
     agent,
     uiMessages: messages,
-    onEnd: async (event) => {
+    onStepEnd: async (step) => {
       if (!sessionId) return;
-
-      const responseMsg = event.responseMessage;
-      if (responseMsg?.parts) {
-        const textContent = responseMsg.parts
-          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join("");
-
-        if (textContent) {
-          saveMessage(sessionId, "assistant", textContent).catch((err) =>
-            console.error("Failed to save assistant message:", err)
-          );
-        }
+      const text = step.text;
+      if (text) {
+        saveMessage(sessionId, "assistant", text).catch((err) =>
+          console.error("Failed to save assistant message:", err)
+        );
       }
     },
   });

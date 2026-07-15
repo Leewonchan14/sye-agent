@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Square } from "lucide-react";
+import { Heart, Send, Square } from "lucide-react";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -123,7 +123,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   );
 
   const onSubmit = useCallback(
-    (e: React.FormEvent) => {
+    (e: React.SyntheticEvent) => {
       e.preventDefault();
       send(input);
     },
@@ -199,7 +199,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 ))}
                 {streaming && (
                   <div
-                    className="shimmer px-3 py-2 text-sm"
+                    className="px-3 py-2 text-sm"
                     style={{ color: "var(--color-muted)" }}
                   >
                     생각 중...
@@ -211,140 +211,131 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           </MessageScroller>
         </MessageScrollerProvider>
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          <EmptyState onSend={send} />
+        <div className="flex flex-1 flex-col items-center">
+          <EmptyState />
         </div>
       )}
 
-      {/* Input — DESIGN.md §6.6 */}
-      <div
-        className="shrink-0 px-4 pb-4 pt-2"
-        style={{ borderTop: "1px solid var(--color-hairline-soft)" }}
-      >
+      {/* Input area — Claude.ai layout: textarea with toolbar + suggestion chips below */}
+      <div className="shrink-0 px-4">
         <div className="mx-auto max-w-[720px]">
           <form
             onSubmit={onSubmit}
-            className="relative flex flex-col rounded-xl border"
+            className="relative flex flex-col rounded-2xl border"
             style={{
               borderColor: "var(--color-hairline)",
-              backgroundColor: "var(--color-surface)",
+              backgroundColor: "var(--color-canvas-soft)",
             }}
           >
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder="오늘 어떤 도움을 드릴까요?"
+              placeholder="어떤 여행을 함께 계획해볼까요?"
               disabled={streaming}
               rows={1}
-              className="min-h-11 max-h-32 resize-none rounded-xl border-0 bg-transparent p-4 pb-12 focus:outline-none focus-visible:ring-0 focus-visible:border-transparent"
-              style={{ color: "var(--color-ink)" }}
+              className="min-h-[52px] max-h-32 resize-none rounded-2xl border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
             />
-            <div className="flex items-center justify-end px-3 pb-3">
-              <button
-                type="submit"
-                disabled={streaming || !input.trim()}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors"
-                style={{
-                  backgroundColor:
-                    streaming || !input.trim()
-                      ? "var(--color-hairline)"
-                      : "var(--color-primary)",
-                  color: streaming || !input.trim() ? "var(--color-muted)" : "#fff",
-                }}
-              >
-                <Send className="h-4 w-4" />
-              </button>
+            {/* Toolbar-style bottom bar */}
+            <div className="flex items-center justify-between px-2 pb-2">
+              <div className="flex items-center gap-1">
+                <span
+                  className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                  style={{
+                    backgroundColor: "var(--color-primary)",
+                    color: "#fff",
+                  }}
+                >
+                  Designer
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="submit"
+                  disabled={streaming || !input.trim()}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+                  style={{
+                    backgroundColor:
+                      streaming || !input.trim()
+                        ? "var(--color-hairline)"
+                        : "var(--color-primary)",
+                    color: streaming || !input.trim() ? "var(--color-muted)" : "#fff",
+                  }}
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </form>
+
+          {/* Suggestion chips — BELOW input (Claude.ai pattern) */}
+          {!hasMsgs && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pb-4 pt-3">
+              <SuggestionChip icon="🌸" label="데이트 코스 추천" onClick={() => send("춘천에서 이원찬과 성예은의 데이트 코스 추천해줘")} />
+              <SuggestionChip icon="🗺️" label="춘천 여행 일정" onClick={() => send("춘천 1박 2일 여행 일정 짜줘")} />
+              <SuggestionChip icon="🍽️" label="맛집 검색" onClick={() => send("춘천 근처 맛집 추천해줘")} />
+              <SuggestionChip icon="📝" label="체크리스트" onClick={() => send("여행 준비물 체크리스트 알려줘")} />
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
+/* ── Suggestion Chip ── */
+
+const SuggestionChip = ({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors"
+    style={{
+      borderColor: "var(--color-hairline)",
+      backgroundColor: "var(--color-surface)",
+      color: "var(--color-body)",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.backgroundColor = "var(--color-canvas-soft)";
+      e.currentTarget.style.color = "var(--color-ink)";
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.backgroundColor = "var(--color-surface)";
+      e.currentTarget.style.color = "var(--color-body)";
+    }}
+  >
+    <span className="text-sm leading-none">{icon}</span>
+    {label}
+  </button>
+);
+
 /* ── Empty State ── */
 
-const EmptyState = ({ onSend }: { onSend: (text: string) => void }) => (
-  <div className="flex flex-col items-center gap-1 pt-32 pb-8">
-    <svg
-      width="40"
-      height="40"
-      viewBox="0 0 40 40"
-      fill="none"
+const EmptyState = () => (
+  <div className="flex flex-col items-center gap-1 pt-32 pb-4">
+    <Heart
       className="mb-6"
+      size={36}
+      strokeWidth={1.2}
       style={{ color: "var(--color-primary)" }}
+    />
+    <h1
+      className="text-[22px] font-normal leading-snug"
+      style={{ color: "var(--color-ink)" }}
     >
-      <circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="20" cy="20" r="10" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="20" cy="20" r="3" fill="currentColor" />
-      <line
-        x1="20"
-        y1="2"
-        x2="20"
-        y2="6"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      <line
-        x1="20"
-        y1="34"
-        x2="20"
-        y2="38"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      <line
-        x1="2"
-        y1="20"
-        x2="6"
-        y2="20"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      <line
-        x1="34"
-        y1="20"
-        x2="38"
-        y2="20"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-    <h1 className="text-2xl font-medium" style={{ color: "var(--color-ink)" }}>
-      WonChan<span style={{ color: "var(--color-muted)" }}>님,</span>
+      원찬<span style={{ color: "var(--color-muted)" }}>님,</span>{" "}
+      예은<span style={{ color: "var(--color-muted)" }}>님</span>
     </h1>
-    <p className="text-base" style={{ color: "var(--color-muted)" }}>
-      다시 돌아왔군요
+    <p className="text-[15px]" style={{ color: "var(--color-muted)" }}>
+      둘만의 여행을 Designer가 함께할게요
     </p>
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {["작성하기", "학습하기", "코드", "일상"].map((q) => (
-        <button
-          key={q}
-          type="button"
-          onClick={() => onSend(q)}
-          className="rounded-full border px-4 py-1.5 text-sm transition-colors"
-          style={{
-            borderColor: "var(--color-hairline)",
-            backgroundColor: "var(--color-surface)",
-            color: "var(--color-muted)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--color-canvas-soft)";
-            e.currentTarget.style.color = "var(--color-ink)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--color-surface)";
-            e.currentTarget.style.color = "var(--color-muted)";
-          }}
-        >
-          {q}
-        </button>
-      ))}
-    </div>
   </div>
 );
