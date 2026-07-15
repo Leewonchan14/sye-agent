@@ -122,6 +122,12 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         <p className="text-center text-xs" style={{ color: "var(--color-muted-soft)" }}>
           원찬 & 예은의 특별한 데이트 플래너
         </p>
+
+        <p className="text-center text-xs leading-relaxed" style={{ color: "var(--color-muted)" }}>
+          알고 있어?〜 100일케이크 밑판에 적힌 문구…<br />
+          그게 힌트…라는 거야!?<br />
+          띄워쓰기 없이, 느낌표 없이 입력하는 거야…!
+        </p>
       </form>
     </div>
   );
