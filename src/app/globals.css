@@ -1,26 +1,138 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: hsl(210 40% 98%);
+  --foreground: hsl(210 60% 10%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(210 60% 10%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(210 60% 10%);
+  --primary: hsl(200 95% 60%);
+  --primary-foreground: hsl(210 40% 98%);
+  --secondary: hsl(200 60% 92%);
+  --secondary-foreground: hsl(210 60% 20%);
+  --muted: hsl(200 40% 92%);
+  --muted-foreground: hsl(210 30% 40%);
+  --accent: hsl(200 95% 60%);
+  --accent-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 84% 60%);
+  --border: hsl(200 40% 85%);
+  --input: hsl(200 40% 85%);
+  --ring: hsl(200 95% 60%);
+  --radius: 0.75rem;
+  --sidebar: hsl(0 0% 100%);
+  --sidebar-foreground: hsl(210 60% 10%);
+  --sidebar-primary: hsl(200 95% 60%);
+  --sidebar-primary-foreground: hsl(210 40% 98%);
+  --sidebar-accent: hsl(200 60% 92%);
+  --sidebar-accent-foreground: hsl(210 60% 20%);
+  --sidebar-border: hsl(200 40% 85%);
+  --sidebar-ring: hsl(200 95% 60%);
+}
+
+.dark {
+  --background: hsl(210 60% 6%);
+  --foreground: hsl(210 40% 90%);
+  --card: hsl(210 60% 8%);
+  --card-foreground: hsl(210 40% 90%);
+  --popover: hsl(210 60% 8%);
+  --popover-foreground: hsl(210 40% 90%);
+  --primary: hsl(200 80% 50%);
+  --primary-foreground: hsl(210 40% 98%);
+  --secondary: hsl(210 50% 15%);
+  --secondary-foreground: hsl(210 40% 80%);
+  --muted: hsl(210 50% 12%);
+  --muted-foreground: hsl(210 30% 60%);
+  --accent: hsl(200 80% 50%);
+  --accent-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 62% 30%);
+  --border: hsl(210 50% 20%);
+  --input: hsl(210 50% 20%);
+  --ring: hsl(200 80% 50%);
+  --radius: 0.75rem;
+  --sidebar: hsl(210 60% 8%);
+  --sidebar-foreground: hsl(210 40% 90%);
+  --sidebar-primary: hsl(200 80% 50%);
+  --sidebar-primary-foreground: hsl(210 40% 98%);
+  --sidebar-accent: hsl(210 50% 15%);
+  --sidebar-accent-foreground: hsl(210 40% 80%);
+  --sidebar-border: hsl(210 50% 20%);
+  --sidebar-ring: hsl(200 80% 50%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Claude.ai-style loading dots animation */
+@keyframes dot-pulse {
+  0%, 80%, 100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Shake animation for password gate */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
 }
