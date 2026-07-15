@@ -16,11 +16,37 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "치이카와 — 원찬 & 예은",
-  description: "작고 귀여운 치이카와가 둘만의 여행을 도와드려요…! 이원찬 & 성예은의 특별한 여행 플래너.",
+  title: "원찬 & 예은 — 둘만의 여행",
+  description: "이원찬과 성예은, 둘만의 특별한 여행을 함께 계획하는 공간이에요…♪ 작고 귀여운 치이카와가 여행 메이트로 함께해요.",
   icons: {
     icon: "/munjackgui.webp",
     apple: "/munjackgui.webp",
+  },
+  openGraph: {
+    title: "원찬 & 예은 — 둘만의 여행",
+    description: "이원찬과 성예은, 둘만의 특별한 여행을 함께 계획하는 공간이에요…♪",
+    images: [
+      {
+        url: "/munjackgui.webp",
+        width: 512,
+        height: 512,
+        alt: "치이카와",
+      },
+      {
+        url: "/munjackgui-thinking.png",
+        width: 512,
+        height: 512,
+        alt: "치이카와 생각중",
+      },
+    ],
+    type: "website",
+    locale: "ko_KR",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "원찬 & 예은 — 둘만의 여행",
+    description: "둘만의 특별한 여행 플래너…♪",
+    images: ["/munjackgui.webp", "/munjackgui-thinking.png"],
   },
 };
 

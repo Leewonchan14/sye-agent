@@ -4,8 +4,6 @@ import { PanelLeft, Plus } from "lucide-react";
 
 import { useQuery } from "@tanstack/react-query";
 
-import { useCallback } from "react";
-
 interface Session {
   id: string;
   title: string;
@@ -102,11 +100,6 @@ export const SessionSidebar = ({
 
           {/* Session list */}
           <nav className="flex-1 overflow-y-auto px-2 py-1">
-            {loading && !sessions.length && (
-              <div className="px-3 py-4 text-xs" style={{ color: css("color-muted-soft") }}>
-                불러오는 중...
-              </div>
-            )}
             {!loading && !sessions.length && (
               <div className="px-3 py-4 text-xs" style={{ color: css("color-muted-soft") }}>
                 아직 채팅이 없습니다
