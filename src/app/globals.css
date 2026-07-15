@@ -11,13 +11,13 @@
 /* ─── DESIGN.md: Warm Pink Boudoir palette ─── */
 :root {
   /* Brand — dried rose */
-  --color-primary: hsl(355 55% 63%);          /* #d96c75 */
-  --color-primary-hover: hsl(355 50% 55%);    /* darker dried rose */
+  --color-primary: hsl(355 55% 63%); /* #d96c75 */
+  --color-primary-hover: hsl(355 50% 55%); /* darker dried rose */
   --color-primary-disabled: hsl(355 40% 85%);
 
   /* Canvas — blush pink cream */
-  --color-canvas: hsl(355 25% 98%);           /* #fdf6f5 */
-  --color-canvas-soft: hsl(355 25% 95%);      /* slightly darker */
+  --color-canvas: hsl(355 25% 98%); /* #fdf6f5 */
+  --color-canvas-soft: hsl(355 25% 95%); /* slightly darker */
   --color-canvas-card: hsl(355 25% 92%);
   --color-canvas-strong: hsl(355 25% 88%);
 
@@ -27,14 +27,14 @@
   --color-surface-card: hsl(355 25% 92%);
 
   /* Text — warm-toned, no pure black */
-  --color-ink: hsl(355 8% 10%);               /* near-black */
+  --color-ink: hsl(355 8% 10%); /* near-black */
   --color-body: hsl(355 5% 25%);
   --color-body-strong: hsl(355 5% 16%);
   --color-muted: hsl(355 5% 45%);
   --color-muted-soft: hsl(355 5% 58%);
 
   /* Hairline — pink undertone */
-  --color-hairline: hsl(355 20% 90%);         /* #e8d6d3 */
+  --color-hairline: hsl(355 20% 90%); /* #e8d6d3 */
   --color-hairline-soft: hsl(355 15% 93%);
 
   /* Semantic */
@@ -130,22 +130,82 @@ body {
 
 /* ─── Motion ─── */
 @keyframes fade-in {
-  from { opacity: 0; } to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-  20%, 40%, 60%, 80% { transform: translateX(4px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-4px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(4px);
+  }
 }
 @keyframes bounce-fade-in {
-  0% { opacity: 0; transform: translateY(8px); }
-  40% { opacity: 1; transform: translateY(-5px); }
-  60% { transform: translateY(0); }
-  75% { transform: translateY(-2px); }
-  88% { transform: translateY(0); }
-  96% { transform: translateY(-1px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+  60% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-2px);
+  }
+  88% {
+    transform: translateY(0);
+  }
+  96% {
+    transform: translateY(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.animate-fade-in { animation: fade-in 200ms ease-out; }
-.animate-shake { animation: shake 0.5s ease-in-out; }
-.animate-bounce-fade-in { animation: bounce-fade-in 400ms ease-out; }
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+.animate-bounce-fade-in {
+  animation: bounce-fade-in 400ms ease-out;
+}
+
+@keyframes heart-float {
+  0% {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-50vh) translateX(var(--drift, 20px)) scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100vh) translateX(calc(var(--drift, 20px) * -1)) scale(0.8);
+  }
+}
+.animate-heart-float {
+  animation: heart-float var(--duration, 3s) ease-out var(--delay, 0s) forwards;
+}

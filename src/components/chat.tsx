@@ -23,6 +23,7 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { ExampleQuestions } from "@/components/example-questions";
+import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
 import { PasswordGate } from "@/components/password-gate";
 import { SessionSidebar } from "@/components/session-sidebar";
@@ -40,8 +41,11 @@ import { useAuthStore } from "@/lib/auth-store";
 
 /* ── ChatShell ── */
 
-export const ChatShell = ({ sessionId }: { sessionId: string }) => {
+export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string }) => {
   const router = useRouter();
+  const [sessionId, setSessionId] = useState(
+    () => initialSessionId ?? crypto.randomUUID()
+  );
   const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
     defaultValue: false,
   });
@@ -55,21 +59,22 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["auth-validate"],
+    queryKey: ["auth-validate", token],
     queryFn: async () => {
+      if (!token) return await new Promise((res) => setTimeout(res, 3000));
       const res = await fetch("/api/auth", {
         headers: { "x-auth-token": token },
       });
       const d = await res.json();
       return d.valid === true;
     },
-    enabled: !!token,
     retry: 1,
     staleTime: 0,
   });
 
   const onNew = useCallback(() => {
-    router.push(`/${crypto.randomUUID()}`);
+    setSessionId(crypto.randomUUID());
+    router.push("/");
   }, [router]);
 
   const onSelect = useCallback(
@@ -82,7 +87,7 @@ export const ChatShell = ({ sessionId }: { sessionId: string }) => {
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
   // Loading: token present but validation pending
-  if (!!token && isLoading) {
+  if (isLoading) {
     return (
       <div
         className="flex min-h-screen flex-col"
@@ -228,10 +233,19 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     }
   }, [initialMessages, setMessages]);
 
+  const [showHearts, setShowHearts] = useState(false);
+
   const handlePromptSubmit = useCallback(
     (message: { text: string }) => {
       if (!message.text.trim() || status !== "ready") return;
-      sendMessage({ text: message.text.trim() });
+      const trimmed = message.text.trim();
+
+      // "사랑해" easter egg — trigger hearts
+      if (trimmed.includes("사랑해") || trimmed.includes("좋아해")) {
+        setShowHearts(true);
+      }
+
+      sendMessage({ text: trimmed });
     },
     [status, sendMessage]
   );
@@ -298,6 +312,8 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       className="flex min-h-0 flex-1 flex-col"
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
+      <HeartsOverlay show={showHearts} onDone={() => setShowHearts(false)} />
+
       {/* Error alert */}
       {error && (
         <div
@@ -443,15 +459,18 @@ const phrases = [
   "잘 될 거야…!",
   "…라는 거야…!",
   "알고 있어?〜",
+  "사랑해…! 하고 말해봐…♪",
+  "좋아한다고… 말해줘…!",
+  "예은님 마음… 궁금해…!",
 ];
 
 const RotatingPhrase = () => {
-  const [idx, setIdx] = useState(0);
+  const [phrase, setPhrase] = useState(() => sample(phrases)!);
   const [fadeKey, setFadeKey] = useState(0);
 
   useEffect(() => {
     const iv = setInterval(() => {
-      setIdx((p) => (p + 1) % phrases.length);
+      setPhrase(sample(phrases)!);
       setFadeKey((p) => p + 1);
     }, 3000);
     return () => clearInterval(iv);
@@ -469,7 +488,7 @@ const RotatingPhrase = () => {
         draggable={false}
       />
       <span key={fadeKey} className="animate-bounce-fade-in">
-        {phrases[idx]}
+        {phrase}
       </span>
     </span>
   );
@@ -478,7 +497,6 @@ const RotatingPhrase = () => {
 /* ── Empty State ── */
 
 const subPhrases = [
-  "뭔가 작고 귀여운 내가… 둘만의 데이트를 도와줄게…!",
   "어떻게든 되겠지…!!",
   "서두르지 않아도 괜찮아…!",
   "즐거운 기분… 계속… 가져가자…!",
@@ -494,9 +512,21 @@ const subPhrases = [
   "알고 있어?〜 그거 완전… 최고의 데이트 코스…라는 뜻이야!?",
 ];
 
+const getTimeGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 11) return "좋은 아침…! 예은님…♪";
+  if (hour >= 11 && hour < 14) return "예은님…! 점심은 챙겨 먹었어…?";
+  if (hour >= 14 && hour < 18) return "따스한 오후야…! 예은님…♪";
+  if (hour >= 18 && hour < 24) return "저녁이 왔어…! 둘이서 저녁 어때…?";
+  return "이 시간까지 깨어있구나…! 푹 쉬어야 해…!";
+};
+
 const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void }) => {
   const [subIdx, setSubIdx] = useState(0);
   const [fadeKey, setFadeKey] = useState(0);
+
+  const timeGreeting = useMemo(() => getTimeGreeting(), []);
+
   useEffect(() => {
     const iv = setInterval(() => {
       setSubIdx((p) => (p + 1) % subPhrases.length);
@@ -523,9 +553,12 @@ const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void 
         예은
         <span style={{ color: "var(--color-muted)" }}>님…!</span>
       </h1>
+      <p className="text-[15px] animate-fade-in" style={{ color: "var(--color-ink)" }}>
+        {timeGreeting}
+      </p>
       <p
         key={fadeKey}
-        className="text-[15px] animate-bounce-fade-in"
+        className="text-[13px] mt-1 animate-bounce-fade-in"
         style={{ color: "var(--color-muted)" }}
       >
         {subPhrases[subIdx]}

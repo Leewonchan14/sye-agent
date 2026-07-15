@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, PanelLeft, Plus } from "lucide-react";
+import { Heart, LogOut, PanelLeft, Plus } from "lucide-react";
 
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
+import { getDDay } from "@/lib/date-utils";
 
 interface Session {
   id: string;
@@ -77,6 +78,30 @@ export const SessionSidebar = ({
               <PanelLeft className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* D-Day */}
+          {(() => {
+            const days = getDDay();
+            if (days === null) return null;
+            return (
+              <div
+                className="mx-3 mb-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs"
+                style={{
+                  backgroundColor: css("color-canvas-soft"),
+                  color: css("color-muted"),
+                }}
+              >
+                <Heart className="h-3 w-3 shrink-0" />
+                <span>
+                  예은님과 함께한 지{" "}
+                  <span style={{ color: css("color-ink"), fontWeight: 600 }}>
+                    {days}일째
+                  </span>
+                  …!
+                </span>
+              </div>
+            );
+          })()}
 
           {/* New Chat */}
           <div className="px-3 pb-3">
