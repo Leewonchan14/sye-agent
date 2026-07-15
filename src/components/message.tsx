@@ -1,6 +1,7 @@
 "use client";
 
-import type { DynamicToolUIPart, ToolUIPart, UIMessage } from "ai";
+import { isDynamicToolUIPart, isToolUIPart } from "ai";
+import type { UIMessage } from "ai";
 
 import {
   Message,
@@ -96,42 +97,27 @@ export const MessageItem = ({
 
           {/* Tool cards outside MessageContent for full width (not constrained by w-fit) */}
           {(() => {
-            const toolItems = message.parts
-              .map((part, idx) => ({
-                key: idx,
-                props: extractToolPartProps(part),
-              }))
-              .filter(
-                (item): item is { key: number; props: ToolPartProps } =>
-                  item.props != null
-              );
+            const toolParts = message.parts.filter(isToolUIPart);
 
-            if (toolItems.length === 0) return null;
+            if (toolParts.length === 0) return null;
 
             return (
               <div className="mt-4 space-y-1">
-                {toolItems.map(({ key, props }) => (
-                  <Tool key={props.toolCallId ?? key} defaultOpen={false}>
-                    {(() => {
-                      const isDynamic = props.type === "dynamic-tool";
-                      // Build header JSX directly, avoiding union type narrowing issues
-                      return isDynamic ? (
-                        <ToolHeader
-                          type="dynamic-tool"
-                          state={props.state as DynamicToolUIPart["state"]}
-                          toolName={props.toolName ?? ""}
-                        />
-                      ) : (
-                        <ToolHeader
-                          type={props.type as `tool-${string}`}
-                          state={props.state as ToolUIPart["state"]}
-                        />
-                      );
-                    })()}
+                {toolParts.map((part) => (
+                  <Tool key={part.toolCallId} defaultOpen={false}>
+                    {isDynamicToolUIPart(part) ? (
+                      <ToolHeader
+                        type="dynamic-tool"
+                        state={part.state}
+                        toolName={part.toolName}
+                      />
+                    ) : (
+                      <ToolHeader type={part.type} state={part.state} />
+                    )}
                     <ToolContent>
-                      {props.input != null && <ToolInput input={props.input} />}
-                      {(props.output != null || props.errorText != null) && (
-                        <ToolOutput output={props.output} errorText={props.errorText} />
+                      {part.input != null && <ToolInput input={part.input} />}
+                      {(part.output != null || part.errorText != null) && (
+                        <ToolOutput output={part.output} errorText={part.errorText} />
                       )}
                     </ToolContent>
                   </Tool>
@@ -143,43 +129,4 @@ export const MessageItem = ({
       </div>
     </Message>
   );
-};
-
-/* ── Tool part extraction ── */
-
-interface ToolPartProps {
-  type: `tool-${string}` | "dynamic-tool";
-  state: string;
-  toolCallId: string;
-  toolName?: string;
-  input: unknown;
-  output: unknown;
-  errorText?: string;
-}
-
-const extractToolPartProps = (part: Record<string, unknown>): ToolPartProps | null => {
-  if (
-    typeof part.type !== "string" ||
-    typeof part.state !== "string" ||
-    typeof part.toolCallId !== "string"
-  ) {
-    return null;
-  }
-  // Accept both static tool-xxx and dynamic-tool from SDK
-  if (part.type !== "dynamic-tool" && !part.type.startsWith("tool-")) {
-    return null;
-  }
-  const type = part.type as `tool-${string}` | "dynamic-tool";
-  return {
-    type,
-    state: part.state,
-    toolCallId: part.toolCallId,
-    toolName: "toolName" in part ? (part.toolName as string) : undefined,
-    input: "input" in part ? part.input : undefined,
-    output: "output" in part ? part.output : undefined,
-    errorText:
-      "errorText" in part && typeof part.errorText === "string"
-        ? part.errorText
-        : undefined,
-  };
 };

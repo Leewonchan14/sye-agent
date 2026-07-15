@@ -4,16 +4,16 @@
 
 ## 기술 스택
 
-| 계층 | 기술 | 버전 |
-|---|---|---|
-| Framework | Next.js (App Router) | 16.2.10 |
-| AI SDK | Vercel AI SDK | 7.0.28 |
-| Agent | ToolLoopAgent (AI SDK v7) | - |
-| LLM | Deepseek | deepseek-flash-v4 |
-| Database | Neon (Serverless Postgres) | @neondatabase/serverless 1.1.0 |
-| UI | shadcn/ui + Tailwind CSS | v4.3 |
-| Web Search | Exa MCP (HTTP, no API key) | https://mcp.exa.ai/mcp |
-| Lint/Format | Prettier + ESLint | - |
+| 계층        | 기술                       | 버전                           |
+| ----------- | -------------------------- | ------------------------------ |
+| Framework   | Next.js (App Router)       | 16.2.10                        |
+| AI SDK      | Vercel AI SDK              | 7.0.28                         |
+| Agent       | ToolLoopAgent (AI SDK v7)  | -                              |
+| LLM         | Deepseek                   | deepseek-flash-v4              |
+| Database    | Neon (Serverless Postgres) | @neondatabase/serverless 1.1.0 |
+| UI          | shadcn/ui + Tailwind CSS   | v4.3                           |
+| Web Search  | Exa MCP (HTTP, no API key) | https://mcp.exa.ai/mcp         |
+| Lint/Format | Prettier + ESLint          | -                              |
 
 ## 설치
 
@@ -26,19 +26,16 @@ npm install
 cp .env.example .env
 # → SITE_PASSWORD, OPENCODE_GO_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
 
-# Neon DB 스키마 생성 (SQL Editor에서 아래 실행)
-# CREATE TABLE chat_messages (...);
-
 npm run dev
 # http://localhost:3000
 ```
 
 ## 환경 변수
 
-| 변수 | 필수 | 설명 |
-|---|---|---|
-| `SITE_PASSWORD` | ✅ | 웹사이트 접속 비밀번호 (예: 0411) |
-| `OPENCODE_GO_API_KEY` | ✅ | OpenCode Go API 키 (Deepseek API 호출용 Bearer 토큰) |
+| 변수                  | 필수 | 설명                                                 |
+| --------------------- | ---- | ---------------------------------------------------- |
+| `SITE_PASSWORD`       | ✅   | 웹사이트 접속 비밀번호 (예: 0411)                    |
+| `OPENCODE_GO_API_KEY` | ✅   | OpenCode Go API 키 (Deepseek API 호출용 Bearer 토큰) |
 
 | `DATABASE_URL` | ✅ | Neon DB 연결 문자열 |
 | `NAVER_CLIENT_ID` | ✅ | 네이버 검색 API Client ID |
@@ -68,15 +65,11 @@ NAVER_CLIENT_SECRET=your_naver_client_secret
 ### SQL 스키마
 
 ```sql
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
-  content TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS session_state (
+  session_id TEXT PRIMARY KEY,
+  messages JSONB NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
 ```
 
 ## MCP 연동
@@ -99,6 +92,7 @@ Exa MCP는 **API 키 없이** HTTP MCP로 즉시 사용 가능합니다.
 ### Naver 검색 API
 
 네이버 검색 API는 Python MCP(`kimcp`)에서 TypeScript로 직접 마이그레이션했습니다.
+
 - `search_naver_local`: 지역 업체/장소 검색
 - `search_naver_blog`: 블로그 검색
 - `search_naver_cafe`: 카페 검색
