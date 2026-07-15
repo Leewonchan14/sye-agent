@@ -1,6 +1,6 @@
 "use client";
 
-import { Cloud, MapPin } from "lucide-react";
+import { Compass } from "lucide-react";
 
 import { useCallback, useRef, useState } from "react";
 
@@ -59,9 +59,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") {
-        handleSubmit();
-      }
+      if (e.key === "Enter") handleSubmit();
     },
     [handleSubmit]
   );
@@ -70,16 +68,16 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-32">
       <form
         onSubmit={handleSubmit}
-        className={`flex w-full max-w-sm flex-col items-center gap-6 rounded-xl border bg-card p-8 shadow-sm $
+        className={`flex w-80 max-w-full flex-col items-center gap-5 rounded-xl border bg-card p-8 shadow-sm ${
           isShaking ? "animate-shake" : ""
         }`}
       >
-        <div className="flex items-center gap-1 text-warm-accent">
-          <Cloud className="h-8 w-8" />
-          <MapPin className="h-6 w-6" />
+        {/* Decorative icon — terracotta */}
+        <div className="text-warm-accent">
+          <Compass className="h-8 w-8" strokeWidth={1.2} />
         </div>
 
-        <h1 className="text-xl font-semibold text-foreground">Designer</h1>
+        <h1 className="text-lg font-medium text-foreground">Designer</h1>
 
         <p className="text-center text-sm text-muted-foreground">
           비밀번호를 입력해주세요
@@ -94,7 +92,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            className="text-center text-lg tracking-widest"
+            className="text-center tracking-widest"
             autoFocus
             autoComplete="off"
           />

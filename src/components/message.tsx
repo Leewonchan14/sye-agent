@@ -9,6 +9,8 @@ import { useCallback, useState } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 
 import { ToolCallCard } from "@/components/tool-call-card";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Message, MessageContent } from "@/components/ui/message";
 
 export const MessageItem = ({ message }: { message: UIMessage }) => {
   const isUser = message.role === "user";
@@ -16,16 +18,30 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
   if (!message.parts || message.parts.length === 0) return null;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 py-2">
       {message.parts.map((part, index) => {
         switch (part.type) {
           case "text": {
-            const text = part.text;
-            if (!text) return null;
-            return isUser ? (
-              <UserBubble key={index} content={text} />
-            ) : (
-              <AssistantMessage key={index} content={text} />
+            if (!part.text) return null;
+            return (
+              <Message key={index} align={isUser ? "end" : "start"}>
+                <MessageContent>
+                  <Bubble
+                    variant={isUser ? "default" : "outline"}
+                    align={isUser ? "end" : "start"}
+                  >
+                    <BubbleContent>
+                      {isUser ? (
+                        <p className="whitespace-pre-wrap break-words text-sm">
+                          {part.text}
+                        </p>
+                      ) : (
+                        <MarkdownRenderer content={part.text} />
+                      )}
+                    </BubbleContent>
+                  </Bubble>
+                </MessageContent>
+              </Message>
             );
           }
           case "reasoning": {
@@ -35,15 +51,11 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
                 <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
                   Reasoning
                 </summary>
-                <div className="border-t px-3 py-2 text-xs text-muted-foreground italic">
-                  {part.text}
-                </div>
+                <div className="px-3 py-2 text-xs text-muted-foreground">{part.text}</div>
               </details>
             );
           }
-          // Handle tool-{name} parts
           default: {
-            // Check if this is a tool-* typed part
             const type = part.type;
             if (type.startsWith("tool-") && "toolCallId" in part) {
               const toolPart = part as typeof part & {
@@ -66,7 +78,6 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
                 />
               );
             }
-            // Handle dynamic-tool parts
             if (type === "dynamic-tool" && "toolCallId" in part) {
               const toolPart = part as typeof part & {
                 toolName: string;
@@ -97,54 +108,37 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
   );
 };
 
-const UserBubble = ({ content }: { content: string }) => (
-  <div className="flex justify-end">
-    <div className="max-w-[80%] rounded-xl rounded-br-md border border-primary/30 bg-primary/10 px-4 py-2 text-foreground">
-      <p className="whitespace-pre-wrap break-words text-sm">{content}</p>
-    </div>
+// === Markdown renderer for assistant messages ===
+
+const MarkdownRenderer = ({ content }: { content: string }) => (
+  <div className="prose prose-sm max-w-none text-foreground [&_a]:text-accent [&_a]:underline [&_a]:hover:text-accent/80 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm [&_pre]:my-0 [&_pre]:rounded-md [&_pre]:border [&_pre]:bg-muted [&_pre]:p-3">
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code({ className, children }) {
+          const match = /language-(\w+)/.exec(className || "");
+          const isInline = !match && !className;
+          const codeString = String(children).replace(/\n$/, "");
+
+          if (isInline) {
+            return <code>{children}</code>;
+          }
+
+          return <CodeBlock language={match?.[1]}>{codeString}</CodeBlock>;
+        },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   </div>
 );
 
-const AssistantMessage = ({ content }: { content: string }) => (
-  <div className="flex">
-    <div className="w-full max-w-full text-foreground prose prose-sm dark:prose-invert">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({ className, children }) {
-            const match = /language-(\w+)/.exec(className || "");
-            const isInline = !match && !className;
-            const codeString = String(children).replace(/\n$/, "");
+// === Code block with copy ===
 
-            if (isInline) {
-              return (
-                <code className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground">
-                  {children}
-                </code>
-              );
-            }
-
-            return <CodeBlock language={match?.[1]}>{codeString}</CodeBlock>;
-          },
-          a({ href, children }) {
-            return (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent underline hover:text-accent/80"
-              >
-                {children}
-              </a>
-            );
-          },
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
-  </div>
-);
+interface CodeBlockProps {
+  children: string;
+  language?: string;
+}
 
 const CodeBlock = ({ children, language }: CodeBlockProps) => {
   const [copied, setCopied] = useState(false);
@@ -167,13 +161,11 @@ const CodeBlock = ({ children, language }: CodeBlockProps) => {
         >
           {copied ? (
             <>
-              <Check className="h-3 w-3" />
-              복사됨
+              <Check className="h-3 w-3" /> 복사됨
             </>
           ) : (
             <>
-              <Copy className="h-3 w-3" />
-              복사
+              <Copy className="h-3 w-3" /> 복사
             </>
           )}
         </button>
@@ -184,8 +176,3 @@ const CodeBlock = ({ children, language }: CodeBlockProps) => {
     </div>
   );
 };
-
-interface CodeBlockProps {
-  children: string;
-  language?: string;
-}

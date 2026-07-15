@@ -23,12 +23,6 @@ const tryFormatJson = (data: unknown): string => {
   }
 };
 
-const truncateJson = (data: unknown, maxLen = 200): string => {
-  const formatted = tryFormatJson(data);
-  if (formatted.length <= maxLen) return formatted;
-  return formatted.slice(0, maxLen) + "...";
-};
-
 export const ToolCallCard = ({
   toolName,
   state,
@@ -46,16 +40,10 @@ export const ToolCallCard = ({
   const isRunning = state === "input-streaming" || state === "input-available";
   const isError = state === "output-error";
   const isComplete = state === "output-available";
-  const isDenied = state === "output-denied";
 
   const getStateBadge = () => {
     if (isError) {
       return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Error</Badge>;
-    }
-    if (isDenied) {
-      return (
-        <Badge className="bg-muted text-muted-foreground hover:bg-muted">Denied</Badge>
-      );
     }
     if (isRunning) {
       return (
@@ -65,11 +53,6 @@ export const ToolCallCard = ({
         </Badge>
       );
     }
-    if (state === "approval-requested") {
-      return (
-        <Badge className="bg-muted text-muted-foreground hover:bg-muted">Approval</Badge>
-      );
-    }
     return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Done</Badge>;
   };
 
@@ -77,11 +60,10 @@ export const ToolCallCard = ({
 
   return (
     <div className="my-2 overflow-hidden rounded-lg border bg-card">
-      {/* Header - always visible */}
       <button
         type="button"
         onClick={toggle}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
       >
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -94,22 +76,17 @@ export const ToolCallCard = ({
         <span className="ml-auto">{getStateBadge()}</span>
       </button>
 
-      {/* Body - collapsible */}
       {isExpanded && (
-        <div className="border-t px-3 py-2 space-y-2 text-xs">
-          {/* Input */}
+        <div className="space-y-2 border-t px-3 py-2 text-xs">
           {input !== undefined && input !== null && (
             <div>
               <div className="mb-1 font-medium text-muted-foreground">Input</div>
               <pre className="overflow-x-auto rounded bg-muted p-2 font-mono text-xs text-foreground">
-                {isRunning && state === "input-streaming"
-                  ? truncateJson(input)
-                  : tryFormatJson(input)}
+                {tryFormatJson(input)}
               </pre>
             </div>
           )}
 
-          {/* Output */}
           {isComplete && output !== undefined && output !== null && (
             <div>
               <div className="mb-1 font-medium text-muted-foreground">Output</div>
@@ -119,7 +96,6 @@ export const ToolCallCard = ({
             </div>
           )}
 
-          {/* Error */}
           {isError && errorText && (
             <div>
               <div className="mb-1 font-medium text-destructive">Error</div>

@@ -1,32 +1,38 @@
 "use client";
 
-import { PanelLeft, Send, Square } from "lucide-react";
+import { Send, Square } from "lucide-react";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useChat } from "@ai-sdk/react";
 
 import { DefaultChatTransport } from "ai";
 
-import { ExampleQuestions } from "@/components/example-questions";
 import { MessageItem } from "@/components/message";
 import { PasswordGate } from "@/components/password-gate";
 import { SessionSidebar } from "@/components/session-sidebar";
 import { Button } from "@/components/ui/button";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import { Textarea } from "@/components/ui/textarea";
 
-// === Top-level: ChatShell ===
+// === ChatShell — top-level gate ===
 
 export const ChatShell = () => {
   const [isAuthed, setIsAuthed] = useState(false);
-  const [sessionId, setSessionId] = useState<string>("");
+  const [sessionId, setSessionId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     setIsAuthed(localStorage.getItem("auth_0411") === "true");
-
     let sid = localStorage.getItem("sessionId");
     if (!sid) {
       sid = crypto.randomUUID();
@@ -71,42 +77,28 @@ export const ChatShell = () => {
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
       />
-      <ChatInner
-        key={sessionId}
-        sessionId={sessionId}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={toggleSidebar}
-      />
+      <ChatInner key={sessionId} sessionId={sessionId} />
     </div>
   );
 };
 
-// === Inner: ChatInner ===
+// === ChatInner — messages + input ===
 
-const ChatInner = ({
-  sessionId,
-  sidebarOpen,
-  onToggleSidebar,
-}: {
-  sessionId: string;
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
-}) => {
+const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   const authToken = localStorage.getItem("auth_token") ?? "";
 
-  const { messages, status, setMessages, sendMessage, stop } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: { sessionId },
-      headers: { "x-auth-token": authToken },
-    }),
-  });
+  const { messages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
+    {
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        body: { sessionId },
+        headers: { "x-auth-token": authToken },
+      }),
+    }
+  );
 
-  // Load history
+  // Load history on mount
   useEffect(() => {
     fetch(`/api/messages?sessionId=${sessionId}`, {
       headers: { "x-auth-token": authToken },
@@ -124,10 +116,6 @@ const ChatInner = ({
       })
       .catch(() => {});
   }, [sessionId, setMessages, authToken]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status]);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -161,20 +149,8 @@ const ChatInner = ({
 
   return (
     <div className="flex flex-1 flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4">
-        <div className="flex items-center gap-2">
-          {!sidebarOpen && (
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted transition-colors"
-              aria-label="Open sidebar"
-            >
-              <PanelLeft className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+      {/* Header — whitespace only, no border */}
+      <header className="flex h-14 shrink-0 items-center justify-end px-4">
         {isStreaming && (
           <Button
             variant="ghost"
@@ -188,46 +164,70 @@ const ChatInner = ({
         )}
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto scroll-smooth">
-        <div className="mx-auto flex max-w-[720px] flex-col gap-4 px-4 py-8">
-          {!hasMessages && !isStreaming && <EmptyState onSend={handleSend} />}
-
-          {messages.map((msg) => (
-            <MessageItem key={msg.id} message={msg} />
-          ))}
-
-          {isStreaming && (
-            <div className="flex items-center gap-1.5 px-1">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-primary/60" />
-              <span className="h-2 w-2 animate-pulse rounded-full bg-primary/60 [animation-delay:0.2s]" />
-              <span className="h-2 w-2 animate-pulse rounded-full bg-primary/60 [animation-delay:0.4s]" />
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
+      {/* Error alert */}
+      {error && (
+        <div className="mx-auto mb-2 flex max-w-[720px] items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          <span>{error.message}</span>
+          <button
+            type="button"
+            onClick={clearError}
+            className="ml-2 shrink-0 leading-none text-destructive/70 hover:text-destructive"
+          >
+            ✕
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Input area */}
-      <div className="sticky bottom-0 bg-background pb-2 pt-4">
-        <div className="mx-auto max-w-[720px] px-4">
+      {/* Messages — shadcn MessageScroller composition */}
+      {hasMessages || isStreaming ? (
+        <MessageScrollerProvider autoScroll>
+          <MessageScroller className="flex-1">
+            <MessageScrollerViewport>
+              <MessageScrollerContent className="mx-auto max-w-[720px] px-4">
+                {messages.map((msg) => (
+                  <MessageScrollerItem
+                    key={msg.id}
+                    messageId={msg.id}
+                    scrollAnchor={msg.role === "user"}
+                  >
+                    <MessageItem message={msg} />
+                  </MessageScrollerItem>
+                ))}
+
+                {/* Streaming shimmer */}
+                {isStreaming && (
+                  <div className="shimmer px-3 py-2 text-sm text-muted-foreground">
+                    생각 중...
+                  </div>
+                )}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+            <MessageScrollerButton />
+          </MessageScroller>
+        </MessageScrollerProvider>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <EmptyState onSend={handleSend} />
+        </div>
+      )}
+
+      {/* Input area — DESIGN.md §8: borderless inside card */}
+      <div className="shrink-0 px-4 pb-4 pt-2">
+        <div className="mx-auto max-w-[720px]">
           <form
             onSubmit={handleFormSubmit}
             className="relative flex flex-col rounded-xl border bg-card shadow-sm"
           >
             <Textarea
-              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="오늘 어떤 도움을 드릴까요?"
               disabled={isStreaming}
               rows={1}
-              className="min-h-11 max-h-32 resize-none rounded-xl border-0 bg-transparent p-4 pb-12 focus:outline-none focus:ring-0"
+              className="min-h-11 max-h-32 resize-none rounded-xl border-0 bg-transparent p-4 pb-12 focus:outline-none focus-visible:ring-0 focus-visible:border-transparent"
             />
-            <div className="flex items-center justify-between px-3 pb-3">
-              <div className="flex items-center gap-1" />
+            <div className="flex items-center justify-end px-3 pb-3">
               <Button
                 type="submit"
                 size="icon"
@@ -244,67 +244,76 @@ const ChatInner = ({
   );
 };
 
-// === Empty State ===
+// === Empty State — Claude.ai greeting style ===
 
 const EmptyState = ({ onSend }: { onSend: (text: string) => void }) => (
-  <div className="flex flex-col items-center gap-2 pt-24 pb-8">
-    {/* Decorative icon */}
+  <div className="flex flex-col items-center gap-1 pt-32 pb-8">
+    {/* Decorative icon — terracotta warm accent */}
     <svg
-      width="48"
-      height="48"
-      viewBox="0 0 48 48"
+      width="40"
+      height="40"
+      viewBox="0 0 40 40"
       fill="none"
-      className="mb-4 text-warm-accent"
+      className="mb-6 text-warm-accent"
     >
-      <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="24" cy="24" r="12" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="24" cy="24" r="4" fill="currentColor" />
+      <circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="20" cy="20" r="10" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="20" cy="20" r="3" fill="currentColor" />
       <line
-        x1="24"
-        y1="4"
-        x2="24"
-        y2="8"
+        x1="20"
+        y1="2"
+        x2="20"
+        y2="6"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
       <line
-        x1="24"
-        y1="40"
-        x2="24"
-        y2="44"
+        x1="20"
+        y1="34"
+        x2="20"
+        y2="38"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
       <line
-        x1="4"
-        y1="24"
-        x2="8"
-        y2="24"
+        x1="2"
+        y1="20"
+        x2="6"
+        y2="20"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
       <line
-        x1="40"
-        y1="24"
-        x2="44"
-        y2="24"
+        x1="34"
+        y1="20"
+        x2="38"
+        y2="20"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
     </svg>
 
-    <h1 className="text-center">
-      <span className="text-2xl font-medium text-foreground">WonChan</span>
-      <span className="ml-2 text-base text-muted-foreground">님,</span>
+    <h1 className="text-2xl font-medium text-foreground">
+      WonChan<span className="text-muted-foreground">님,</span>
     </h1>
     <p className="text-base text-muted-foreground">다시 돌아왔군요</p>
 
-    <div className="mt-8 w-full">
-      <ExampleQuestions onQuestionClick={onSend} />
+    {/* Suggestion chips — DESIGN.md §8 badge style */}
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      {["작성하기", "학습하기", "코드", "일상"].map((q) => (
+        <button
+          key={q}
+          type="button"
+          onClick={() => onSend(q)}
+          className="rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {q}
+        </button>
+      ))}
     </div>
   </div>
 );
