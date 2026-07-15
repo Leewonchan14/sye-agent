@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, MessageSquare, PanelLeft, Plus } from "lucide-react";
+import { MessageSquare, PanelLeft, Plus } from "lucide-react";
 
 import { useEffect, useState } from "react";
 
@@ -72,10 +72,10 @@ export const SessionSidebar = ({
           {/* Header */}
           <div className="flex h-14 items-center justify-between px-4">
             <div className="flex items-center gap-2">
-              <Heart
-                className="h-4 w-4"
-                strokeWidth={1.5}
-                style={{ color: css("color-primary") }}
+              <img
+                src="/munjackgui.webp"
+                alt="치이카와"
+                className="size-6 rounded-full object-cover"
               />
               <span className="text-sm font-medium">치이카와</span>
             </div>

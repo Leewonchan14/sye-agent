@@ -207,7 +207,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 )}
               </MessageScrollerContent>
             </MessageScrollerViewport>
-            <MessageScrollerButton />
+            <MessageScrollerButton variant="outline" />
           </MessageScroller>
         </MessageScrollerProvider>
       ) : (
@@ -239,15 +239,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
             {/* Toolbar-style bottom bar */}
             <div className="flex items-center justify-between px-2 pb-2">
               <div className="flex items-center gap-1">
-                <span
-                  className="rounded-md px-2 py-0.5 text-[11px] font-medium"
-                  style={{
-                    backgroundColor: "var(--color-primary)",
-                    color: "#fff",
-                  }}
-                >
-                  치이카와
-                </span>
+                <RotatingPhrase />
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -316,6 +308,49 @@ const SuggestionChip = ({
     {label}
   </button>
 );
+
+/* ── Rotating Phrase Badge ── */
+
+const phrases = [
+  "힘내자…!",
+  "같이 가자…!",
+  "야호…!",
+  "좋아…♪",
+  "원찬니임…!",
+  "예은니임…!",
+  "여행 가쟈…!",
+  "맛난 거 먹쟈…!",
+  "무섭지 않아…!",
+  "둘이 함께…!",
+  "즐거워…♪",
+  "괜찮아…!",
+  "행복해…!",
+  "내가 도와줄게…!",
+  "잘 될 거야…!",
+];
+
+const RotatingPhrase = () => {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setIdx((p) => (p + 1) % phrases.length);
+    }, 3000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <span
+      className="rounded-md px-2 py-0.5 text-[11px] font-medium transition-opacity duration-300"
+      style={{
+        backgroundColor: "var(--color-primary)",
+        color: "#fff",
+      }}
+    >
+      {phrases[idx]}
+    </span>
+  );
+};
 
 /* ── Empty State ── */
 
