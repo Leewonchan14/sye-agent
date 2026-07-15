@@ -11,7 +11,6 @@ import { DefaultChatTransport } from "ai";
 import { MessageItem } from "@/components/message";
 import { PasswordGate } from "@/components/password-gate";
 import { SessionSidebar } from "@/components/session-sidebar";
-import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -22,102 +21,99 @@ import {
 } from "@/components/ui/message-scroller";
 import { Textarea } from "@/components/ui/textarea";
 
-// === ChatShell — top-level gate ===
+/* ── ChatShell ── */
 
 export const ChatShell = () => {
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [sessionId, setSessionId] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [sid, setSid] = useState("");
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    setIsAuthed(localStorage.getItem("auth_0411") === "true");
-    let sid = localStorage.getItem("sessionId");
-    if (!sid) {
-      sid = crypto.randomUUID();
-      localStorage.setItem("sessionId", sid);
+    setAuthed(localStorage.getItem("auth_0411") === "true");
+    let s = localStorage.getItem("sessionId");
+    if (!s) {
+      s = crypto.randomUUID();
+      localStorage.setItem("sessionId", s);
     }
-    setSessionId(sid);
+    setSid(s);
     setMounted(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  const handleNewChat = useCallback(() => {
-    const newSid = crypto.randomUUID();
-    localStorage.setItem("sessionId", newSid);
-    setSessionId(newSid);
+  const onNew = useCallback(() => {
+    const ns = crypto.randomUUID();
+    localStorage.setItem("sessionId", ns);
+    setSid(ns);
   }, []);
 
-  const handleSelectSession = useCallback((id: string) => {
+  const onSelect = useCallback((id: string) => {
     localStorage.setItem("sessionId", id);
-    setSessionId(id);
+    setSid(id);
   }, []);
 
-  const toggleSidebar = useCallback(() => {
-    setSidebarOpen((prev) => !prev);
-  }, []);
+  const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
 
-  if (!mounted) {
+  if (!mounted)
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background" />
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ backgroundColor: "var(--color-canvas)" }}
+      />
     );
-  }
-
-  if (!isAuthed) {
-    return <PasswordGate onSuccess={() => setIsAuthed(true)} />;
-  }
+  if (!authed) return <PasswordGate onSuccess={() => setAuthed(true)} />;
 
   return (
-    <div className="flex h-screen flex-row bg-background">
+    <div
+      className="flex h-screen flex-row"
+      style={{ backgroundColor: "var(--color-canvas)" }}
+    >
       <SessionSidebar
-        activeSessionId={sessionId}
-        onSelect={handleSelectSession}
-        onNew={handleNewChat}
+        activeSessionId={sid}
+        onSelect={onSelect}
+        onNew={onNew}
         isOpen={sidebarOpen}
-        onToggle={toggleSidebar}
+        onToggle={toggle}
       />
-      <ChatInner key={sessionId} sessionId={sessionId} />
+      <ChatInner key={sid} sessionId={sid} />
     </div>
   );
 };
 
-// === ChatInner — messages + input ===
+/* ── ChatInner ── */
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const [input, setInput] = useState("");
-  const authToken = localStorage.getItem("auth_token") ?? "";
+  const tk = localStorage.getItem("auth_token") ?? "";
 
   const { messages, status, setMessages, sendMessage, stop, error, clearError } = useChat(
     {
       transport: new DefaultChatTransport({
         api: "/api/chat",
         body: { sessionId },
-        headers: { "x-auth-token": authToken },
+        headers: { "x-auth-token": tk },
       }),
     }
   );
 
-  // Load history on mount
   useEffect(() => {
-    fetch(`/api/messages?sessionId=${sessionId}`, {
-      headers: { "x-auth-token": authToken },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.messages?.length > 0) {
-          const uiMessages = data.messages.map((m: Record<string, unknown>) => ({
-            id: m.id as string,
-            role: m.role as string,
-            parts: [{ type: "text", text: m.content as string }],
-          }));
-          setMessages(uiMessages);
-        }
+    fetch(`/api/messages?sessionId=${sessionId}`, { headers: { "x-auth-token": tk } })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.messages?.length)
+          setMessages(
+            d.messages.map((m: Record<string, unknown>) => ({
+              id: m.id,
+              role: m.role,
+              parts: [{ type: "text", text: m.content }],
+            }))
+          );
       })
       .catch(() => {});
-  }, [sessionId, setMessages, authToken]);
+  }, [sessionId, setMessages, tk]);
 
-  const handleSend = useCallback(
+  const send = useCallback(
     (text: string) => {
       if (!text.trim() || status !== "ready") return;
       sendMessage({ text: text.trim() });
@@ -126,77 +122,86 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     [status, sendMessage]
   );
 
-  const handleFormSubmit = useCallback(
-    (e: React.FormEvent<HTMLFormElement>) => {
+  const onSubmit = useCallback(
+    (e: React.FormEvent) => {
       e.preventDefault();
-      handleSend(input);
+      send(input);
     },
-    [input, handleSend]
+    [input, send]
   );
-
-  const handleKeyDown = useCallback(
+  const onKey = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSend(input);
+        send(input);
       }
     },
-    [input, handleSend]
+    [input, send]
   );
 
-  const isStreaming = status === "submitted" || status === "streaming";
-  const hasMessages = messages.length > 0;
+  const streaming = status === "submitted" || status === "streaming";
+  const hasMsgs = messages.length > 0;
 
   return (
-    <div className="flex flex-1 flex-col bg-background">
-      {/* Header — whitespace only, no border */}
+    <div
+      className="flex flex-1 flex-col"
+      style={{ backgroundColor: "var(--color-canvas)" }}
+    >
+      {/* Header */}
       <header className="flex h-14 shrink-0 items-center justify-end px-4">
-        {isStreaming && (
-          <Button
-            variant="ghost"
-            size="sm"
+        {streaming && (
+          <button
+            type="button"
             onClick={stop}
-            className="gap-1.5 text-xs text-muted-foreground"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:opacity-70"
+            style={{ color: "var(--color-muted)" }}
           >
-            <Square className="h-3.5 w-3.5" />
-            중지
-          </Button>
+            <Square className="h-3.5 w-3.5" /> 중지
+          </button>
         )}
       </header>
 
       {/* Error alert */}
       {error && (
-        <div className="mx-auto mb-2 flex max-w-[720px] items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+        <div
+          className="mx-auto mb-2 flex max-w-[720px] items-center justify-between rounded-md border px-4 py-2 text-sm"
+          style={{
+            borderColor: "var(--color-error)",
+            backgroundColor: "var(--color-canvas-soft)",
+            color: "var(--color-error)",
+          }}
+        >
           <span>{error.message}</span>
           <button
             type="button"
             onClick={clearError}
-            className="ml-2 shrink-0 leading-none text-destructive/70 hover:text-destructive"
+            className="ml-2 shrink-0 leading-none hover:opacity-70"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Messages — shadcn MessageScroller composition */}
-      {hasMessages || isStreaming ? (
+      {/* Messages */}
+      {hasMsgs || streaming ? (
         <MessageScrollerProvider autoScroll>
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
               <MessageScrollerContent className="mx-auto max-w-[720px] px-4">
-                {messages.map((msg) => (
+                {messages.map((m) => (
                   <MessageScrollerItem
-                    key={msg.id}
-                    messageId={msg.id}
-                    scrollAnchor={msg.role === "user"}
+                    key={m.id}
+                    messageId={m.id}
+                    scrollAnchor={m.role === "user"}
                   >
-                    <MessageItem message={msg} />
+                    <MessageItem message={m} />
                   </MessageScrollerItem>
                 ))}
-
-                {/* Streaming shimmer */}
-                {isStreaming && (
-                  <div className="shimmer px-3 py-2 text-sm text-muted-foreground">
+                {streaming && (
+                  <div
+                    className="shimmer px-3 py-2 text-sm"
+                    style={{ color: "var(--color-muted)" }}
+                  >
                     생각 중...
                   </div>
                 )}
@@ -207,35 +212,49 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         </MessageScrollerProvider>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <EmptyState onSend={handleSend} />
+          <EmptyState onSend={send} />
         </div>
       )}
 
-      {/* Input area — DESIGN.md §8: borderless inside card */}
-      <div className="shrink-0 px-4 pb-4 pt-2">
+      {/* Input — DESIGN.md §6.6 */}
+      <div
+        className="shrink-0 px-4 pb-4 pt-2"
+        style={{ borderTop: "1px solid var(--color-hairline-soft)" }}
+      >
         <div className="mx-auto max-w-[720px]">
           <form
-            onSubmit={handleFormSubmit}
-            className="relative flex flex-col rounded-xl border bg-card shadow-sm"
+            onSubmit={onSubmit}
+            className="relative flex flex-col rounded-xl border"
+            style={{
+              borderColor: "var(--color-hairline)",
+              backgroundColor: "var(--color-surface)",
+            }}
           >
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onKeyDown={onKey}
               placeholder="오늘 어떤 도움을 드릴까요?"
-              disabled={isStreaming}
+              disabled={streaming}
               rows={1}
               className="min-h-11 max-h-32 resize-none rounded-xl border-0 bg-transparent p-4 pb-12 focus:outline-none focus-visible:ring-0 focus-visible:border-transparent"
+              style={{ color: "var(--color-ink)" }}
             />
             <div className="flex items-center justify-end px-3 pb-3">
-              <Button
+              <button
                 type="submit"
-                size="icon"
-                disabled={isStreaming || !input.trim()}
-                className="h-8 w-8 shrink-0 rounded-md"
+                disabled={streaming || !input.trim()}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors"
+                style={{
+                  backgroundColor:
+                    streaming || !input.trim()
+                      ? "var(--color-hairline)"
+                      : "var(--color-primary)",
+                  color: streaming || !input.trim() ? "var(--color-muted)" : "#fff",
+                }}
               >
                 <Send className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
           </form>
         </div>
@@ -244,17 +263,17 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   );
 };
 
-// === Empty State — Claude.ai greeting style ===
+/* ── Empty State ── */
 
 const EmptyState = ({ onSend }: { onSend: (text: string) => void }) => (
   <div className="flex flex-col items-center gap-1 pt-32 pb-8">
-    {/* Decorative icon — terracotta warm accent */}
     <svg
       width="40"
       height="40"
       viewBox="0 0 40 40"
       fill="none"
-      className="mb-6 text-warm-accent"
+      className="mb-6"
+      style={{ color: "var(--color-primary)" }}
     >
       <circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="1.2" />
       <circle cx="20" cy="20" r="10" stroke="currentColor" strokeWidth="1.2" />
@@ -296,20 +315,32 @@ const EmptyState = ({ onSend }: { onSend: (text: string) => void }) => (
         strokeLinecap="round"
       />
     </svg>
-
-    <h1 className="text-2xl font-medium text-foreground">
-      WonChan<span className="text-muted-foreground">님,</span>
+    <h1 className="text-2xl font-medium" style={{ color: "var(--color-ink)" }}>
+      WonChan<span style={{ color: "var(--color-muted)" }}>님,</span>
     </h1>
-    <p className="text-base text-muted-foreground">다시 돌아왔군요</p>
-
-    {/* Suggestion chips — DESIGN.md §8 badge style */}
+    <p className="text-base" style={{ color: "var(--color-muted)" }}>
+      다시 돌아왔군요
+    </p>
     <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
       {["작성하기", "학습하기", "코드", "일상"].map((q) => (
         <button
           key={q}
           type="button"
           onClick={() => onSend(q)}
-          className="rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="rounded-full border px-4 py-1.5 text-sm transition-colors"
+          style={{
+            borderColor: "var(--color-hairline)",
+            backgroundColor: "var(--color-surface)",
+            color: "var(--color-muted)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-canvas-soft)";
+            e.currentTarget.style.color = "var(--color-ink)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-surface)";
+            e.currentTarget.style.color = "var(--color-muted)";
+          }}
         >
           {q}
         </button>

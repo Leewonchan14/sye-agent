@@ -9,8 +9,6 @@ import { useCallback, useState } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 
 import { ToolCallCard } from "@/components/tool-call-card";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import { Message, MessageContent } from "@/components/ui/message";
 
 export const MessageItem = ({ message }: { message: UIMessage }) => {
   const isUser = message.role === "user";
@@ -18,85 +16,42 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
   if (!message.parts || message.parts.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-3 py-2">
-      {message.parts.map((part, index) => {
+    <div className="flex flex-col gap-2 py-1.5">
+      {message.parts.map((part, idx) => {
         switch (part.type) {
           case "text": {
             if (!part.text) return null;
-            return (
-              <Message key={index} align={isUser ? "end" : "start"}>
-                <MessageContent>
-                  <Bubble
-                    variant={isUser ? "default" : "outline"}
-                    align={isUser ? "end" : "start"}
-                  >
-                    <BubbleContent>
-                      {isUser ? (
-                        <p className="whitespace-pre-wrap break-words text-sm">
-                          {part.text}
-                        </p>
-                      ) : (
-                        <MarkdownRenderer content={part.text} />
-                      )}
-                    </BubbleContent>
-                  </Bubble>
-                </MessageContent>
-              </Message>
+            return isUser ? (
+              <UserBubble key={idx} text={part.text} />
+            ) : (
+              <AssistantMessage key={idx} text={part.text} />
             );
           }
           case "reasoning": {
             if (!part.text) return null;
             return (
-              <details key={index} className="rounded-md border bg-muted/30">
-                <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
-                  Reasoning
-                </summary>
-                <div className="px-3 py-2 text-xs text-muted-foreground">{part.text}</div>
-              </details>
+              <div key={idx} className="flex flex-col gap-1">
+                <span className="text-xs italic text-[--color-muted]">Thinking</span>
+                <AssistantMessage text={part.text} />
+              </div>
             );
           }
           default: {
-            const type = part.type;
-            if (type.startsWith("tool-") && "toolCallId" in part) {
-              const toolPart = part as typeof part & {
-                toolCallId: string;
-                state: string;
-                title?: string;
-                input?: unknown;
-                output?: unknown;
-                errorText?: string;
-              };
+            const t = part as Record<string, unknown>;
+            if (t.type === "dynamic-tool" || String(t.type).startsWith("tool-")) {
               return (
                 <ToolCallCard
-                  key={toolPart.toolCallId ?? index}
-                  toolName={type.slice(5)}
-                  state={toolPart.state}
-                  input={"input" in toolPart ? toolPart.input : undefined}
-                  output={"output" in toolPart ? toolPart.output : undefined}
-                  errorText={"errorText" in toolPart ? toolPart.errorText : undefined}
-                  title={toolPart.title}
-                />
-              );
-            }
-            if (type === "dynamic-tool" && "toolCallId" in part) {
-              const toolPart = part as typeof part & {
-                toolName: string;
-                toolCallId: string;
-                state: string;
-                title?: string;
-                input?: unknown;
-                output?: unknown;
-                errorText?: string;
-              };
-              return (
-                <ToolCallCard
-                  key={toolPart.toolCallId ?? index}
-                  toolName={toolPart.toolName}
-                  state={toolPart.state}
-                  input={"input" in toolPart ? toolPart.input : undefined}
-                  output={"output" in toolPart ? toolPart.output : undefined}
-                  errorText={"errorText" in toolPart ? toolPart.errorText : undefined}
-                  title={toolPart.title}
+                  key={(t.toolCallId as string) ?? idx}
+                  toolName={
+                    t.type === "dynamic-tool"
+                      ? (t.toolName as string)
+                      : String(t.type).slice(5)
+                  }
+                  state={t.state as string}
+                  input={t.input}
+                  output={t.output}
+                  errorText={t.errorText as string}
+                  title={t.title as string}
                 />
               );
             }
@@ -108,56 +63,95 @@ export const MessageItem = ({ message }: { message: UIMessage }) => {
   );
 };
 
-// === Markdown renderer for assistant messages ===
+// === User bubble — DESIGN.md §6.4 ===
 
-const MarkdownRenderer = ({ content }: { content: string }) => (
-  <div className="prose prose-sm max-w-none text-foreground [&_a]:text-accent [&_a]:underline [&_a]:hover:text-accent/80 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm [&_pre]:my-0 [&_pre]:rounded-md [&_pre]:border [&_pre]:bg-muted [&_pre]:p-3">
+const UserBubble = ({ text }: { text: string }) => (
+  <div className="flex justify-end">
+    <div
+      className="max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-[--color-ink]"
+      style={{ backgroundColor: "var(--color-canvas-card)" }}
+    >
+      {text}
+    </div>
+  </div>
+);
+
+// === Assistant message — DESIGN.md §6.5 ===
+
+const AssistantMessage = ({ text }: { text: string }) => (
+  <div className="max-w-none text-[16px] leading-relaxed text-[--color-ink]">
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
         code({ className, children }) {
-          const match = /language-(\w+)/.exec(className || "");
+          const match = /language-(\w+)/.exec(className ?? "");
           const isInline = !match && !className;
-          const codeString = String(children).replace(/\n$/, "");
-
+          const codeStr = String(children).replace(/\n$/, "");
           if (isInline) {
-            return <code>{children}</code>;
+            return (
+              <code
+                className="rounded px-1.5 py-0.5 font-mono text-sm"
+                style={{
+                  backgroundColor: "var(--color-canvas-soft)",
+                  color: "var(--color-ink)",
+                }}
+              >
+                {children}
+              </code>
+            );
           }
-
-          return <CodeBlock language={match?.[1]}>{codeString}</CodeBlock>;
+          return <CodeBlock language={match?.[1]} code={codeStr} />;
+        },
+        a({ href, children }) {
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+              style={{ color: "var(--color-primary)" }}
+            >
+              {children}
+            </a>
+          );
         },
       }}
     >
-      {content}
+      {text}
     </ReactMarkdown>
   </div>
 );
 
-// === Code block with copy ===
+// === Code block — DESIGN.md §6.8 dark theme ===
 
 interface CodeBlockProps {
-  children: string;
+  code: string;
   language?: string;
 }
 
-const CodeBlock = ({ children, language }: CodeBlockProps) => {
+const CodeBlock = ({ code, language }: CodeBlockProps) => {
   const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(children).then(() => {
+  const onCopy = useCallback(() => {
+    navigator.clipboard.writeText(code).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [children]);
+  }, [code]);
 
   return (
-    <div className="relative my-2 overflow-hidden rounded-md border bg-muted">
-      <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs text-muted-foreground">
-        <span>{language || "code"}</span>
+    <div
+      className="relative mt-3 overflow-hidden rounded-lg"
+      style={{ backgroundColor: "var(--color-dark)" }}
+    >
+      <div className="flex items-center justify-between px-4 py-2">
+        <span className="text-xs" style={{ color: "var(--color-on-dark-soft)" }}>
+          {language ?? "code"}
+        </span>
         <button
           type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1 transition-colors hover:text-foreground"
+          onClick={onCopy}
+          className="flex items-center gap-1 text-xs transition-colors"
+          style={{ color: "var(--color-on-dark-soft)" }}
         >
           {copied ? (
             <>
@@ -170,8 +164,8 @@ const CodeBlock = ({ children, language }: CodeBlockProps) => {
           )}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-sm">
-        <code>{children}</code>
+      <pre className="overflow-x-auto px-4 pb-4 font-mono text-sm leading-relaxed">
+        <code style={{ color: "var(--color-on-dark)" }}>{code}</code>
       </pre>
     </div>
   );

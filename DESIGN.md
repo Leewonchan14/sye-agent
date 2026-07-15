@@ -1,348 +1,365 @@
-# DESIGN.md — Designer (트래블 에이전트)
+# DESIGN.md — Designer
 
-> This file is the single source of truth for visual decisions.
-> Every AI agent MUST read this before generating or modifying any UI code.
-> Do not fall back on generic defaults. Every choice here is deliberate.
+> 연인 둘만의 여행 플래너. 핑크 팔레트, 따뜻하고 부드러운 무드.
+> 모든 UI 생성 전 이 파일을 읽어야 합니다. 기본값(fallback)은 금지입니다.
 
 ---
 
 ## 1. Visual Archetype
 
-**Claude-inspired editorial warmth + subtle sky accent**
+**Warm Pink Boudoir — Romantic Editorial**
 
-- Base: Claude.ai의 미니멀하고 따뜻한 에디토리얼 감성 — 넉넉한 여백, 낮은 대비의 중성 배경, 본문 중심 레이아웃
-- Accent: 여행의 경쾌함을 담은 muted skyblue (#7AB8D6)를 강조색으로 사용
-- 느낌: "비싼 개인 비서 앱" — 조용하고, 신뢰감 있고, 방해하지 않음
-- 절대 NOT: startup-modern, shadcn 기본값, glassmorphism, purple/indigo 그라데이션, 다크모드 기본값
+Claude.ai의 에디토리얼 구조를 베이스로, 팔레트를 dried rose & blush pink 계열로 전환.
+"따뜻한 핑크 부케" 같은 분위기 — 부드럽고, 낭만적이고, 둘만의 공간 같은 느낌.
+
+- **핵심 대비**: 블러쉬 핑크 캔버스 (`#fdf6f5`) + dried rose primary (`#d96c75`) + rosewood accent (`#b85d65`)
+- **AI Slop 금지 목록**: vibecode purple 없음, cool gray 없음, pure white 없음, glassmorphism 없음
+- **NOT**: "아기자기한", "장난감 같은" — 럭셔리하고 차분한 핑크, 절제된 로맨틱
+- **Reference 감성**: Aesop의 핑크 에디션, Journal de la beauté, 톤 다운된 로맨틱 editorial
 
 ---
 
 ## 2. Palette
 
-### Brand Hues (3 active hues only)
+### Brand & Accent
 
-| 역할 | 색상 | HSL | 용도 |
+| 토큰 | 역할 | Hex | 용도 |
 |------|------|-----|------|
-| **Neutral (60%)** | Warm off-white → warm charcoal | `hsl(40 20% 97%)` → `hsl(40 10% 12%)` | 배경, 본문 텍스트 |
-| **Accent (30%)** | Muted skyblue | `hsl(200 50% 65%)` | 버튼, 링크, 포커스링, 인터랙션 |
-| **Warm point (10%)** | Soft terracotta | `hsl(25 55% 55%)` | 장식적 아이콘(여행), 구분선 포인트 |
+| `--primary` | **Dried Rose** | **`#d96c75`** | CTA 버튼, 링크, 강조 — 시든 장미 같은 차분한 핑크 |
+| `--primary-active` | Rose pressed | `#c25660` | 버튼 active/pressed |
+| `--primary-disabled` | Rose disabled | `#efd3d0` | 비활성화 상태 |
+| `--accent-rosewood` | Rosewood | `#b85d65` | 보조 악센트 (아이콘, 장식) |
+| `--accent-blush` | Soft Blush | `#f0b7b9` | 배지, 약한 강조 |
 
-### Semantic Colors (separate from brand)
+### Surface
 
-- Success: `hsl(150 40% 50%)`
-- Warning: `hsl(40 70% 55%)`
-- Error: `hsl(0 65% 55%)`
-- Info: `hsl(200 50% 60%)`
+| 토큰 | Hex | 용도 |
+|------|-----|------|
+| `--canvas` | **`#fdf6f5`** | **기본 배경 — 블러쉬 핑크 빛 도는 크림** |
+| `--surface-soft` | `#fcf0ee` | 살짝 더 진한 레이어, 호버 |
+| `--surface-card` | `#f7e8e5` | 카드 배경 |
+| `--surface-strong` | `#f0dbd7` | 강한 핑크 표면 |
+| `--surface-dark` | **`#1c1517`** | **다크 표면 (코드블록)** — 따뜻한 레드빛 블랙 |
+| `--surface-dark-elevated` | `#2a1f21` | 다크 표면 elevated |
+| `--surface-dark-soft` | `#231a1b` | 다크 표면 소프트 |
 
-### Neutral Ramp
+### Text
 
-```
-bg (light)   : hsl(40 20% 97%)    /* #f7f6f3 — 따뜻한 오프화이트 */
-surface      : hsl(40 15% 99%)    /* 카드, 패널 */
-muted        : hsl(40 15% 93%)    /* 호버, 섹션 구분 */
-border       : hsl(40 10% 86%)    /* hairline */
-muted-fg     : hsl(40 10% 45%)    /* 보조 텍스트 */
-fg           : hsl(40 10% 12%)    /* 본문 (거의 검정에 가깝지만 완전 검정은 아님) */
-```
+| 토큰 | Hex | 용도 |
+|------|-----|------|
+| `--ink` | **`#141312`** | **본문/헤딩 — 따뜻한 near-black** |
+| `--body` | `#3d3837` | 보조 텍스트 |
+| `--body-strong` | `#252222` | 진한 보조 텍스트 |
+| `--muted` | `#6c5d5b` | 메타데이터, 플레이스홀더 — 로즈 브라운 |
+| `--muted-soft` | `#8e7d7a` | 가장 흐린 텍스트 |
+| `--on-primary` | `#ffffff` | Primary 위 텍스트 |
+| `--on-dark` | `#fdf6f5` | 다크 표면 위 텍스트 |
+| `--on-dark-soft` | `#a0908d` | 다크 표면 위 흐린 텍스트 |
+
+### Border & Hairline
+
+| 토큰 | Hex | 용도 |
+|------|-----|------|
+| `--hairline` | `#e8d6d3` | 표준 구분선/보더 — 소프트 핑크 |
+| `--hairline-soft` | `#f0e3e0` | 흐린 구분선 |
+
+### Semantic
+
+| 토큰 | Hex |
+|------|-----|
+| `--success` | `#7db8a0` (민트, 핑크 대비용) |
+| `--warning` | `#d4a017` |
+| `--error` | `#c64545` |
 
 ### Rules
 
-- **Pure `#fff` / `#000` 사용 금지** — 모든 배경과 텍스트는 톤을 준다
-- **Tailwind blue 계열(`blue-*`), indigo 계열(`indigo-*`), purple 계열(`purple-*`) 절대 사용 금지**
-- 그라데이션 사용 금지 (단, 버튼이나 배너에도 NO)
-- 그림자는 단일 레이어 `0 1px 3px rgba(0,0,0,0.06)` 만 허용 (multiple shadow 금지)
+- **pink에 warm undertone** — 차가운 핫핑크(barbie pink), 형광 금지
+- **Pure `#ffffff` 금지** — 기본 배경은 항상 `#fdf6f5` (블러쉬 크림)
+- **Pure `#000000` 금지** — 텍스트는 `#141312`
+- **Tailwind `blue-*`, `indigo-*`, `purple-*` 계열 절대 금지** (특히 vibecode lavender-purple)
+- **Tailwind `rose-*`, `pink-*` 기본값 사용 금지** — 직접 정의한 hex만 사용
+- **그라데이션 완전 금지** — 깊이는 레이어링으로만 표현
 
 ---
 
 ## 3. Typography
 
-### Font Pairing
+### Font Family
 
-| 용도 | 폰트 | 비고 |
-|------|------|------|
-| **Display / Heading** | `Instrument Serif` (400 only) | Claude.ai 스타일의 serif 강조, 이탤릭도 가능 |
-| **UI / Body** | `Geist Sans` | 깔끔하고 중성적인 sans |
-| **Mono** | `Geist Mono` | 코드블록, 메타데이터, tool call 로그 |
+| 역할 | 폰트 | Fallback |
+|------|------|----------|
+| **Display (h1-h3)** | `Instrument Serif` | `Georgia`, `serif` |
+| **Body / UI** | `Geist` | `system-ui`, `sans-serif` |
+| **Code** | `Geist Mono` | `ui-monospace`, `monospace` |
 
-### Size Scale (1.25 modular scale, app rhythm)
+### Type Scale (Claude.ai 그대로 — 구조는 유지)
 
-```
-display : 48px (text-5xl)
-h1      : 36px (text-4xl)
-h2      : 28px (text-3xl)
-h3      : 22px (text-2xl)
-h4      : 18px (text-xl)
-body    : 15px (text-base / 0.938rem)
-small   : 13px (text-sm)
-xs      : 11px (text-xs)
-```
+| Level | Size | Weight | Line Height | Letter Spacing | Font |
+|-------|------|--------|-------------|----------------|------|
+| **Display XL** (hero) | 64px | 400 | 1.05 | -1.5px | Serif |
+| **Display LG** (h1) | 48px | 400 | 1.1 | -1px | Serif |
+| **Display MD** (h2) | 36px | 400 | 1.15 | -0.5px | Serif |
+| **Display SM** (h3) | 28px | 400 | 1.2 | -0.3px | Serif |
+| **Title LG** | 22px | 500 | 1.3 | 0 | Sans |
+| **Title MD** (h4) | 18px | 500 | 1.4 | 0 | Sans |
+| **Title SM** | 16px | 500 | 1.4 | 0 | Sans |
+| **Body MD** | 16px | 400 | 1.55 | 0 | Sans |
+| **Body SM** | 14px | 400 | 1.55 | 0 | Sans |
+| **Caption** | 13px | 500 | 1.4 | 0 | Sans |
+| **Caption uppercase** | 12px | 500 | 1.4 | 1.5px | Sans |
+| **Code** | 14px | 400 | 1.6 | 0 | Mono |
+| **Button** | 14px | 500 | 1 | 0 | Sans |
 
 ### Weight Usage
 
-- Headings: 500 (medium) — serif는 400 (regular italic 쓰려면 `font-serif italic`)
+- Serif Display: 400 only (italic 가능)
 - Body: 400 (regular)
-- Labels / 버튼: 500 (medium)
-- Bold (700) 사용 금지 — 무게 대신 계층으로 해결
+- Labels / UI: 500 (medium)
+- **700 (bold) 사용 금지**
 
-### Measure (line length)
+### Measure
 
-- 본문: 60–75자
-- 채팅 메시지: 최대 720px 너비
-
-### Rules
-
-- **Inter, Poppins, Plus Jakarta Sans, Space Grotesk 절대 사용 금지** (AI slop default)
-- 한글 본문은 `Geist Sans`가 기본이지만, 필요시 `Noto Sans KR` fallback 고려
-- 올캡스 레이블은 `text-xs font-medium tracking-wider`만 허용, 과용 금지
+- 채팅 메시지 최대 너비: **720px** (`max-w-3xl`), 가운데 정렬
 
 ---
 
-## 4. Spacing System
+## 4. Radius System
 
-### Base unit: 4px (Tailwind v4 spacing scale)
+| Level | px | 용도 |
+|-------|----|------|
+| `--radius-xs` | **4px** | 작은 UI 요소 |
+| `--radius-sm` | **6px** | 버튼 |
+| `--radius-md` | **8px** | **기본 radius** — input, CTA |
+| `--radius-lg` | **12px** | 카드, 모달, 코드블록 |
+| `--radius-xl` | **16px** | 유저 버블, 특수 컨테이너 |
+| `--radius-pill` | 9999px | pill/badge |
 
-```
-gap-1   = 4px
-gap-2   = 8px
-gap-3   = 12px
-gap-4   = 16px
-gap-6   = 24px
-gap-8   = 32px
-gap-12  = 48px
-gap-16  = 64px
-gap-20  = 80px
-```
+### Key Rule
 
-### Proximity Rule
-```
-내부 간격(컴포넌트 내) < 컴포넌트 간격 < 섹션 간격
-button 내부:  gap-2
-card 내부:    gap-3 (vertical) / gap-4 (horizontal)
-section 간:   gap-12 ~ gap-20
-```
-
-### Section Padding Variation
-- Hero: `py-24` 
-- Content: `py-16`
-- CTA / Footer: `py-12`
-- **모든 섹션이 같은 패딩이면 monotonous → 반드시 다르게**
+- **`rounded-2xl` (16px+), `rounded-3xl` 절대 금지**
+- 버튼 `rounded-md`(8px), 카드 `rounded-lg`(12px)
+- 용도별로 radius 다르게 — 통일 금지
 
 ---
 
-## 5. Border Radius
+## 5. Spacing
 
-| 요소 | Radius | 값 |
-|------|--------|-----|
-| Button (interactive) | `rounded-md` | 6px |
-| Card (container) | `rounded-xl` | 12px |
-| Input | `rounded-md` | 6px |
-| Badge | `rounded-full` | pill |
-| Panel / Sidebar | `rounded-none` | 0px |
-| Tool call card | `rounded-lg` | 8px |
-| Avatar | `rounded-full` | pill |
-
-### Rules
-
-- **`rounded-2xl` / `rounded-3xl` 절대 사용 금지** — AI slop signature
-- 버튼 radius와 카드 radius는 반드시 다르게 (mismatch = choice의 증거)
-- `rounded-lg` (8px)는 한 곳에서만 사용 (tool call card)
+| Token | px | Tailwind |
+|-------|----|----------|
+| `--space-xxs` | 4px | `gap-1` |
+| `--space-xs` | 8px | `gap-2` |
+| `--space-sm` | 12px | `gap-3` |
+| `--space-md` | 16px | `gap-4` |
+| `--space-lg` | 24px | `gap-6` |
+| `--space-xl` | **32px** | `gap-8` — 카드 내부 패딩 |
+| `--space-xxl` | 48px | `gap-12` |
+| `--space-section` | **96px** | `gap-24` — 섹션 간격 |
 
 ---
 
-## 6. Card & Container Rules
+## 6. Component Styles
 
-1. **첫 번째 분리 수단: whitespace** → 안 되면 배경 차이(3-5% lightness shift)
-2. **보더는 최후의 수단** — 절대 flat gray 1px border를 기본으로 쓰지 않음
-3. **좌측 컬러 보더 스트립 금지** — 가장 확실한 AI tell
-4. 카드 중첩("cardocalypse") 금지 — 카드 안에 카드 넣지 않음
-5. 그림자는 `shadow-sm` 하나로 통일 (shadcn 기본 `shadow-md` 금지)
-
----
-
-## 7. Layout Rules
-
-### Channel / Page Skeleton
+### 6.1 전체 레이아웃
 
 ```
-[Left Sidebar (w-64)] [Main Content (flex-1)]
+┌──────────────────────────────────────────────────┐
+│  ┌──────────────┬──────────────────────────────┐  │
+│  │  Sidebar     │  Main Content                │  │
+│  │  w-64        │  flex-1                      │  │
+│  │  bg-canvas   │  flex items-center           │  │
+│  │  border-r    │  max-w-3xl 가운데             │  │
+│  │  hairline    │                              │  │
+│  └──────────────┴──────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
 ```
 
-- 사이드바: session list, 고정 너비 256px
-- 메인 영역: 채팅 메시지 목록 + 입력창
+### 6.2 Sidebar
 
-### Message Area (Claude.ai style)
+| 속성 | 값 |
+|------|-----|
+| 너비 | 256px (`w-64`) |
+| 배경 | `bg-[#fdf6f5]` (canvas) |
+| 우측 보더 | `border-r border-[#e8d6d3]` |
+| New Chat 버튼 | `h-9 px-4`, `rounded-md`, border `#e8d6d3` |
+| Session item | `h-9 px-3 rounded-md`, hover `bg-[#fcf0ee]` |
+| Active session | `bg-[#f7e8e5] text-[#141312]` |
+| Icons | Rosewood `#b85d65` |
 
-- 최대 너비: `max-w-3xl` (720px), 가운데 정렬
-- User bubble: 우측 정렬, soft accent background (`bg-primary/10`), rounded-2xl
-- Assistant message: 좌측 정렬, full width, 일반 텍스트 흐름
-- 사이드바와 메인 사이: `border-r` 1px
+### 6.3 Chat Message Area
 
-### Anti-patterns (금지 목록)
+- **메시지 영역 너비**: `max-w-3xl` (720px), 가운데 정렬
+- **Empty state greeting**: "무엇을 도와드릴까요?" — Instrument Serif, 28px
+- **Sub**: "우리 여행을 Designer가 도와줄게요" — 14px, muted
 
-- **3등분 카드 그리드** (`grid-cols-3`) — 절대 금지
-- **"Trusted by" 로고 줄** — 절대 금지
-- **숫자 "1·2·3" 단계** — 절대 금지
-- **통계 숫자 배너 줄** — 절대 금지
-- **아이콘 + 라벨 피쳐 카드 3개** — 절대 금지
-- **Pricing 테이블 3단 "Most Popular"** — 절대 금지 (필요 없음)
-- **가운데 정렬 hero + floating 스크린샷** — 절대 금지
-- **인용에 동그란 아바타 + 이름 + 역할** — 절대 금지
-- **자동 재생 숫자 카운터 애니메이션** — 절대 금지
-- **blob SVG / 추상 도형 장식** — 절대 금지
-- **glassmorphism (frosted glass)** — 절대 금지
-- **Lottie 애니메이션** — 절대 금지
-- **푸터 4단 컬럼 (Product / Company / Resources / Legal)** — 절대 금지
+### 6.4 User Bubble (연인 메시지)
+
+- 우측 정렬
+- 배경: **`bg-[#f0dbd7]`** (surface-strong — 핑크빛 도는 크림)
+- Radius: `rounded-[16px] rounded-br-[4px]` (하단만 sharp)
+- Padding: `px-4 py-2.5`
+- Max-width: `max-w-[80%]`
+- Text: 15px, `#141312` (ink)
+
+### 6.5 Assistant Message
+
+- 좌측 정렬, 배경 없음 (transparent)
+- 텍스트: 16px, `#141312`, line-height 1.55
+- 최대 너비: `max-w-3xl` (720px)
+
+### 6.6 Input Bar
+
+- 위치: 페이지 하단 fixed
+- 배경: `bg-[#fdf6f5]` (canvas)
+- 상단 보더: `border-t border-[#e8d6d3]`
+- Textarea: `bg-transparent`, `border-none`, `min-h-[44px] max-h-32`, 15px
+- Placeholder: `text-[#8e7d7a]`
+- Send 버튼: `w-8 h-8 rounded-md bg-[#d96c75] text-white` — ArrowUp icon
+- Stop 버튼: Square icon
+
+### 6.7 Tool Call Card
+
+- `rounded-lg` (12px), `border border-[#e8d6d3]`
+- 배경: `bg-[#fcf0ee]` (surface-soft)
+- State badge running: `bg-[#d96c75]/10 text-[#d96c75]`
+- State badge complete: `bg-[#7db8a0]/10 text-[#7db8a0]`
+- State badge error: `bg-[#c64545]/10 text-[#c64545]`
+
+### 6.8 Code Block
+
+- 배경: `#1c1517` (surface-dark, 레드빛 블랙)
+- `rounded-lg` (12px), padding `p-4`
+- 폰트: `font-mono text-sm`, text `#fdf6f5`
+
+### 6.9 Password Gate
+
+- 중앙 정렬 full-screen
+- 배경: `bg-[#fdf6f5]`
+- Input: `w-80`, `rounded-md`, `border-[#e8d6d3]`
+- 버튼: `bg-[#d96c75] text-white rounded-md h-9 px-4`
+- Icon: Heart 기반 장식 (lucide Heart 또는 MapPin, rosewood `#b85d65`)
+
+### 6.10 Button Variants
+
+| Variant | 스타일 |
+|---------|--------|
+| **Primary** | `bg-[#d96c75] text-white rounded-md h-10 px-5 text-sm font-medium` |
+| Primary hover | `bg-[#c25660]` |
+| **Secondary** | `bg-[#fdf6f5] text-[#141312] rounded-md h-10 px-5 border border-[#e8d6d3]` |
+| Secondary hover | `bg-[#fcf0ee]` |
+| **Ghost** | `bg-transparent text-[#141312] rounded-md h-9 px-3` |
+| Ghost hover | `bg-[#fcf0ee]` |
 
 ---
 
-## 8. Component Styles
+## 7. Elevation / Shadow
 
-### Button
-- Flat (no gradient), `rounded-md`, 6px
-- Primary: accent skyblue bg, white text
-- Ghost: transparent, hover 시 muted bg
-- Size: `h-9 px-4` (default), `h-8 px-3` (sm)
-- Transition: `transition-all duration-150` (snap 느낌 최소화)
+| Level | 값 |
+|-------|-----|
+| **Flat** | `none` — 기본 |
+| **Ring** | `0 0 0 1px #e8d6d3` |
+| **Raised** | `0 4px 24px rgba(0,0,0,0.04)` |
 
-### Input / Textarea
-- 배경: surface, border: border color
-- Focus: `ring-2 ring-accent/30` (skyblue)
-- Textarea: borderless design inside message bar, `min-h-[44px] max-h-32`
-- 비밀번호 게이트: 중앙 정렬, 넉넉한 여백, minimal
-
-### Badge
-- `rounded-full`, `px-2.5 py-0.5`, `text-xs font-medium`
-- Background: `muted` or `primary/10` (tool call 상태 표시용)
-
-### Tool Call Card
-- collapse/expand 토글
-- Header: tool icon + name + state badge
-- State colors:
-  - running: `bg-blue-100 text-blue-700` (muted skyblue)
-  - complete: `bg-green-100 text-green-700`
-  - error: `bg-red-100 text-red-700`
-- JSON body: `font-mono text-xs`, pre 포맷
-
-### Session Sidebar
-- 배경: sidebar color (muted보다 한 단계 더 진함)
-- Active session: accent background highlight
-- Hover: subtle bg shift
-- New chat button: accent outline 버튼
-
-### Password Gate
-- 중앙 정렬, 여백 넉넉 (`py-32`)
-- Decorative icon: 여행 관련 (MapPin / Compass) — terracotta warm point color
-- Input: centered, 제한된 너비 (`w-80 max-w-full`)
-- Error: shake 애니메이션 + 피드백 텍스트
+- Tailwind `shadow-sm`/`shadow-md` 기본 shadow 금지
 
 ---
 
-## 9. Motion & Animation
+## 8. Layout Anti-Patterns (금지 목록)
 
-### Principles
-- 과장된 motion NO — 미묘함이 핵심
-- 모든 scroll animation 1회만 실행 (반복 금지)
+```
+❌ 3등분 카드 그리드
+❌ "Trusted by" 로고 줄
+❌ 숫자 "1·2·3" 단계
+❌ 통계 숫자 배너 줄
+❌ 아이콘 + 라벨 피쳐 카드 3개
+❌ 가운데 정렬 hero + floating 스크린샷
+❌ 그라데이션 / blob SVG / abstract shape
+❌ glassmorphism (frosted glass)
+❌ Lottie 애니메이션
+❌ fade-up (translateY + opacity)
+❌ hover 시 scale transform
+❌ scroll-triggered number counter
+❌ glowing border / neon effect
+❌ 좌측 컬러 보더 스트립
+❌ rounded-2xl / rounded-3xl
+❌ Pure #fff / #000 배경
+❌ vibecode purple / indigo gradient 가장 금지
+```
 
-### 허용 목록
+---
 
-| 요소 | 애니메이션 | 타이밍 |
+## 9. Motion
+
+### Minimal motion (Claude.ai 스타일 유지)
+
+| 요소 | 애니메이션 | Timing |
 |------|-----------|--------|
 | Message appear | `fadeIn` (opacity 0→1) | 200ms ease-out |
-| Sidebar appear | slide from left | 250ms ease-out |
-| Loading dot (Claude style) | 3-dot pulse | infinite, 1.4s cycle |
+| Loading dots | 3-dot pulse | 1.4s cycle infinite |
 | Button hover | bg tint shift | 150ms ease |
 | Tool call expand | height transition | 200ms ease |
 
-### Keyframes (globals.css)
-```css
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-12px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-@keyframes dotPulse {
-  0%, 80%, 100% { opacity: 0; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
-}
-```
-
 ### 금지
-- **fade-up (translateY + opacity)** — AI slop default, 절대 금지
+- translateY 기반 fade-up
 - stagger animation
-- scroll-triggered number counter
-- glowing effect
-- hover시 scale transform (카드 떠있는 느낌)
+- glowing / pulsing (loading dot 제외)
 
 ---
 
 ## 10. Voice & Microcopy
 
 ### Tone
-- **한국어**, 친구에게 말하듯 자연스럽게
-- 존댓말 기본, 필요시 반말 (여행 일정 제안처럼 캐주얼한 맥락)
-- "~합니다" 체, "~해요" 혼용 가능
+- **한국어**, 부드러운 말투, "~해요" / "~예요" 체
+- 연인 사이의 대화처럼 편안하지만 AI라는 점을 고려한 적절한 격식
+- 여행 제안 시: 부드럽고 따뜻하게
 
-### 금지 단어 (절대 사용 금지)
-- empower, leverage, seamless, robust, harness, delve, tapestry, revolutionize
-- "오늘날의 빠르게 변화하는 세상에서"
+### Greeting 예시
+- "무엇을 도와드릴까요?"
+- "우리 여행, 같이 계획해볼까요?"
+- "오늘은 어디로 갈까요?"
+
+### 금지 단어
+- empower, leverage, seamless, robust, harness, revolutionize
 - "혁신적인", "최첨단", "스마트한"
-
-### Microcopy 예시
-- 버튼: "시작하기", "질문하기" — NOT "Get Started", "Submit"
-- 빈 상태: "무엇을 도와드릴까요?" (Claude.ai 스타일)
-- 로딩: "생각 중...", "장소 검색 중..."
-- 에러: "다시 시도해 주세요" — NOT "An error occurred"
 
 ---
 
-## 11. Dark Mode (optional, 제한적)
+## 11. Dark Mode
 
-- **기본값은 라이트 모드** — 다크모드는 사용자 OS 설정에 따라 자동 전환
-- 다크모드는 Accent skyblue를 한 단계 어둡게 (`hsl(200 45% 50%)`)
-- 모든 대비 APCA Lc ≥ 75 (본문), ≥ 45 (큰 텍스트) 측정 필수
-- `bg-background`는 완전 검정(`#000`)이 아닌 `hsl(40 15% 8%)`
+- **기본값 라이트 모드**
+- OS 설정 자동 전환
+- Dark canvas: `#1c1517`
+- Dark text: `#fdf6f5`
+- pink accent 유지 (약간 더 어둡게: `#c25660`)
 
 ---
 
 ## 12. APCA Contrast Targets
 
-모든 text/background 쌍은 아래 기준 통과해야 함 (눈대기 금지):
-
-| 용도 | 최소 APCA Lc |
-|------|-------------|
-| 본문 (15px / 400 weight) | ≥ 75 |
-| 큰 텍스트 (24px+ / 700) | ≥ 45 |
-| 비텍스트 UI (icon, border) | ≥ 30 |
-| 비활성 상태 | ≥ 15 |
-
-- 이미지나 그라데이션 위 텍스트는 반투명 오버레이 필수
-- CI에 contrast check 스크립트 포함 권장
+| 용도 | 최소 Lc |
+|------|---------|
+| 본문 (16px / 400) | ≥ 75 |
+| 큰 텍스트 (24px+ / 500) | ≥ 45 |
+| 비텍스트 UI | ≥ 30 |
 
 ---
 
 ## 13. Design Review Checklist
 
-배포 전에 아래 항목을 전부 검토하세요. 하나라도 fail이면 수정 후 재검토:
-
-- [ ] 하나의 명확한 aesthetic 방향이 유지되는가?
-- [ ] 폰트가 Inter/Poppins/Geist 단독이 아닌가? (페어링 사용)
+- [ ] 배경이 `#fdf6f5` (블러쉬 핑크 크림)인가?
+- [ ] primary가 `#d96c75` (dried rose)인가?
+- [ ] 모든 gray가 pink warm undertone을 가지는가? (cool gray 없음)
 - [ ] Tailwind blue/indigo/purple 계열이 전혀 없는가?
-- [ ] `rounded-2xl` 이상 radius가 사용되지 않았는가?
-- [ ] 카드에 flat gray border가 없는가? (whitespace/bg로 대체)
-- [ ] 좌측 컬러 보더 스트립이 없는가?
+- [ ] vibecode lavender-purple이 없는가?
+- [ ] `rounded-2xl` 이상이 사용되지 않았는가?
+- [ ] flat gray border가 카드 기본값이 아닌가? (hairline `#e8d6d3`)
 - [ ] 3등분 카드 그리드가 없는가?
 - [ ] 그라데이션/glassmorphism/blob SVG가 없는가?
-- [ ] 다크모드가 기본값이 아닌가?
-- [ ] 모든 인터랙티브 상태(hover, focus, active, disabled)가 정의되었는가?
-- [ ] APCA 대비가 모든 text/bg 쌍에서 통과하는가?
-- [ ] "fade-up" 애니메이션이 사용되지 않았는가?
-- [ ] 인터랙션마다 같은 애니메이션(motion uniformity)이 아닌가?
-- [ ] 금지 단어(empower, leverage 등)가 microcopy에 없는가?
+- [ ] dark mode가 기본값이 아닌가?
+- [ ] 모든 인터랙티브 상태가 정의되었는가?
+- [ ] 모든 text/bg 쌍이 APCA 대비를 통과하는가?
+- [ ] translateY fade-up이 없고 Claude dot pulse를 쓰는가?
 
 ---
 
-*Last updated: 2026-07-15*
-*Apply this file before every UI generation pass. If a component doesn't match, reject and regenerate.*
+*Warm Pink Boudoir 테마 — 2026-07-15*
+*연인 둘만의 여행 플래너를 위한 디자인 시스템*

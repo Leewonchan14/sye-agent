@@ -2,13 +2,11 @@
 
 import { useCallback } from "react";
 
-interface ExampleQuestionsProps {
-  onQuestionClick: (question: string) => void;
+interface Props {
+  onQuestionClick: (q: string) => void;
 }
 
-const questions = ["작성하기", "학습하기", "코드", "일상"];
-
-export const ExampleQuestions = ({ onQuestionClick }: ExampleQuestionsProps) => {
+export const ExampleQuestions = ({ onQuestionClick }: Props) => {
   const handleClick = useCallback(
     (q: string) => {
       onQuestionClick(q);
@@ -18,12 +16,25 @@ export const ExampleQuestions = ({ onQuestionClick }: ExampleQuestionsProps) => 
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      {questions.map((q) => (
+      {["작성하기", "학습하기", "코드", "일상"].map((q) => (
         <button
           key={q}
           type="button"
           onClick={() => handleClick(q)}
-          className="rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground"
+          className="rounded-full border px-4 py-1.5 text-sm transition-colors"
+          style={{
+            borderColor: "var(--color-hairline)",
+            backgroundColor: "var(--color-surface)",
+            color: "var(--color-muted)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-canvas-soft)";
+            e.currentTarget.style.color = "var(--color-ink)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-surface)";
+            e.currentTarget.style.color = "var(--color-muted)";
+          }}
         >
           {q}
         </button>

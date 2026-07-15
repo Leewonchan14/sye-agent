@@ -4,132 +4,133 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ─── Theme mapping ─── */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-warm-accent: var(--warm-accent);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-}
-
-/* ─── DESIGN.md §2 Palette ─── */
+/* ─── DESIGN.md: Warm Pink Boudoir palette ─── */
 :root {
-  --background: hsl(40 20% 97%);    /* #f7f6f3 warm off-white */
-  --foreground: hsl(40 10% 12%);    /* warm charcoal */
-  --card: hsl(40 15% 99%);          /* surface */
-  --card-foreground: hsl(40 10% 12%);
-  --popover: hsl(40 15% 99%);
-  --popover-foreground: hsl(40 10% 12%);
-  --primary: hsl(200 50% 65%);      /* muted skyblue — accent 30% */
-  --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(40 15% 93%);     /* muted hover */
-  --secondary-foreground: hsl(40 10% 20%);
-  --muted: hsl(40 15% 93%);         /* hover, section dividers */
-  --muted-foreground: hsl(40 10% 45%);
-  --accent: hsl(200 50% 65%);
-  --accent-foreground: hsl(0 0% 100%);
-  --warm-accent: hsl(25 55% 55%);   /* terracotta — warm point 10% */
-  --destructive: hsl(0 65% 55%);    /* semantic error */
-  --border: hsl(40 10% 86%);        /* hairline */
-  --input: hsl(40 10% 86%);
-  --ring: hsl(200 50% 65%);
-  --radius: 0.5rem;                 /* 8px base */
-  --sidebar: hsl(40 15% 95%);       /* slightly darker than bg */
-  --sidebar-foreground: hsl(40 10% 12%);
-  --sidebar-primary: hsl(200 50% 65%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(200 30% 90%);
-  --sidebar-accent-foreground: hsl(40 10% 20%);
-  --sidebar-border: hsl(40 10% 86%);
-  --sidebar-ring: hsl(200 50% 65%);
-}
+  /* Brand — dried rose */
+  --color-primary: hsl(355 55% 63%);          /* #d96c75 */
+  --color-primary-hover: hsl(355 50% 55%);    /* darker dried rose */
+  --color-primary-disabled: hsl(355 40% 85%);
 
-.dark {
-  --background: hsl(40 15% 8%);
-  --foreground: hsl(40 10% 88%);
-  --card: hsl(40 15% 10%);
-  --card-foreground: hsl(40 10% 88%);
-  --popover: hsl(40 15% 10%);
-  --popover-foreground: hsl(40 10% 88%);
-  --primary: hsl(200 45% 55%);
+  /* Canvas — blush pink cream */
+  --color-canvas: hsl(355 25% 98%);           /* #fdf6f5 */
+  --color-canvas-soft: hsl(355 25% 95%);      /* slightly darker */
+  --color-canvas-card: hsl(355 25% 92%);
+  --color-canvas-strong: hsl(355 25% 88%);
+
+  /* Surfaces */
+  --color-surface: hsl(355 30% 99%);
+  --color-surface-soft: hsl(355 25% 95%);
+  --color-surface-card: hsl(355 25% 92%);
+
+  /* Text — warm-toned, no pure black */
+  --color-ink: hsl(355 8% 10%);               /* near-black */
+  --color-body: hsl(355 5% 25%);
+  --color-body-strong: hsl(355 5% 16%);
+  --color-muted: hsl(355 5% 45%);
+  --color-muted-soft: hsl(355 5% 58%);
+
+  /* Hairline — pink undertone */
+  --color-hairline: hsl(355 20% 90%);         /* #e8d6d3 */
+  --color-hairline-soft: hsl(355 15% 93%);
+
+  /* Semantic */
+  --color-success: hsl(140 35% 52%);
+  --color-warning: hsl(38 70% 50%);
+  --color-error: hsl(0 50% 52%);
+
+  /* Dark surfaces */
+  --color-dark: hsl(355 8% 12%);
+  --color-dark-soft: hsl(355 8% 16%);
+  --color-on-dark: hsl(355 20% 97%);
+  --color-on-dark-soft: hsl(355 10% 65%);
+
+  /* Legacy shadcn — map to new tokens */
+  --background: var(--color-canvas);
+  --foreground: var(--color-ink);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-primary);
   --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(40 15% 18%);
-  --secondary-foreground: hsl(40 10% 80%);
-  --muted: hsl(40 15% 14%);
-  --muted-foreground: hsl(40 10% 55%);
-  --accent: hsl(200 45% 55%);
-  --accent-foreground: hsl(0 0% 100%);
-  --destructive: hsl(0 60% 45%);
-  --border: hsl(40 10% 20%);
-  --input: hsl(40 10% 20%);
-  --ring: hsl(200 45% 55%);
+  --secondary: var(--color-canvas-soft);
+  --secondary-foreground: var(--color-body-strong);
+  --muted: var(--color-canvas-soft);
+  --muted-foreground: var(--color-muted);
+  --accent: var(--color-canvas-card);
+  --accent-foreground: var(--color-body-strong);
+  --destructive: var(--color-error);
+  --border: var(--color-hairline);
+  --input: var(--color-hairline);
+  --ring: hsl(355 55% 63%);
   --radius: 0.5rem;
-  --sidebar: hsl(40 15% 10%);
-  --sidebar-foreground: hsl(40 10% 88%);
-  --sidebar-primary: hsl(200 45% 55%);
+
+  /* Sidebar */
+  --sidebar: var(--color-canvas);
+  --sidebar-foreground: var(--color-ink);
+  --sidebar-primary: var(--color-primary);
   --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(40 15% 18%);
-  --sidebar-accent-foreground: hsl(40 10% 80%);
-  --sidebar-border: hsl(40 10% 20%);
-  --sidebar-ring: hsl(200 45% 55%);
+  --sidebar-accent: var(--color-canvas-card);
+  --sidebar-accent-foreground: var(--color-body-strong);
+  --sidebar-border: var(--color-hairline);
+  --sidebar-ring: hsl(355 55% 63%);
+
+  /* Font */
+  --font-sans: "Geist", "Geist Fallback", sans-serif;
+  --font-mono: "JetBrains Mono", "Geist Mono", monospace;
 }
 
-/* ─── Base layer ─── */
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
+/* Dark theme — DESIGN.md §11 */
+.dark {
+  --background: hsl(355 8% 10%);
+  --foreground: hsl(355 20% 97%);
+  --card: hsl(355 8% 14%);
+  --card-foreground: hsl(355 20% 97%);
+  --popover: hsl(355 8% 14%);
+  --popover-foreground: hsl(355 20% 97%);
+  --primary: hsl(355 45% 52%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(355 8% 18%);
+  --secondary-foreground: hsl(355 15% 85%);
+  --muted: hsl(355 8% 16%);
+  --muted-foreground: hsl(355 10% 60%);
+  --accent: hsl(355 8% 18%);
+  --accent-foreground: hsl(355 15% 85%);
+  --destructive: hsl(0 45% 45%);
+  --border: hsl(355 10% 22%);
+  --input: hsl(355 10% 22%);
+  --ring: hsl(355 45% 52%);
+  --radius: 0.5rem;
+  --sidebar: hsl(355 8% 12%);
+  --sidebar-foreground: hsl(355 20% 97%);
+  --sidebar-primary: hsl(355 45% 52%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(355 8% 18%);
+  --sidebar-accent-foreground: hsl(355 15% 85%);
+  --sidebar-border: hsl(355 10% 22%);
+  --sidebar-ring: hsl(355 45% 52%);
+  --color-canvas: hsl(355 8% 10%);
+  --color-primary: hsl(355 45% 52%);
+  --color-ink: hsl(355 20% 97%);
+  --color-hairline: hsl(355 10% 22%);
+  --color-muted: hsl(355 10% 60%);
 }
 
-/* ─── DESIGN.md §9 Motion ─── */
+/* ─── Base ─── */
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Motion ─── */
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; } to { opacity: 1; }
 }
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
   20%, 40%, 60%, 80% { transform: translateX(4px); }
 }
-
-.animate-fade-in {
-  animation: fade-in 200ms ease-out;
-}
-.animate-shake {
-  animation: shake 0.5s ease-in-out;
-}
+.animate-fade-in { animation: fade-in 200ms ease-out; }
+.animate-shake { animation: shake 0.5s ease-in-out; }
