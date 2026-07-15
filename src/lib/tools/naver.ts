@@ -11,7 +11,7 @@ const naverFetch = async <T>(
   params: Record<string, string | number | undefined>
 ): Promise<NaverFetchResult<T>> => {
   const query = Object.entries(params)
-    .filter(([_, v]) => v !== undefined)
+    .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join("&");
 

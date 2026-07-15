@@ -67,19 +67,19 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   );
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-32">
       <form
         onSubmit={handleSubmit}
-        className={`flex w-full max-w-sm flex-col items-center gap-6 rounded-2xl border bg-card p-8 shadow-sm ${
+        className={`flex w-full max-w-sm flex-col items-center gap-6 rounded-xl border bg-card p-8 shadow-sm $
           isShaking ? "animate-shake" : ""
         }`}
       >
-        <div className="flex items-center gap-1 text-primary">
+        <div className="flex items-center gap-1 text-warm-accent">
           <Cloud className="h-8 w-8" />
           <MapPin className="h-6 w-6" />
         </div>
 
-        <h1 className="text-xl font-semibold text-foreground">트래블 에이전트</h1>
+        <h1 className="text-xl font-semibold text-foreground">Designer</h1>
 
         <p className="text-center text-sm text-muted-foreground">
           비밀번호를 입력해주세요

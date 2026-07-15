@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "트래블 에이전트 - 춘천 여행 도우미",
-  description: "AI 기반 춘천 여행 플래너 - 이원찬 & 성예은의 특별한 여행",
+  title: "Designer",
+  description: "AI 기반 여행 플래너 - 이원찬 & 성예은의 특별한 여행",
 };
 
 const RootLayout = ({

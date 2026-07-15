@@ -11,6 +11,26 @@ export const POST = async (req: Request) => {
   const authError = await requireAuth(req);
   if (authError) return authError;
 
+  // Validate required configuration
+  if (!process.env.DEEPSEEK_API_KEY) {
+    return Response.json(
+      {
+        error: "DEEPSEEK_API_KEY가 설정되지 않았습니다. .env 파일을 확인해주세요.",
+      },
+      { status: 500 }
+    );
+  }
+
+  if (!process.env.NAVER_CLIENT_ID || !process.env.NAVER_CLIENT_SECRET) {
+    return Response.json(
+      {
+        error:
+          "NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET이 설정되지 않았습니다. .env 파일을 확인해주세요.",
+      },
+      { status: 500 }
+    );
+  }
+
   const { messages, sessionId } = await req.json();
 
   // Save user message to Neon DB (non-blocking)

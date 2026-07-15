@@ -1,0 +1,938 @@
+{
+  "schema_version": "1.0.0",
+  "domains": {
+    "fintech": {
+      "name": "Fintech",
+      "aesthetic_label": "minimal-trust",
+      "description": "Clean, restrained, confidence-inspiring. Every pixel must convey \"your money is safe here.\" Precision over personality.",
+      "color_mood": [
+        "navy",
+        "institutional",
+        "muted",
+        "high-contrast"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.985 0.003 250)",
+        "bg_secondary": "oklch(0.97 0.005 250)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.20 0.02 260)",
+        "text_secondary": "oklch(0.45 0.015 260)",
+        "text_heading": "oklch(0.15 0.03 260)",
+        "accent_primary": "oklch(0.50 0.18 260)",
+        "accent_secondary": "oklch(0.60 0.10 170)",
+        "border": "oklch(0.88 0.01 250)",
+        "error": "oklch(0.55 0.22 25)",
+        "success": "oklch(0.60 0.17 155)",
+        "warning": "oklch(0.70 0.15 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.13 0.015 260)",
+        "bg_secondary": "oklch(0.17 0.015 260)",
+        "bg_elevated": "oklch(0.22 0.015 260)",
+        "text_primary": "oklch(0.92 0.005 250)",
+        "text_secondary": "oklch(0.65 0.01 250)",
+        "text_heading": "oklch(0.95 0.003 250)",
+        "accent_primary": "oklch(0.65 0.18 260)",
+        "accent_secondary": "oklch(0.70 0.10 170)",
+        "border": "oklch(0.28 0.015 260)",
+        "error": "oklch(0.65 0.20 25)",
+        "success": "oklch(0.70 0.17 155)",
+        "warning": "oklch(0.78 0.15 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        "heading_weight": "700",
+        "body_family": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace",
+        "font_scale": "minor-third",
+        "heading_letter_spacing": "-0.02em",
+        "body_line_height": "1.6",
+        "heading_line_height": "1.15",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "6px",
+        "medium": "8px",
+        "large": "12px",
+        "pill": "9999px"
+      },
+      "density": "medium",
+      "shadow_style": "subtle",
+      "animation": {
+        "intensity": "minimal",
+        "style": "snappy",
+        "page_transitions": false,
+        "scroll_animations": false,
+        "micro_interactions": true
+      },
+      "layout_preference": "symmetric",
+      "max_content_width": "1280px",
+      "grid_columns": "12",
+      "imagery_style": "screenshots",
+      "imagery_treatment": "contained",
+      "reference_files": [
+        "web-react.md",
+        "dataviz.md"
+      ],
+      "token_file": "fintech.json",
+      "exemplar_sites": [
+        "stripe.com",
+        "mercury.com",
+        "wise.com",
+        "linear.app/finance",
+        "ramp.com"
+      ],
+      "anti_patterns": [
+        "Decorative animation",
+        "Stock photography of handshakes",
+        "Playful rounded corners >12px",
+        "Bright saturated primary colors",
+        "Gradient backgrounds",
+        "Comic/playful fonts",
+        "Excessive use of illustrations"
+      ]
+    },
+    "healthcare": {
+      "name": "Healthcare",
+      "aesthetic_label": "calm-reassuring",
+      "description": "Soothing, trustworthy, warm. Must feel safe and approachable — never clinical or cold. Accessibility is paramount.",
+      "color_mood": [
+        "calming",
+        "blue-green",
+        "warm-neutral",
+        "soft"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.98 0.004 160)",
+        "bg_secondary": "oklch(0.96 0.01 170)",
+        "bg_elevated": "oklch(0.995 0.002 90)",
+        "text_primary": "oklch(0.22 0.02 200)",
+        "text_secondary": "oklch(0.48 0.015 200)",
+        "text_heading": "oklch(0.18 0.025 200)",
+        "accent_primary": "oklch(0.55 0.14 190)",
+        "accent_secondary": "oklch(0.60 0.12 250)",
+        "border": "oklch(0.88 0.015 170)",
+        "error": "oklch(0.55 0.18 25)",
+        "success": "oklch(0.58 0.15 160)",
+        "warning": "oklch(0.72 0.12 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.14 0.01 200)",
+        "bg_secondary": "oklch(0.18 0.015 200)",
+        "bg_elevated": "oklch(0.23 0.015 200)",
+        "text_primary": "oklch(0.90 0.008 170)",
+        "text_secondary": "oklch(0.65 0.01 180)",
+        "text_heading": "oklch(0.93 0.005 170)",
+        "accent_primary": "oklch(0.65 0.12 190)",
+        "accent_secondary": "oklch(0.70 0.12 250)",
+        "border": "oklch(0.30 0.015 200)",
+        "error": "oklch(0.65 0.18 25)",
+        "success": "oklch(0.68 0.15 160)",
+        "warning": "oklch(0.78 0.12 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Outfit', 'DM Sans', system-ui, sans-serif",
+        "heading_weight": "600",
+        "body_family": "'DM Sans', 'Source Sans 3', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'IBM Plex Mono', 'Consolas', monospace",
+        "font_scale": "major-third",
+        "heading_letter_spacing": "-0.01em",
+        "body_line_height": "1.7",
+        "heading_line_height": "1.2",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "8px",
+        "medium": "12px",
+        "large": "16px",
+        "pill": "9999px"
+      },
+      "density": "spacious",
+      "shadow_style": "subtle",
+      "animation": {
+        "intensity": "minimal",
+        "style": "smooth",
+        "page_transitions": true,
+        "scroll_animations": false,
+        "micro_interactions": true
+      },
+      "layout_preference": "single-column",
+      "max_content_width": "800px",
+      "grid_columns": "12",
+      "imagery_style": "illustration",
+      "imagery_treatment": "contained",
+      "reference_files": [
+        "web-react.md",
+        "accessibility.md"
+      ],
+      "token_file": "healthcare.json",
+      "exemplar_sites": [
+        "headspace.com",
+        "calm.com",
+        "zocdoc.com",
+        "one.app",
+        "nhs.uk"
+      ],
+      "anti_patterns": [
+        "Red as primary/accent color",
+        "Dense information layouts",
+        "Small text below 16px",
+        "Stock photos of stethoscopes",
+        "Clinical/sterile color schemes",
+        "Fast animations",
+        "Complex multi-step forms without progress indicators",
+        "Tiny tap targets"
+      ]
+    },
+    "devtools": {
+      "name": "Developer Tools",
+      "aesthetic_label": "linear-dark",
+      "description": "The Linear look — dark-first, precise, information-dense. Monochrome with colorful accent glows.",
+      "color_mood": [
+        "dark",
+        "precise",
+        "neon-accent",
+        "monochrome-plus-glow"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.97 0.003 260)",
+        "bg_secondary": "oklch(0.94 0.005 260)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.18 0.02 270)",
+        "text_secondary": "oklch(0.50 0.01 260)",
+        "text_heading": "oklch(0.13 0.025 270)",
+        "accent_primary": "oklch(0.60 0.25 290)",
+        "accent_secondary": "oklch(0.70 0.20 180)",
+        "border": "oklch(0.87 0.008 260)",
+        "error": "oklch(0.60 0.22 25)",
+        "success": "oklch(0.65 0.18 155)",
+        "warning": "oklch(0.75 0.15 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.10 0.01 270)",
+        "bg_secondary": "oklch(0.14 0.012 270)",
+        "bg_elevated": "oklch(0.18 0.015 270)",
+        "text_primary": "oklch(0.90 0.005 260)",
+        "text_secondary": "oklch(0.60 0.008 260)",
+        "text_heading": "oklch(0.95 0.003 260)",
+        "accent_primary": "oklch(0.70 0.25 290)",
+        "accent_secondary": "oklch(0.75 0.20 180)",
+        "border": "oklch(0.25 0.012 270)",
+        "error": "oklch(0.65 0.22 25)",
+        "success": "oklch(0.70 0.18 155)",
+        "warning": "oklch(0.80 0.15 80)"
+      },
+      "dark_default": true,
+      "typography": {
+        "heading_family": "'Geist Sans', 'Cabinet Grotesk', system-ui, sans-serif",
+        "heading_weight": "600",
+        "body_family": "'Geist Sans', 'General Sans', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'Geist Mono', 'JetBrains Mono', 'Fira Code', monospace",
+        "font_scale": "minor-third",
+        "heading_letter_spacing": "-0.025em",
+        "body_line_height": "1.5",
+        "heading_line_height": "1.1",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "6px",
+        "medium": "8px",
+        "large": "12px",
+        "pill": "9999px"
+      },
+      "density": "medium",
+      "shadow_style": "none",
+      "animation": {
+        "intensity": "moderate",
+        "style": "snappy",
+        "page_transitions": true,
+        "scroll_animations": true,
+        "micro_interactions": true
+      },
+      "layout_preference": "bento",
+      "max_content_width": "1400px",
+      "grid_columns": "16",
+      "imagery_style": "screenshots",
+      "imagery_treatment": "contained",
+      "reference_files": [
+        "web-react.md",
+        "animation-motion.md",
+        "cli-terminal.md"
+      ],
+      "token_file": "devtools.json",
+      "exemplar_sites": [
+        "linear.app",
+        "vercel.com",
+        "raycast.com",
+        "warp.dev",
+        "supabase.com"
+      ],
+      "anti_patterns": [
+        "Light backgrounds as default",
+        "Rounded corners >12px",
+        "Stock photography",
+        "Bouncy/playful animations",
+        "Serif fonts",
+        "Low information density",
+        "Hamburger menus",
+        "Loading spinners instead of skeleton states"
+      ]
+    },
+    "ecommerce": {
+      "name": "E-Commerce / Luxury",
+      "aesthetic_label": "editorial-cinematic",
+      "description": "Product is the hero. Restrained UI that steps back to let merchandise speak.",
+      "color_mood": [
+        "neutral",
+        "warm",
+        "restrained",
+        "high-contrast-accents"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.975 0.008 85)",
+        "bg_secondary": "oklch(0.96 0.01 80)",
+        "bg_elevated": "oklch(0.99 0.005 85)",
+        "text_primary": "oklch(0.18 0.02 80)",
+        "text_secondary": "oklch(0.42 0.015 80)",
+        "text_heading": "oklch(0.12 0.025 80)",
+        "accent_primary": "oklch(0.40 0.05 30)",
+        "accent_secondary": "oklch(0.45 0.06 260)",
+        "border": "oklch(0.85 0.008 80)",
+        "error": "oklch(0.55 0.18 25)",
+        "success": "oklch(0.55 0.15 150)",
+        "warning": "oklch(0.70 0.14 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.12 0.008 80)",
+        "bg_secondary": "oklch(0.16 0.01 80)",
+        "bg_elevated": "oklch(0.20 0.012 80)",
+        "text_primary": "oklch(0.88 0.006 80)",
+        "text_secondary": "oklch(0.62 0.008 80)",
+        "text_heading": "oklch(0.92 0.004 80)",
+        "accent_primary": "oklch(0.55 0.04 30)",
+        "accent_secondary": "oklch(0.60 0.06 260)",
+        "border": "oklch(0.26 0.01 80)",
+        "error": "oklch(0.65 0.18 25)",
+        "success": "oklch(0.65 0.15 150)",
+        "warning": "oklch(0.78 0.14 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Cormorant Garamond', 'Playfair Display', Georgia, serif",
+        "heading_weight": "600",
+        "body_family": "'Source Serif 4', 'Literata', Georgia, serif",
+        "body_weight": "400",
+        "mono_family": "'Fragment Mono', 'IBM Plex Mono', monospace",
+        "font_scale": "perfect-fifth",
+        "heading_letter_spacing": "0.02em",
+        "body_line_height": "1.7",
+        "heading_line_height": "1.15",
+        "heading_transform": "uppercase"
+      },
+      "border_radius": {
+        "small": "0px",
+        "medium": "0px",
+        "large": "0px",
+        "pill": "9999px"
+      },
+      "density": "spacious",
+      "shadow_style": "sharp",
+      "animation": {
+        "intensity": "expressive",
+        "style": "slow-organic",
+        "page_transitions": true,
+        "scroll_animations": true,
+        "micro_interactions": true
+      },
+      "layout_preference": "editorial",
+      "max_content_width": "1440px",
+      "grid_columns": "12",
+      "imagery_style": "photography",
+      "imagery_treatment": "full-bleed",
+      "reference_files": [
+        "web-landing.md",
+        "animation-motion.md"
+      ],
+      "token_file": "ecommerce.json",
+      "exemplar_sites": [
+        "ssense.com",
+        "acnestudios.com",
+        "cotopaxi.com",
+        "aesop.com",
+        "rickowens.eu"
+      ],
+      "anti_patterns": [
+        "3-column grid layouts",
+        "Blue primary colors",
+        "Chunky UI elements",
+        "Gradients on backgrounds",
+        "Rounded corners",
+        "Artificial urgency elements",
+        "Icon-heavy interfaces",
+        "Loading spinners"
+      ]
+    },
+    "education": {
+      "name": "Education",
+      "aesthetic_label": "playful-friendly",
+      "description": "Encouraging, warm, energetic. Makes learning feel fun without being childish.",
+      "color_mood": [
+        "happy",
+        "vibrant",
+        "warm",
+        "encouraging"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.975 0.01 110)",
+        "bg_secondary": "oklch(0.95 0.02 100)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.20 0.025 110)",
+        "text_secondary": "oklch(0.45 0.015 100)",
+        "text_heading": "oklch(0.15 0.03 110)",
+        "accent_primary": "oklch(0.55 0.20 145)",
+        "accent_secondary": "oklch(0.60 0.18 250)",
+        "border": "oklch(0.85 0.015 100)",
+        "error": "oklch(0.55 0.20 25)",
+        "success": "oklch(0.58 0.18 145)",
+        "warning": "oklch(0.72 0.16 75)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.13 0.015 110)",
+        "bg_secondary": "oklch(0.17 0.018 100)",
+        "bg_elevated": "oklch(0.22 0.02 100)",
+        "text_primary": "oklch(0.90 0.008 100)",
+        "text_secondary": "oklch(0.65 0.01 100)",
+        "text_heading": "oklch(0.94 0.005 100)",
+        "accent_primary": "oklch(0.65 0.18 145)",
+        "accent_secondary": "oklch(0.70 0.18 250)",
+        "border": "oklch(0.28 0.015 100)",
+        "error": "oklch(0.65 0.20 25)",
+        "success": "oklch(0.68 0.18 145)",
+        "warning": "oklch(0.78 0.16 75)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Nunito', 'Fredoka', system-ui, sans-serif",
+        "heading_weight": "700",
+        "body_family": "'Nunito', 'Atkinson Hyperlegible', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'JetBrains Mono', 'Fira Code', monospace",
+        "font_scale": "major-third",
+        "heading_letter_spacing": "-0.01em",
+        "body_line_height": "1.7",
+        "heading_line_height": "1.2",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "8px",
+        "medium": "12px",
+        "large": "20px",
+        "pill": "9999px"
+      },
+      "density": "spacious",
+      "shadow_style": "playful",
+      "animation": {
+        "intensity": "expressive",
+        "style": "bouncy",
+        "page_transitions": true,
+        "scroll_animations": true,
+        "micro_interactions": true
+      },
+      "layout_preference": "asymmetric",
+      "max_content_width": "1200px",
+      "grid_columns": "12",
+      "imagery_style": "illustration",
+      "imagery_treatment": "full-bleed",
+      "reference_files": [
+        "web-landing.md",
+        "animation-motion.md",
+        "accessibility.md"
+      ],
+      "token_file": "education.json",
+      "exemplar_sites": [
+        "duolingo.com",
+        "khanacademy.org",
+        "brilliant.org",
+        "codecademy.com",
+        "scratch.mit.edu"
+      ],
+      "anti_patterns": [
+        "Dull/business-like color schemes",
+        "Dense text layouts",
+        "Stock photography of happy students",
+        "Small tap targets",
+        "Serif fonts for body text",
+        "Boring progress indicators",
+        "Static/flat design",
+        "Long form fields without gamification"
+      ]
+    },
+    "media": {
+      "name": "Media / Publishing",
+      "aesthetic_label": "editorial-refined",
+      "description": "Clean, typography-first layouts. Content is king — UI is lightweight.",
+      "color_mood": [
+        "warm-offwhite",
+        "editorial",
+        "accent-muted",
+        "serif-first"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.978 0.003 90)",
+        "bg_secondary": "oklch(0.96 0.005 90)",
+        "bg_elevated": "oklch(0.99 0.002 90)",
+        "text_primary": "oklch(0.15 0.02 40)",
+        "text_secondary": "oklch(0.40 0.015 40)",
+        "text_heading": "oklch(0.10 0.025 40)",
+        "accent_primary": "oklch(0.50 0.10 30)",
+        "accent_secondary": "oklch(0.60 0.05 250)",
+        "border": "oklch(0.88 0.005 90)",
+        "error": "oklch(0.55 0.18 25)",
+        "success": "oklch(0.55 0.14 155)",
+        "warning": "oklch(0.70 0.12 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.12 0.005 90)",
+        "bg_secondary": "oklch(0.16 0.008 90)",
+        "bg_elevated": "oklch(0.20 0.01 90)",
+        "text_primary": "oklch(0.88 0.003 40)",
+        "text_secondary": "oklch(0.62 0.004 40)",
+        "text_heading": "oklch(0.93 0.002 40)",
+        "accent_primary": "oklch(0.65 0.10 30)",
+        "accent_secondary": "oklch(0.70 0.05 250)",
+        "border": "oklch(0.26 0.006 90)",
+        "error": "oklch(0.65 0.18 25)",
+        "success": "oklch(0.65 0.14 155)",
+        "warning": "oklch(0.78 0.12 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Playfair Display', 'Source Serif 4', Georgia, serif",
+        "heading_weight": "700",
+        "body_family": "'Source Serif 4', 'Literata', Georgia, serif",
+        "body_weight": "400",
+        "mono_family": "'JetBrains Mono', 'SF Mono', monospace",
+        "font_scale": "perfect-fifth",
+        "heading_letter_spacing": "-0.02em",
+        "body_line_height": "1.75",
+        "heading_line_height": "1.1",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "2px",
+        "medium": "4px",
+        "large": "6px",
+        "pill": "9999px"
+      },
+      "density": "normal",
+      "shadow_style": "sharp",
+      "animation": {
+        "intensity": "moderate",
+        "style": "elegant",
+        "page_transitions": true,
+        "scroll_animations": true,
+        "micro_interactions": true
+      },
+      "layout_preference": "editorial",
+      "max_content_width": "680px",
+      "grid_columns": "12",
+      "imagery_style": "photography",
+      "imagery_treatment": "full-bleed",
+      "reference_files": [
+        "web-landing.md",
+        "typography.md",
+        "animation-motion.md"
+      ],
+      "token_file": "media.json",
+      "exemplar_sites": [
+        "theguardian.com",
+        "newyorker.com",
+        "wired.com",
+        "vanityfair.com",
+        "monocle.com"
+      ],
+      "anti_patterns": [
+        "Centered hero layouts",
+        "Card-heavy dashboards",
+        "Sans-serif for body text",
+        "Bright/muted color schemes",
+        "Multiple column layouts in mobile",
+        "Heroicons for article content",
+        "Pop-up modals for newsletters",
+        "Auto-playing video"
+      ]
+    },
+    "government": {
+      "name": "Government / Civic",
+      "aesthetic_label": "functional-clear",
+      "description": "Maximum readability, zero decoration, total accessibility. Design that disappears so content leads.",
+      "color_mood": [
+        "neutral",
+        "clean",
+        "plain",
+        "high-contrast"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(1.0 0 0)",
+        "bg_secondary": "oklch(0.96 0.002 250)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.15 0.01 260)",
+        "text_secondary": "oklch(0.45 0.008 260)",
+        "text_heading": "oklch(0.10 0.015 260)",
+        "accent_primary": "oklch(0.45 0.12 260)",
+        "accent_secondary": "oklch(0.50 0.08 160)",
+        "border": "oklch(0.75 0.008 260)",
+        "error": "oklch(0.50 0.22 25)",
+        "success": "oklch(0.55 0.18 155)",
+        "warning": "oklch(0.65 0.18 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.10 0.005 260)",
+        "bg_secondary": "oklch(0.15 0.008 260)",
+        "bg_elevated": "oklch(0.20 0.01 260)",
+        "text_primary": "oklch(0.90 0.005 250)",
+        "text_secondary": "oklch(0.65 0.004 260)",
+        "text_heading": "oklch(0.95 0.002 250)",
+        "accent_primary": "oklch(0.60 0.12 260)",
+        "accent_secondary": "oklch(0.65 0.08 160)",
+        "border": "oklch(0.28 0.008 260)",
+        "error": "oklch(0.60 0.22 25)",
+        "success": "oklch(0.65 0.18 155)",
+        "warning": "oklch(0.75 0.18 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Noto Sans', 'Atkinson Hyperlegible', system-ui, sans-serif",
+        "heading_weight": "700",
+        "body_family": "'Noto Sans', 'Atkinson Hyperlegible', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'IBM Plex Mono', 'Noto Sans Mono', monospace",
+        "font_scale": "major-second",
+        "heading_letter_spacing": "0.01em",
+        "body_line_height": "1.7",
+        "heading_line_height": "1.2",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "2px",
+        "medium": "4px",
+        "large": "6px",
+        "pill": "9999px"
+      },
+      "density": "medium",
+      "shadow_style": "none",
+      "animation": {
+        "intensity": "none",
+        "style": "none",
+        "page_transitions": false,
+        "scroll_animations": false,
+        "micro_interactions": false
+      },
+      "layout_preference": "single-column",
+      "max_content_width": "960px",
+      "grid_columns": "12",
+      "imagery_style": "photography",
+      "imagery_treatment": "contained",
+      "reference_files": [
+        "web-landing.md",
+        "accessibility.md",
+        "pdf-print.md"
+      ],
+      "token_file": "government.json",
+      "exemplar_sites": [
+        "gov.uk",
+        "uswds.style",
+        "canada.ca",
+        "europa.eu",
+        "accessibility.gsa.gov"
+      ],
+      "anti_patterns": [
+        "Any decorative element",
+        "Stock photography",
+        "Rounded corners >4px",
+        "Rich colors beyond blue/gray",
+        "Animation/motion of any kind",
+        "Floating elements/Docked buttons",
+        "Informal typography",
+        "Icon-only navigation"
+      ]
+    },
+    "creative": {
+      "name": "Creative / Agency",
+      "aesthetic_label": "expressive-bold",
+      "description": "Visually daring, maximalist, experimental. Commands attention. Unique layouts, texture-heavy.",
+      "color_mood": [
+        "bold",
+        "vibrant",
+        "maximal",
+        "expressive"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.97 0.015 25)",
+        "bg_secondary": "oklch(0.90 0.03 20)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.12 0.025 20)",
+        "text_secondary": "oklch(0.40 0.02 20)",
+        "text_heading": "oklch(0.08 0.03 20)",
+        "accent_primary": "oklch(0.50 0.24 25)",
+        "accent_secondary": "oklch(0.55 0.22 300)",
+        "border": "oklch(0.82 0.02 20)",
+        "error": "oklch(0.60 0.22 25)",
+        "success": "oklch(0.55 0.18 155)",
+        "warning": "oklch(0.70 0.18 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.10 0.02 20)",
+        "bg_secondary": "oklch(0.14 0.025 20)",
+        "bg_elevated": "oklch(0.18 0.03 20)",
+        "text_primary": "oklch(0.92 0.005 20)",
+        "text_secondary": "oklch(0.65 0.01 20)",
+        "text_heading": "oklch(0.95 0.003 20)",
+        "accent_primary": "oklch(0.65 0.24 25)",
+        "accent_secondary": "oklch(0.70 0.22 300)",
+        "border": "oklch(0.26 0.02 20)",
+        "error": "oklch(0.65 0.22 25)",
+        "success": "oklch(0.65 0.18 155)",
+        "warning": "oklch(0.78 0.18 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Clash Display', 'Cabinet Grotesk', system-ui, sans-serif",
+        "heading_weight": "700",
+        "body_family": "'Satoshi', 'Archivo', system-ui, sans-serif",
+        "body_weight": "450",
+        "mono_family": "'JetBrains Mono', 'Fira Code', monospace",
+        "font_scale": "augmented-fourth",
+        "heading_letter_spacing": "-0.03em",
+        "body_line_height": "1.6",
+        "heading_line_height": "1.0",
+        "heading_transform": "normal"
+      },
+      "border_radius": {
+        "small": "4px",
+        "medium": "8px",
+        "large": "16px",
+        "pill": "9999px"
+      },
+      "density": "compact",
+      "shadow_style": "dramatic",
+      "animation": {
+        "intensity": "expressive",
+        "style": "dynamic",
+        "page_transitions": true,
+        "scroll_animations": true,
+        "micro_interactions": true
+      },
+      "layout_preference": "asymmetric",
+      "max_content_width": "1600px",
+      "grid_columns": "12",
+      "imagery_style": "mixed-media",
+      "imagery_treatment": "full-bleed",
+      "reference_files": [
+        "web-landing.md",
+        "animation-motion.md",
+        "web-artifacts.md"
+      ],
+      "token_file": "creative.json",
+      "exemplar_sites": [
+        "awwwards.com",
+        "c82.net",
+        "stripe.com/press",
+        "act-3.com",
+        "brutalistwebsites.com"
+      ],
+      "anti_patterns": [
+        "Safe/symmetric layouts",
+        "Subtle/subdued color palettes",
+        "Heroicons exclusively",
+        "Standard sans-serif fonts",
+        "Minimal flat design",
+        "Zero animation / motion",
+        "Card grid layouts",
+        "Photography with no post-treatment"
+      ]
+    },
+    "saas": {
+      "name": "SaaS / Business",
+      "aesthetic_label": "modern-professional",
+      "description": "The default. Clean, professional, polished. For general business software when no other domain matches.",
+      "color_mood": [
+        "blue",
+        "professional",
+        "clean",
+        "modern"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.985 0.003 250)",
+        "bg_secondary": "oklch(0.965 0.005 250)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.18 0.02 260)",
+        "text_secondary": "oklch(0.48 0.01 260)",
+        "text_heading": "oklch(0.12 0.025 260)",
+        "accent_primary": "oklch(0.55 0.20 255)",
+        "accent_secondary": "oklch(0.65 0.08 180)",
+        "border": "oklch(0.88 0.008 250)",
+        "error": "oklch(0.55 0.20 25)",
+        "success": "oklch(0.58 0.16 155)",
+        "warning": "oklch(0.72 0.14 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.12 0.01 260)",
+        "bg_secondary": "oklch(0.16 0.012 260)",
+        "bg_elevated": "oklch(0.21 0.015 260)",
+        "text_primary": "oklch(0.90 0.005 250)",
+        "text_secondary": "oklch(0.62 0.008 250)",
+        "text_heading": "oklch(0.95 0.003 250)",
+        "accent_primary": "oklch(0.70 0.20 255)",
+        "accent_secondary": "oklch(0.75 0.08 180)",
+        "border": "oklch(0.27 0.012 260)",
+        "error": "oklch(0.65 0.20 25)",
+        "success": "oklch(0.68 0.16 155)",
+        "warning": "oklch(0.78 0.14 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Inter', 'Plus Jakarta Sans', system-ui, sans-serif",
+        "heading_weight": "700",
+        "body_family": "'Inter', 'General Sans', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'JetBrains Mono', 'SF Mono', monospace",
+        "font_scale": "major-third",
+        "heading_letter_spacing": "-0.02em",
+        "body_line_height": "1.6",
+        "heading_line_height": "1.15",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "6px",
+        "medium": "8px",
+        "large": "12px",
+        "pill": "9999px"
+      },
+      "density": "normal",
+      "shadow_style": "standard",
+      "animation": {
+        "intensity": "moderate",
+        "style": "snappy",
+        "page_transitions": true,
+        "scroll_animations": false,
+        "micro_interactions": true
+      },
+      "layout_preference": "bento",
+      "max_content_width": "1280px",
+      "grid_columns": "12",
+      "imagery_style": "illustration",
+      "imagery_treatment": "contained",
+      "reference_files": [
+        "web-react.md",
+        "dataviz.md"
+      ],
+      "token_file": null,
+      "exemplar_sites": [
+        "linear.app",
+        "notion.so",
+        "figma.com",
+        "slack.com",
+        "stripe.com"
+      ],
+      "anti_patterns": [
+        "Purple-to-blue gradients in hero",
+        "Inter/Fira/Montserrat for headings",
+        "Equal 3-column layouts",
+        "Pure white backgrounds",
+        "Pure black dark mode",
+        "Material elevation shadows",
+        "Generic stock photography"
+      ]
+    },
+    "general": {
+      "name": "General / Unclassified",
+      "aesthetic_label": "neutral-modern",
+      "description": "Non-opinionated default. Clean, readable, accessible. Used when no other domain matches and user provides no industry context.",
+      "color_mood": [
+        "neutral",
+        "clean",
+        "accessible",
+        "non-opinionated"
+      ],
+      "primary_palette_oklch": {
+        "bg_primary": "oklch(0.985 0.003 250)",
+        "bg_secondary": "oklch(0.97 0.005 240)",
+        "bg_elevated": "oklch(1.0 0 0)",
+        "text_primary": "oklch(0.20 0.018 260)",
+        "text_secondary": "oklch(0.48 0.012 260)",
+        "text_heading": "oklch(0.15 0.025 260)",
+        "accent_primary": "oklch(0.50 0.16 250)",
+        "accent_secondary": "oklch(0.58 0.08 170)",
+        "border": "oklch(0.88 0.008 250)",
+        "error": "oklch(0.55 0.20 25)",
+        "success": "oklch(0.58 0.16 155)",
+        "warning": "oklch(0.72 0.14 80)"
+      },
+      "dark_mode_palette_oklch": {
+        "bg_primary": "oklch(0.13 0.01 260)",
+        "bg_secondary": "oklch(0.17 0.012 260)",
+        "bg_elevated": "oklch(0.22 0.015 260)",
+        "text_primary": "oklch(0.90 0.005 250)",
+        "text_secondary": "oklch(0.62 0.008 250)",
+        "text_heading": "oklch(0.95 0.003 250)",
+        "accent_primary": "oklch(0.65 0.16 250)",
+        "accent_secondary": "oklch(0.70 0.08 170)",
+        "border": "oklch(0.28 0.012 260)",
+        "error": "oklch(0.65 0.20 25)",
+        "success": "oklch(0.68 0.16 155)",
+        "warning": "oklch(0.78 0.14 80)"
+      },
+      "dark_default": false,
+      "typography": {
+        "heading_family": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        "heading_weight": "600",
+        "body_family": "'Source Sans 3', 'Inter', system-ui, sans-serif",
+        "body_weight": "400",
+        "mono_family": "'JetBrains Mono', 'SF Mono', monospace",
+        "font_scale": "major-third",
+        "heading_letter_spacing": "-0.02em",
+        "body_line_height": "1.6",
+        "heading_line_height": "1.2",
+        "heading_transform": "none"
+      },
+      "border_radius": {
+        "small": "6px",
+        "medium": "8px",
+        "large": "12px",
+        "pill": "9999px"
+      },
+      "density": "normal",
+      "shadow_style": "standard",
+      "animation": {
+        "intensity": "minimal",
+        "style": "snappy",
+        "page_transitions": true,
+        "scroll_animations": false,
+        "micro_interactions": true
+      },
+      "layout_preference": "bento",
+      "max_content_width": "1200px",
+      "grid_columns": "12",
+      "imagery_style": "screenshots",
+      "imagery_treatment": "contained",
+      "reference_files": [
+        "web-react.md"
+      ],
+      "token_file": null,
+      "exemplar_sites": [],
+      "anti_patterns": [
+        "Purple gradients",
+        "Inter as default heading font",
+        "Pure white backgrounds",
+        "Generic stock photography",
+        "Identical 3-column layouts"
+      ]
+    }
+  }
+}

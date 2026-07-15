@@ -2,17 +2,11 @@
 
 import { useCallback } from "react";
 
-import { Card } from "@/components/ui/card";
-
 interface ExampleQuestionsProps {
   onQuestionClick: (question: string) => void;
 }
 
-const questions = [
-  "춘천 1박2일 데이트 코스 추천해줘",
-  "춘천 맛집 베스트 3 알려줘",
-  "춘천에서 커플이 가기 좋은 카페",
-];
+const questions = ["작성하기", "학습하기", "코드", "일상"];
 
 export const ExampleQuestions = ({ onQuestionClick }: ExampleQuestionsProps) => {
   const handleClick = useCallback(
@@ -23,15 +17,16 @@ export const ExampleQuestions = ({ onQuestionClick }: ExampleQuestionsProps) => 
   );
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="flex flex-wrap items-center justify-center gap-2">
       {questions.map((q) => (
-        <Card
+        <button
           key={q}
+          type="button"
           onClick={() => handleClick(q)}
-          className="cursor-pointer rounded-xl border p-4 text-center text-sm text-muted-foreground transition-all hover:scale-[1.02] hover:border-primary/50 hover:text-foreground"
+          className="rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground"
         >
           {q}
-        </Card>
+        </button>
       ))}
     </div>
   );
