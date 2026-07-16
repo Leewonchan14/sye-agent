@@ -435,7 +435,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
               <PromptInputBody>
                 <PromptInputTextarea
                   placeholder="뭐 하고 싶어…?"
-                  disabled={streaming}
                   className="max-h-32 min-h-13 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
                 />
               </PromptInputBody>
