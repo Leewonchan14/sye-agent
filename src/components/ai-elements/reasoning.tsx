@@ -195,7 +195,7 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "text-muted-foreground/80 hover:text-foreground/90 flex w-full items-center gap-2 text-sm italic transition-colors",
+          "flex w-full items-center gap-2 text-sm text-muted-foreground/80 italic transition-colors hover:text-foreground/90",
           className
         )}
         {...props}
@@ -229,12 +229,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown
-        plugins={streamdownPlugins}
-        controls={{ table: { fullscreen: true } }}
-      >
-        {children}
-      </Streamdown>
+      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
     </CollapsibleContent>
   )
 );
