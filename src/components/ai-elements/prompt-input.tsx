@@ -934,6 +934,9 @@ export const PromptInputTextarea = ({
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
+  const [isMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
+  );
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = useCallback(
     (e) => {
@@ -950,6 +953,10 @@ export const PromptInputTextarea = ({
           return;
         }
         if (e.shiftKey) {
+          return;
+        }
+        // On mobile/touch devices, Enter should insert a newline, not submit
+        if (isMobile) {
           return;
         }
         e.preventDefault();
@@ -1115,7 +1122,7 @@ export const PromptInputButton = ({
       <TooltipTrigger>{button}</TooltipTrigger>
       <TooltipContent side={side}>
         {tooltipContent}
-        {shortcut && <span className="text-muted-foreground ml-2">{shortcut}</span>}
+        {shortcut && <span className="ml-2 text-muted-foreground">{shortcut}</span>}
       </TooltipContent>
     </Tooltip>
   );
@@ -1225,7 +1232,7 @@ export const PromptInputSelectTrigger = ({
 }: PromptInputSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
-      "text-muted-foreground border-none bg-transparent font-medium shadow-none transition-colors",
+      "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
       "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
       className
     )}
@@ -1297,7 +1304,7 @@ export const PromptInputTabLabel = ({
   // Content provided via children in props
   // oxlint-disable-next-line eslint-plugin-jsx-a11y(heading-has-content)
   <h3
-    className={cn("text-muted-foreground mb-2 px-3 text-xs font-medium", className)}
+    className={cn("mb-2 px-3 text-xs font-medium text-muted-foreground", className)}
     {...props}
   />
 );
@@ -1312,7 +1319,7 @@ export type PromptInputTabItemProps = HTMLAttributes<HTMLDivElement>;
 
 export const PromptInputTabItem = ({ className, ...props }: PromptInputTabItemProps) => (
   <div
-    className={cn("hover:bg-accent flex items-center gap-2 px-3 py-2 text-xs", className)}
+    className={cn("flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent", className)}
     {...props}
   />
 );

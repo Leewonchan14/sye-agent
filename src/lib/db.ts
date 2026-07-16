@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { v4 as uuidv4 } from "uuid";
 
 type SqlQueryResult = Record<string, unknown>[];
 
@@ -169,5 +170,5 @@ export const listSessionsPaginated = async (
 };
 
 export const getOrCreateSession = (sessionId?: string): string => {
-  return sessionId ?? crypto.randomUUID();
+  return sessionId ?? uuidv4();
 };

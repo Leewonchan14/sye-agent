@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useChat } from "@ai-sdk/react";
+import { v4 as uuidv4 } from "uuid";
 
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
@@ -44,7 +45,7 @@ import { useAuthStore } from "@/lib/auth-store";
 export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string }) => {
   const router = useRouter();
   const [sessionId, setSessionId] = useState(
-    () => initialSessionId ?? crypto.randomUUID()
+    () => initialSessionId ?? uuidv4()
   );
   const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
     defaultValue: false,
@@ -73,7 +74,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
   });
 
   const onNew = useCallback(() => {
-    setSessionId(crypto.randomUUID());
+    setSessionId(uuidv4());
     router.push("/");
   }, [router]);
 
