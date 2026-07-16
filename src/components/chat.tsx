@@ -270,6 +270,12 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     (text: string) => {
       if (status !== "ready") return;
       scheduleInvalidate();
+
+      // "사랑해" easter egg — trigger hearts
+      if (text.includes("사랑해") || text.includes("좋아해")) {
+        setShowHearts(true);
+      }
+
       sendMessage({ text });
     },
     [status, sendMessage, scheduleInvalidate]
@@ -505,7 +511,7 @@ const phrases = [
   "사랑해…! 하고 말해봐…♪",
   "좋아한다고… 말해줘…!",
   "예은님 마음… 궁금해…!",
-  "BMW 분석해볼까…!",
+  "파나소닉 분석해볼까…!",
   "홍콩관광청 뉴스 볼래…!",
   "파나소닉 조회 해볼래…!",
   "브랜드 모니터링 해줘…!",

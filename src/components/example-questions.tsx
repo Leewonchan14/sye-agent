@@ -9,6 +9,7 @@ interface Props {
 }
 
 const suggestions = [
+  { label: "사랑해!", prompt: "사랑해!" },
   { label: "데이트 코스 추천", prompt: "데이트 코스 추천해줘…!" },
   {
     label: "오늘 뭐하지?",
