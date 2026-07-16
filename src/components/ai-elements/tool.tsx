@@ -91,6 +91,8 @@ const toolNameKoreanMap: Record<string, string> = {
   web_fetch_exa: "웹 내용 읽기",
   /* brand monitoring tools */
   brand_monitor: "데이터 수집 및 분석",
+  /* utility */
+  get_current_time: "현재 시각",
 };
 
 const formatToolName = (name: string): string => {

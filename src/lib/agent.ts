@@ -4,6 +4,7 @@ import { ToolLoopAgent, isStepCount } from "ai";
 
 import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
 import { brandMonitor } from "@/lib/tools/brand-monitoring";
+import { getCurrentTime } from "@/lib/tools/current-time";
 import { exaTools } from "@/lib/tools/exa";
 import { naverTools } from "@/lib/tools/naver";
 
@@ -33,6 +34,7 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
       ...naverTools,
       ...exa,
       brand_monitor: brandMonitor,
+      get_current_time: getCurrentTime,
     },
     stopWhen: isStepCount(100),
   }) as unknown as ToolLoopAgent;

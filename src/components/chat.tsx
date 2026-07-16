@@ -354,7 +354,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 ))}
                 {streaming && (
                   <div
-                    className="px-3 py-2 text-sm"
+                    className="animate-bounce px-3 py-2 text-sm"
                     style={{ color: "var(--color-muted)" }}
                   >
                     생각 중이에요…♪

@@ -206,9 +206,9 @@ const searchViaGoogle = async (
     if (!res.ok) return items;
 
     const html = await res.text();
+
     // Extract search result snippets
     const linkRegex = /<a[^>]*href="(\/url\?q=[^"&]+|https?:\/\/[^"]+)"[^>]*>/g;
-    const snippetRegex = /<div[^>]*data-sncf[^>]*>[\s\S]*?<\/div>/g;
 
     const links: string[] = [];
     let linkMatch: RegExpExecArray | null;
@@ -414,14 +414,15 @@ export async function crawlBrand(
 
 export const brandMonitor = tool({
   description: `지정 브랜드의 여러 채널에서 데이터를 수집하고, 키워드 추출과 인플루언서 분석까지 한 번에 수행합니다.
-채널: news(뉴스), blog(블로그), instagram(인스타그램), twitter(트위터/X), community(커뮤니티=네이버카페)
+채널: news(뉴스), blog(블로그), community(커뮤니티=네이버카페)
+인스타그램/트위터(X)는 brand_monitor로 수집하지 않고 web_search_exa 도구로 직접 검색해주세요.
 반환: items(수집 데이터) + keywords(TF-IDF 키워드) + influencers(작성자 분석)`,
   inputSchema: z.object({
     brand: z.string().describe("모니터링할 브랜드명"),
     channels: z
       .array(z.enum(["news", "blog", "instagram", "twitter", "community"]))
-      .default(["news", "blog", "community", "instagram", "twitter"])
-      .describe("수집할 채널 목록"),
+      .default(["news", "blog", "community"])
+      .describe("수집할 채널 목록 (인스타그램/트위터는 web_search_exa로 직접 검색)"),
     period: z.string().default("최근 7일").describe("분석 기간"),
     maxPerChannel: z
       .number()
