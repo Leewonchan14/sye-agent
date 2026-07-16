@@ -304,7 +304,32 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     return result;
   }, [rawMessages]);
 
-  const streaming = status === "submitted" || status === "streaming";
+  const streaming = useMemo(
+    () => status === "submitted" || status === "streaming",
+    [status]
+  );
+
+  const showLoader = useMemo(() => {
+    if (status === "submitted") return true;
+
+    const lastMessage = messages.at(-1);
+    if (status !== "streaming" || lastMessage?.role !== "assistant") return false;
+
+    // reasoning 아니고, pending tool이 없고, text도 없어야 함 (tool 완료 → 다음 LLM 대기)
+    const isReasoning = lastMessage.parts.at(-1)?.type === "reasoning";
+
+    if (isReasoning) return false;
+
+    const hasLastText = lastMessage.parts.at(-1)?.type === "text";
+    if (streaming && hasLastText) return false;
+
+    const hasPendingTool = lastMessage.parts.some(
+      (part) => "output" in part && part.type.includes("tool") && !part.output
+    );
+
+    return !hasPendingTool;
+  }, [status, messages]);
+
   const hasMsgs = messages.length > 0;
 
   return (
@@ -352,12 +377,12 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                     />
                   </MessageScrollerItem>
                 ))}
-                {streaming && (
-                  <div
-                    className="animate-bounce px-3 py-2 text-sm"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    생각 중이에요…♪
+                {showLoader && (
+                  <div className="flex animate-bounce items-center gap-2 px-3 py-2">
+                    <Avatar size="sm" className="inline-flex md:hidden">
+                      <AvatarImage src="/munjackgui.png" alt="치이카와" />
+                    </Avatar>
+                    <span className="text-sm text-muted-foreground">생각 중이에요…♪</span>
                   </div>
                 )}
               </MessageScrollerContent>
