@@ -88,7 +88,7 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
       ref={tableContainerRef}
       data-streamdown="table-wrapper"
       className={cn(
-        "border-border bg-sidebar my-4 flex flex-col gap-2 rounded-lg border p-2",
+        "my-4 flex flex-col gap-2 rounded-lg border border-border bg-sidebar p-2",
         className
       )}
     >
@@ -97,7 +97,7 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
         {/* Copy dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Copy table"
           >
             {copied ? (
@@ -106,7 +106,7 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
               <CopyIcon className="size-4" />
             )}
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4} className="bg-canvas-card">
+          <DropdownMenuContent align="end" sideOffset={4}>
             <DropdownMenuItem onClick={() => handleCopy("md")}>
               Copy as Markdown
             </DropdownMenuItem>
@@ -122,12 +122,12 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
         {/* Download dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Download table"
           >
             <DownloadIcon className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4} className="bg-canvas-card">
+          <DropdownMenuContent align="end" sideOffset={4}>
             <DropdownMenuItem onClick={() => handleDownload("csv")}>
               Download as CSV
             </DropdownMenuItem>
@@ -140,7 +140,7 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
         {/* Fullscreen trigger */}
         <button
           type="button"
-          className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="View fullscreen"
           onClick={() => setFullscreenOpen(true)}
         >
@@ -149,8 +149,8 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
       </div>
 
       {/* Table container */}
-      <div className="border-border overflow-x-auto overflow-y-auto rounded-md border bg-canvas-card">
-        <table data-streamdown="table" className="divide-border w-full divide-y">
+      <div className="overflow-x-auto overflow-y-auto rounded-md border border-border bg-canvas-card">
+        <table data-streamdown="table" className="w-full divide-y divide-border">
           {children}
         </table>
       </div>
@@ -159,11 +159,11 @@ export const TableWrapper = ({ children, className }: TableWrapperProps) => {
       <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
         <DialogContent className="flex max-h-[95vh] max-w-[95vw] flex-col bg-canvas-card">
           <DialogTitle className="sr-only">Table fullscreen view</DialogTitle>
-          <DialogClose className="text-muted-foreground hover:bg-muted hover:text-foreground absolute top-2 right-2 z-10 flex size-7 cursor-pointer items-center justify-center rounded-md transition-colors outline-none">
+          <DialogClose className="absolute top-2 right-2 z-10 flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground">
             <XIcon className="size-4" />
           </DialogClose>
           <div className="flex-1 overflow-auto rounded-md p-4">
-            <table className="divide-border w-full border-collapse divide-y">
+            <table className="w-full border-collapse divide-y divide-border">
               {children}
             </table>
           </div>

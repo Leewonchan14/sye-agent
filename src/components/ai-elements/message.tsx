@@ -3,6 +3,7 @@
 import { TableWrapper } from "@/components/ai-elements/table";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -26,6 +27,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { Streamdown } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -304,6 +306,50 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
+const LinkSafetyModalWrapper = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  url,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  url: string;
+}) => {
+  if (!isOpen) return null;
+  return createPortal(
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogTitle>외부 링크로 이동할까요?</DialogTitle>
+        <p className="text-muted-foreground text-sm">
+          외부 사이트로 이동합니다. 링크를 열겠어요?
+        </p>
+        <div className="bg-muted rounded-md p-3 font-mono text-sm break-all">{url}</div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            취소
+          </Button>
+          <Button className="flex-1" onClick={onConfirm}>
+            열기
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>,
+    document.body
+  );
+};
+
+const streamdownLinkSafety = {
+  enabled: true,
+  renderModal: (props: {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    url: string;
+  }) => <LinkSafetyModalWrapper {...props} />,
+};
+
 const streamdownPlugins = { cjk, code, math, mermaid };
 
 export const MessageResponse = memo(
@@ -314,6 +360,7 @@ export const MessageResponse = memo(
       components={{
         table: TableWrapper,
       }}
+      linkSafety={streamdownLinkSafety}
       {...props}
     />
   ),
