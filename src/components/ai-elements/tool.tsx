@@ -93,7 +93,6 @@ const toolNameKoreanMap: Record<string, string> = {
   brand_monitor: "데이터 수집 및 분석",
   /* utility */
   get_current_time: "현재 시각",
-  chuncheon_travel_plan: "춘천 여행 계획",
 };
 
 const formatToolName = (name: string): string => {
