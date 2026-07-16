@@ -8,6 +8,7 @@ export const getCurrentTime = tool({
     const now = new Intl.DateTimeFormat("ko-KR", {
       dateStyle: "full",
       timeStyle: "medium",
+      timeZone: "Asia/Seoul",
     }).format(new Date());
     return { currentTime: now };
   },
