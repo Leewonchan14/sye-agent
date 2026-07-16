@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth";
-import { listSessions } from "@/lib/db";
+import { listSessionsPaginated } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,10 +9,14 @@ export const GET = async (req: Request) => {
   if (authError) return authError;
 
   try {
-    const sessions = await listSessions();
-    return Response.json({ sessions });
+    const url = new URL(req.url);
+    const cursor = url.searchParams.get("cursor") ?? undefined;
+    const limit = Number(url.searchParams.get("limit")) || 10;
+
+    const result = await listSessionsPaginated({ cursor, limit });
+    return Response.json(result);
   } catch (error) {
     console.error("Failed to fetch sessions:", error);
-    return Response.json({ sessions: [] });
+    return Response.json({ sessions: [], nextCursor: null });
   }
 };

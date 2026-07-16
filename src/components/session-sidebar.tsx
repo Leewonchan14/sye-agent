@@ -1,6 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Heart, LogOut, PanelLeft, Plus } from "lucide-react";
 
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
@@ -33,16 +35,46 @@ export const SessionSidebar = ({
   onToggle,
 }: Props) => {
   const tk = useAuthStore((s) => s.token);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { data: sessions = [], isLoading: loading } = useQuery({
+  const {
+    data,
+    isLoading: loading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["sessions"],
-    queryFn: async () => {
-      const r = await fetch("/api/sessions", { headers: { "x-auth-token": tk } });
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam) params.set("cursor", pageParam);
+      const r = await fetch(`/api/sessions?${params}`, {
+        headers: { "x-auth-token": tk },
+      });
       const d = await r.json();
-      return (d.sessions ?? []) as Session[];
+      return d as { sessions: Session[]; nextCursor: string | null };
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     staleTime: 10_000,
   });
+
+  const sessions = data?.pages.flatMap((p) => p.sessions) ?? [];
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const logout = useAuthStore((s) => s.logout);
 
@@ -144,6 +176,16 @@ export const SessionSidebar = ({
                 </button>
               );
             })}
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="h-px" />
+            {isFetchingNextPage && (
+              <div
+                className="px-3 py-3 text-center text-xs"
+                style={{ color: css("color-muted-soft") }}
+              >
+                불러오는 중…
+              </div>
+            )}
           </nav>
 
           {/* Logout */}
