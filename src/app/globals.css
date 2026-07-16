@@ -239,3 +239,44 @@ body {
 .animate-heart-float {
   animation: heart-float var(--duration, 3s) ease-out var(--delay, 0s) forwards;
 }
+
+/* Streamdown: hide empty code block header when no language specified */
+[data-streamdown="code-block-header"][data-language=""] {
+  display: none;
+}
+
+/* Streamdown: fix code block layout — language + buttons in same row, sticky preserved */
+[data-streamdown="code-block"] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "header actions"
+    "body   body";
+  align-items: start;
+}
+
+[data-streamdown="code-block-header"] {
+  grid-area: header;
+}
+
+[data-streamdown="code-block-body"] {
+  grid-area: body;
+}
+
+[data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]) {
+  grid-area: actions;
+  position: sticky !important;
+  top: 8px;
+  z-index: 10;
+  align-self: start;
+  justify-self: end;
+  margin-top: 0 !important;
+  pointer-events: auto;
+}
+
+/* Streamdown: soften inline code background */
+[data-streamdown="inline-code"] {
+  background-color: color-mix(in srgb, var(--color-muted) 50%, transparent);
+  color: inherit;
+}
