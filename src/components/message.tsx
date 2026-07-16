@@ -69,7 +69,7 @@ export const MessageItem = ({
   return (
     <Message from="assistant">
       <div className="flex items-start gap-3">
-        <Avatar size="default">
+        <Avatar size="default" className="hidden md:inline-flex">
           <AvatarImage src="/munjackgui.png" alt="치이카와" />
         </Avatar>
         <div className="min-w-0 flex-1">

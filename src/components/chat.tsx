@@ -68,7 +68,6 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
       const d = await res.json();
       return d.valid === true;
     },
-    enabled: !!token,
     retry: 1,
     staleTime: 0,
   });
@@ -339,7 +338,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         <MessageScrollerProvider autoScroll>
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
-              <MessageScrollerContent className="mx-auto max-w-180 px-4">
+              <MessageScrollerContent className="mx-auto max-w-180 px-4 pt-12">
                 {messages.map((m, idx) => (
                   <MessageScrollerItem
                     key={m.id}
