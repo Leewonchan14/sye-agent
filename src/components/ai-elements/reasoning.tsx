@@ -21,7 +21,6 @@ import {
   useState,
 } from "react";
 
-import { TableWrapper } from "@/components/ai-elements/table";
 import {
   Collapsible,
   CollapsibleContent,
@@ -232,9 +231,7 @@ export const ReasoningContent = memo(
     >
       <Streamdown
         plugins={streamdownPlugins}
-        components={{
-          table: TableWrapper,
-        }}
+        controls={{ table: { fullscreen: true } }}
       >
         {children}
       </Streamdown>

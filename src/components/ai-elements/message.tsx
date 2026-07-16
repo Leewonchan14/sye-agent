@@ -1,6 +1,5 @@
 "use client";
 
-import { TableWrapper } from "@/components/ai-elements/table";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -55,7 +54,7 @@ export const MessageContent = ({
   <div
     className={cn(
       "is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:bg-secondary group-[.is-user]:text-foreground group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:px-4 group-[.is-user]:py-3",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
       "group-[.is-assistant]:text-foreground",
       className
     )}
@@ -294,7 +293,7 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
   return (
     <ButtonGroupText
       className={cn(
-        "text-muted-foreground border-none bg-transparent shadow-none",
+        "border-none bg-transparent text-muted-foreground shadow-none",
         className
       )}
       {...props}
@@ -322,10 +321,10 @@ const LinkSafetyModalWrapper = ({
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogTitle>외부 링크로 이동할까요?</DialogTitle>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           외부 사이트로 이동합니다. 링크를 열겠어요?
         </p>
-        <div className="bg-muted rounded-md p-3 font-mono text-sm break-all">{url}</div>
+        <div className="rounded-md bg-muted p-3 font-mono text-sm break-all">{url}</div>
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" onClick={onClose}>
             취소
@@ -357,10 +356,8 @@ export const MessageResponse = memo(
     <Streamdown
       className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
       plugins={streamdownPlugins}
-      components={{
-        table: TableWrapper,
-      }}
       linkSafety={streamdownLinkSafety}
+      controls={{ table: { fullscreen: false } }}
       {...props}
     />
   ),

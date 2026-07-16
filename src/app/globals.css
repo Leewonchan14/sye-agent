@@ -280,3 +280,13 @@ body {
   background-color: color-mix(in srgb, var(--color-muted) 50%, transparent);
   color: inherit;
 }
+
+/* Streamdown: table cell background */
+[data-streamdown="table-cell"] {
+  background-color: var(--color-canvas-card);
+}
+
+/* Streamdown: remove border from code block action buttons */
+[data-streamdown="code-block-actions"] {
+  border: none !important;
+}
