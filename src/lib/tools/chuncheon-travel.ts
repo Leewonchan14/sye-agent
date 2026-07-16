@@ -2,16 +2,10 @@ import { tool } from "ai";
 import { z } from "zod/v4";
 
 export const chuncheonTravelPlan = tool({
-  description: "춘천 여행 계획을 제공합니다. 날짜, 인원 등을 선택하면 맞춤형 여행 일정을 보여줍니다.",
-  inputSchema: z.object({
-    date: z.string().describe("여행 날짜 (예: 2026-07-18)").optional(),
-    groupSize: z.number().describe("여행 인원").optional().default(2),
-    interests: z
-      .array(z.enum(["food", "nature", "culture", "cafe", "activity"]))
-      .describe("관심사 (food, nature, culture, cafe, activity)")
-      .optional(),
-  }),
-  execute: async ({ date, groupSize, interests }) => {
+  description:
+    "현재 계획 중인 춘천 여행 일정을 보여줍니다. 2박 3일 코스, 맛집, 카페, 관광지 정보가 포함되어 있습니다.",
+  inputSchema: z.object({}),
+  execute: async () => {
     const day1 = `
 ## 1일차 | 7월 17일(금)
 
@@ -64,8 +58,8 @@ export const chuncheonTravelPlan = tool({
     const plan = `
 # 🗺️ 춘천 여행 계획
 
-> **여행 날짜**: ${date ?? "7월 17일(금) ~ 7월 18일(토)"}
-> **인원**: ${groupSize ?? 2}명
+**날짜**: 7월 17일(금) ~ 7월 19일(일)
+**인원**: 2명
 
 ---
 
@@ -76,8 +70,6 @@ ${day2}
 
     return {
       plan,
-      date: date ?? "미정",
-      groupSize: groupSize ?? 2,
       location: "춘천, 강원도",
     };
   },
