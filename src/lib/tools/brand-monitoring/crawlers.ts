@@ -1,9 +1,10 @@
+import Parser from "rss-parser";
 import { z } from "zod/v4";
 
 import { tool } from "ai";
 
-import { extractKeywords } from "./analyze-keywords";
 import { detectInfluencers } from "./analyze-influencers";
+import { extractKeywords } from "./analyze-keywords";
 
 // ── Shared types ────────────────────────────────────────────
 
@@ -20,12 +21,7 @@ export type BrandMentionItem = {
   source_id?: string;
 };
 
-type CrawlChannel =
-  | "news"
-  | "blog"
-  | "instagram"
-  | "twitter"
-  | "community";
+type CrawlChannel = "news" | "blog" | "instagram" | "twitter" | "community";
 
 const CHANNEL_NAMES: Record<CrawlChannel, string> = {
   news: "뉴스",
@@ -43,7 +39,7 @@ type NaverFetchResult<T> = { items: T[] } | { error: string };
 
 const naverFetch = async <T>(
   endpoint: string,
-  params: Record<string, string | number | undefined>,
+  params: Record<string, string | number | undefined>
 ): Promise<NaverFetchResult<T>> => {
   const query = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== "")
@@ -73,45 +69,33 @@ const stripHtml = (text: string): string =>
 
 // ─── Google News RSS ───────────────────────────────────────────
 
+const rssParser = new Parser({
+  headers: { "User-Agent": "Mozilla/5.0" },
+});
+
 const fetchGoogleNewsRSS = async (
   brand: string,
-  maxItems: number,
+  maxItems: number
 ): Promise<BrandMentionItem[]> => {
   const items: BrandMentionItem[] = [];
   try {
     const url = `https://news.google.com/rss/search?q=${encodeURIComponent(brand)}&hl=ko&gl=KR&ceid=KR:ko`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-    if (!res.ok) return items;
-
-    const xml = await res.text();
-    // Simple XML parsing for RSS
-    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-    let match: RegExpExecArray | null;
-    let idx = 0;
-
-    while ((match = itemRegex.exec(xml)) !== null && idx < maxItems) {
-      const itemXml = match[1];
-      const title = extractXmlValue(itemXml, "title");
-      const link = extractXmlValue(itemXml, "link");
-      const pubDate = extractXmlValue(itemXml, "pubDate");
-      const source = extractXmlValue(itemXml, "source");
-
-      if (title) {
-        items.push({
-          id: `gn-${idx}-${Date.now()}`,
-          brand,
-          title: stripHtml(title),
-          content: title,
-          channel: "news",
-          url: link || "",
-          author: source || null,
-          date: pubDate || null,
-          mentions: 1,
-        });
-        idx++;
-      }
+    const feed = await rssParser.parseURL(url);
+    const sliced = (feed.items ?? []).slice(0, maxItems);
+    for (let i = 0; i < sliced.length; i++) {
+      const entry = sliced[i];
+      if (!entry.title) continue;
+      items.push({
+        id: `gn-${i}-${Date.now()}`,
+        brand,
+        title: entry.title,
+        content: entry.contentSnippet || entry.title,
+        channel: "news",
+        url: entry.link || "",
+        author: entry.creator || entry.author || null,
+        date: entry.pubDate || entry.isoDate || null,
+        mentions: 1,
+      });
     }
   } catch {
     // RSS is optional; silently fail
@@ -119,17 +103,11 @@ const fetchGoogleNewsRSS = async (
   return items;
 };
 
-const extractXmlValue = (xml: string, tag: string): string => {
-  const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`);
-  const m = regex.exec(xml);
-  return m ? m[1].trim() : "";
-};
-
 // ─── Naver News ────────────────────────────────────────────────
 
 const fetchNaverNews = async (
   brand: string,
-  maxItems: number,
+  maxItems: number
 ): Promise<BrandMentionItem[]> => {
   const result = await naverFetch<Record<string, unknown>>("news", {
     query: brand,
@@ -156,7 +134,7 @@ const fetchNaverNews = async (
 
 const fetchNaverBlog = async (
   brand: string,
-  maxItems: number,
+  maxItems: number
 ): Promise<BrandMentionItem[]> => {
   const result = await naverFetch<Record<string, unknown>>("blog", {
     query: brand,
@@ -183,7 +161,7 @@ const fetchNaverBlog = async (
 
 const fetchNaverCafe = async (
   brand: string,
-  maxItems: number,
+  maxItems: number
 ): Promise<BrandMentionItem[]> => {
   const result = await naverFetch<Record<string, unknown>>("cafearticle", {
     query: brand,
@@ -212,7 +190,7 @@ const searchViaGoogle = async (
   brand: string,
   site: string,
   channel: CrawlChannel,
-  maxItems: number,
+  maxItems: number
 ): Promise<BrandMentionItem[]> => {
   const items: BrandMentionItem[] = [];
   try {
@@ -255,7 +233,8 @@ const searchViaGoogle = async (
 
     // Get snippets
     const snippets: string[] = [];
-    const spanRegex = /<span[^>]*class=["']?[^"']*?(?:st|aCOpRe)[^"']*["']?[^>]*>([\s\S]*?)<\/span>/g;
+    const spanRegex =
+      /<span[^>]*class=["']?[^"']*?(?:st|aCOpRe)[^"']*["']?[^>]*>([\s\S]*?)<\/span>/g;
     let spanMatch: RegExpExecArray | null;
     while ((spanMatch = spanRegex.exec(html)) !== null) {
       snippets.push(stripHtml(spanMatch[1]));
@@ -285,7 +264,7 @@ const searchViaGoogle = async (
 const crawlChannel = async (
   brand: string,
   channel: CrawlChannel,
-  maxItems: number,
+  maxItems: number
 ): Promise<BrandMentionItem[]> => {
   switch (channel) {
     case "news": {
@@ -318,7 +297,7 @@ const crawlChannel = async (
 // ─── Period parsing ─────────────────────────────────────────────
 
 const parsePeriod = (
-  period: string,
+  period: string
 ): { startDate: string; endDate: string; label: string } => {
   const now = new Date();
 
@@ -327,15 +306,13 @@ const parsePeriod = (
   if (recentMatch) {
     const days = parseInt(recentMatch[1], 10);
     const end = now.toISOString().split("T")[0];
-    const start = new Date(now.getTime() - days * 86400000)
-      .toISOString()
-      .split("T")[0];
+    const start = new Date(now.getTime() - days * 86400000).toISOString().split("T")[0];
     return { startDate: start, endDate: end, label: `최근 ${days}일` };
   }
 
   // "YYYY-MM-DD~YYYY-MM-DD" pattern
   const rangeMatch = period.match(
-    /(\d{4}[.-]\d{1,2}[.-]\d{1,2})\s*[~\-∼]\s*(\d{4}[.-]\d{1,2}[.-]\d{1,2})/,
+    /(\d{4}[.-]\d{1,2}[.-]\d{1,2})\s*[~\-∼]\s*(\d{4}[.-]\d{1,2}[.-]\d{1,2})/
   );
   if (rangeMatch) {
     const normalize = (d: string) => d.replace(/[.-]/g, "-");
@@ -348,9 +325,7 @@ const parsePeriod = (
 
   // Default: last 7 days
   const end = now.toISOString().split("T")[0];
-  const start = new Date(now.getTime() - 7 * 86400000)
-    .toISOString()
-    .split("T")[0];
+  const start = new Date(now.getTime() - 7 * 86400000).toISOString().split("T")[0];
   return { startDate: start, endDate: end, label: "최근 7일" };
 };
 
@@ -383,7 +358,7 @@ export async function crawlBrand(
   brand: string,
   channels: CrawlChannel[],
   period: string,
-  maxPerChannel: number,
+  maxPerChannel: number
 ): Promise<CrawlResult> {
   const periodInfo = parsePeriod(period);
 
@@ -391,7 +366,7 @@ export async function crawlBrand(
     channels.map(async (ch) => {
       const items = await crawlChannel(brand, ch, maxPerChannel);
       return { channel: ch, items };
-    }),
+    })
   );
 
   const allItems: BrandMentionItem[] = [];
@@ -447,10 +422,7 @@ export const brandMonitor = tool({
       .array(z.enum(["news", "blog", "instagram", "twitter", "community"]))
       .default(["news", "blog", "community", "instagram", "twitter"])
       .describe("수집할 채널 목록"),
-    period: z
-      .string()
-      .default("최근 7일")
-      .describe("분석 기간"),
+    period: z.string().default("최근 7일").describe("분석 기간"),
     maxPerChannel: z
       .number()
       .min(1)

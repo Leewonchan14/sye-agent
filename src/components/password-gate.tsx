@@ -85,12 +85,12 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
           alt="munjackgu"
           width={80}
           height={80}
-          className="border-primary rounded-full border-2"
+          className="rounded-full border-2 border-primary"
           priority
         />
 
         <h1 className="text-lg font-medium" style={{ color: "var(--color-ink)" }}>
-          치이카와 데이트 메이트
+          치이카와 메이트
         </h1>
 
         <p
@@ -120,7 +120,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
 
           <Button
             type="submit"
-            className="border-primary w-full border"
+            className="w-full border border-primary"
             disabled={isLoading || !password.trim()}
           >
             {isLoading ? "확인 중..." : "입장하기"}

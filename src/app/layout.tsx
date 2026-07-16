@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "원찬 & 예은 — 둘만의 데이트",
   description:
-    "이원찬과 성예은, 둘만의 특별한 데이트를 함께 계획하는 공간이에요…♪ 작고 귀여운 치이카와가 데이트 메이트로 함께해요.",
+    "이원찬과 성예은, 둘만의 특별한 데이트를 함께 계획하는 공간이에요…♪ 작고 귀여운 치이카와가 메이트로 함께해요.",
   icons: {
     icon: [{ url: "/munjackgui.png", sizes: "384x384", type: "image/png" }],
     apple: { url: "/munjackgui.png", sizes: "384x384", type: "image/png" },

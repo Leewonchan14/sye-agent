@@ -139,7 +139,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
           className="flex-1 text-sm font-medium"
           style={{ color: "var(--color-ink)" }}
         >
-          치이카와 데이트 메이트
+          치이카와 메이트
         </span>
         <Button variant="ghost" size="icon" onClick={logout} aria-label="Logout">
           <LogOut className="h-5 w-5" />
@@ -385,7 +385,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
             >
               <PromptInputBody>
                 <PromptInputTextarea
-                  placeholder="어디로 데이트하러 갈까요…?"
+                  placeholder="뭐 하고 싶어…?"
                   disabled={streaming}
                   className="max-h-32 min-h-13 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
                 />
@@ -462,6 +462,10 @@ const phrases = [
   "사랑해…! 하고 말해봐…♪",
   "좋아한다고… 말해줘…!",
   "예은님 마음… 궁금해…!",
+  "브랜드 조회 해볼래…!",
+  "BMW 분석해볼까…!",
+  "모니터링 해줘…!",
+  "브랜드 뉴스 수집…!",
 ];
 
 const RotatingPhrase = () => {

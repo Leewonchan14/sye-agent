@@ -9,12 +9,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  ClockIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { CheckCircleIcon, ChevronDownIcon, ClockIcon, XCircleIcon } from "lucide-react";
 
 import { Spinner } from "@/components/ui/spinner";
 import type { ComponentProps, ReactNode } from "react";

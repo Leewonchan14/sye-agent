@@ -42,7 +42,7 @@ export interface InfluencerOutput {
 // ── Detection Function (async — yields between processing blocks) ──
 
 export async function detectInfluencers(
-  items: InfluencerInput[],
+  items: InfluencerInput[]
 ): Promise<InfluencerOutput> {
   if (!items || items.length === 0) {
     return { influencers: [], total_authors: 0, summary: {} };
@@ -63,11 +63,7 @@ export async function detectInfluencers(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const author =
-      item.author ||
-      item.bloggername ||
-      item.cafename ||
-      item.nickname ||
-      "";
+      item.author || item.bloggername || item.cafename || item.nickname || "";
     if (!author || author.length < 2) continue;
 
     let entry = authorMap.get(author);
@@ -106,8 +102,7 @@ export async function detectInfluencers(
     const channelCount = data.channels.size;
     const avgSentiment =
       data.sentimentScores.length > 0
-        ? data.sentimentScores.reduce((a, b) => a + b, 0) /
-          data.sentimentScores.length
+        ? data.sentimentScores.reduce((a, b) => a + b, 0) / data.sentimentScores.length
         : 0;
 
     const influenceScore =
