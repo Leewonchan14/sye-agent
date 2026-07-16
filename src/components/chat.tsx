@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { sample } from "lodash";
 import { LogOut, Menu } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
@@ -44,9 +44,7 @@ import { useAuthStore } from "@/lib/auth-store";
 
 export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string }) => {
   const router = useRouter();
-  const [sessionId, setSessionId] = useState(
-    () => initialSessionId ?? uuidv4()
-  );
+  const [sessionId, setSessionId] = useState(() => initialSessionId ?? uuidv4());
   const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
     defaultValue: false,
   });
@@ -54,6 +52,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
   const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
+  const queryClient = useQueryClient();
 
   const {
     data: isValid,
@@ -75,14 +74,16 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
   const onNew = useCallback(() => {
     setSessionId(uuidv4());
+    queryClient.invalidateQueries({ queryKey: ["sessions"] });
     router.push("/");
-  }, [router]);
+  }, [router, queryClient]);
 
   const onSelect = useCallback(
     (id: string) => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       router.push(`/${id}`);
     },
-    [router]
+    [router, queryClient]
   );
 
   const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
@@ -183,6 +184,7 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const tk = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
 
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
@@ -221,9 +223,11 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           "x-auth-token": tk,
         },
         body: JSON.stringify({ sessionId, messages: allMessages }),
-      }).catch((err) =>
-        console.error("Failed to save session state from frontend:", err)
-      );
+      })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["sessions"] }))
+        .catch((err) =>
+          console.error("Failed to save session state from frontend:", err)
+        );
     },
   });
 
@@ -233,6 +237,14 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       setMessages(initialMessages as Parameters<typeof setMessages>[0]);
     }
   }, [initialMessages, setMessages]);
+
+  // Invalidate sessions cache on unmount (catches mid-stream navigation
+  // where onFinish doesn't fire, e.g. browser back, URL change)
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    };
+  }, [queryClient]);
 
   const [showHearts, setShowHearts] = useState(false);
 
