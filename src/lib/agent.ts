@@ -3,10 +3,11 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ToolLoopAgent, isStepCount } from "ai";
 
 import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
+import { brandMonitor } from "@/lib/tools/brand-monitoring";
 import { exaTools } from "@/lib/tools/exa";
 import { naverTools } from "@/lib/tools/naver";
 
-const opencode = createOpenAICompatible({
+export const opencode = createOpenAICompatible({
   name: "opencode-go",
   baseURL: "https://opencode.ai/zen/go/v1",
   headers: {
@@ -25,12 +26,13 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
     id: "trable-agent",
     model: opencode("deepseek-v4-flash"),
     providerOptions: {
-      "opencode-go": { reasoningEffort: "xhigh" },
+      opencodeGo: { reasoningEffort: "xhigh" },
     },
     instructions: AGENT_INSTRUCTIONS,
     tools: {
       ...naverTools,
       ...exa,
+      brand_monitor: brandMonitor,
     },
     stopWhen: isStepCount(100),
   }) as unknown as ToolLoopAgent;

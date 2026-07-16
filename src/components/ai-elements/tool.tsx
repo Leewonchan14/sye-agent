@@ -12,10 +12,11 @@ import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   CheckCircleIcon,
   ChevronDownIcon,
-  CircleIcon,
   ClockIcon,
   XCircleIcon,
 } from "lucide-react";
+
+import { Spinner } from "@/components/ui/spinner";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement } from "react";
 
@@ -70,8 +71,8 @@ const statusLabels: Record<ToolPart["state"], string> = {
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
   "approval-requested": <ClockIcon className="size-3" />,
   "approval-responded": <CheckCircleIcon className="size-3" />,
-  "input-available": <ClockIcon className="size-3" />,
-  "input-streaming": <CircleIcon className="size-3" />,
+  "input-available": <Spinner />,
+  "input-streaming": <Spinner />,
   "output-available": <CheckCircleIcon className="size-3" />,
   "output-denied": <XCircleIcon className="size-3" />,
   "output-error": <XCircleIcon className="size-3" />,
@@ -91,6 +92,8 @@ const toolNameKoreanMap: Record<string, string> = {
   search_naver_place: "네이버 플레이스 검색",
   web_search_exa: "웹에서 찾기",
   web_fetch_exa: "웹 내용 읽기",
+  /* brand monitoring tools */
+  brand_monitor: "데이터 수집 및 분석",
 };
 
 const formatToolName = (name: string): string => {
@@ -120,7 +123,7 @@ export const ToolHeader = ({
     >
       <div className="flex items-center gap-2">
         <Tooltip>
-          <TooltipTrigger>
+          <TooltipTrigger render={<span className="inline-flex" />}>
             <img
               src="/munjackgui-thinking.png"
               alt=""
