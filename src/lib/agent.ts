@@ -32,7 +32,7 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
       ...naverTools,
       ...exa,
     },
-    stopWhen: isStepCount(10),
+    stopWhen: isStepCount(100),
   }) as unknown as ToolLoopAgent;
 
   return agent;
