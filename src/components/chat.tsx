@@ -5,7 +5,7 @@ import { sample } from "lodash";
 import { LogOut, Menu } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -39,6 +39,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { useAuthStore } from "@/lib/auth-store";
+import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
 
 /* ── ChatShell ── */
 
@@ -186,6 +187,11 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const tk = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
 
+  const { handleFinish } = useSessionSidebarSync({
+    sessionId,
+    token: tk ?? "",
+  });
+
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: async () => {
@@ -214,21 +220,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       body: { sessionId },
       headers: { "x-auth-token": tk },
     }),
-    onFinish: ({ messages: allMessages }) => {
-      // Save complete session state from frontend
-      fetch("/api/messages/session-state", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-auth-token": tk,
-        },
-        body: JSON.stringify({ sessionId, messages: allMessages }),
-      })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["sessions"] }))
-        .catch((err) =>
-          console.error("Failed to save session state from frontend:", err)
-        );
-    },
+    onFinish: handleFinish,
   });
 
   // Load saved messages into useChat once query resolves
@@ -248,10 +240,21 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
   const [showHearts, setShowHearts] = useState(false);
 
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const scheduleInvalidate = useCallback(() => {
+    if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current);
+    invalidateTimerRef.current = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    }, 2000);
+  }, [queryClient]);
+
   const handlePromptSubmit = useCallback(
     (message: { text: string }) => {
       if (!message.text.trim() || status !== "ready") return;
       const trimmed = message.text.trim();
+
+      scheduleInvalidate();
 
       // "사랑해" easter egg — trigger hearts
       if (trimmed.includes("사랑해") || trimmed.includes("좋아해")) {
@@ -260,14 +263,16 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       sendMessage({ text: trimmed });
     },
-    [status, sendMessage]
+    [status, sendMessage, scheduleInvalidate]
   );
 
   const handleQuestionClick = useCallback(
     (text: string) => {
-      if (status === "ready") sendMessage({ text });
+      if (status !== "ready") return;
+      scheduleInvalidate();
+      sendMessage({ text });
     },
-    [status, sendMessage]
+    [status, sendMessage, scheduleInvalidate]
   );
 
   /* ── Debounced loading: show ChatLoading only after 300ms ── */

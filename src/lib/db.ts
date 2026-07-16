@@ -68,6 +68,11 @@ export interface SessionInfo {
   lastActivity: string;
 }
 
+export interface SessionsPage {
+  sessions: SessionInfo[];
+  nextCursor: string | null;
+}
+
 interface SessionRow {
   session_id: string;
   title: string;
@@ -78,19 +83,14 @@ interface SessionRow {
 const encodeCursor = (updatedAt: string, sessionId: string): string =>
   Buffer.from(JSON.stringify([updatedAt, sessionId])).toString("base64");
 
-const decodeCursor = (
-  cursor: string
-): { updatedAt: string; sessionId: string } => {
-  const [updatedAt, sessionId] = JSON.parse(
-    Buffer.from(cursor, "base64").toString()
-  );
+const decodeCursor = (cursor: string): { updatedAt: string; sessionId: string } => {
+  const [updatedAt, sessionId] = JSON.parse(Buffer.from(cursor, "base64").toString());
   return { updatedAt, sessionId };
 };
 
 export const listSessions = async (): Promise<SessionInfo[]> => {
   await ensureStateTable();
-  const rows = await getSql()
-    `SELECT
+  const rows = await getSql()`SELECT
       session_id,
       COALESCE(
         messages->0->'parts'->0->>'text',
@@ -163,7 +163,10 @@ export const listSessionsPaginated = async (
 
   const nextCursor =
     hasMore && slice.length > 0
-      ? encodeCursor(slice[slice.length - 1].last_activity, slice[slice.length - 1].session_id)
+      ? encodeCursor(
+          slice[slice.length - 1].last_activity,
+          slice[slice.length - 1].session_id
+        )
       : null;
 
   return { sessions, nextCursor };
