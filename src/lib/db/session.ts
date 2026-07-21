@@ -1,5 +1,5 @@
 import type { TextUIPart, UIMessage } from "ai";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 import { getDb, schema } from "@/lib/db/db";
@@ -182,35 +182,49 @@ const toDateString = (d: Date | string | null): string => {
 
 export const searchSessions = async (
   query: string,
-  limit: number = 20
-): Promise<SessionSearchResult[]> => {
+  opts: { cursor?: string; limit?: number } = {}
+): Promise<{ results: SessionSearchResult[]; nextCursor: string | null }> => {
   const db = getDb();
 
-  if (!query.trim()) return [];
+  if (!query.trim()) return { results: [], nextCursor: null };
 
+  const limit = opts.limit ?? 20;
+  const take = limit + 1; // fetch one extra to detect next page
   const pattern = `%${query}%`;
 
-  // title / messages_text (trigram index) + JSONB fallback for legacy rows
-  const titleExpr = sql<string>`COALESCE(${sessionState.title}, 
+  const titleExpr = sql<string>`COALESCE(${sessionState.title},
       ${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`;
 
-  // snippet: 검색어가 포함된 첫 번째 문장을 보여줌
-  // snippet: 검색어가 포함된 첫 번째 문장을 보여줌
-  // 문장 기준: . ! ? 줄바꿈
+  // snippet: 검색어가 포함된 문장들을 모두 보여줌
+  // 문장 기준: . ! ? 줄바꿈, 각 문장은 150자, 합쳐서 최대 500자
   const snippetExpr = sql<string>`COALESCE(
       CASE
         WHEN position(lower(${query}) in lower(${sessionState.messagesText})) > 0 THEN
         (
-          SELECT trim(LEFT(sentence, 200))
+          SELECT LEFT(string_agg(trim(LEFT(sentence, 150)), chr(10) || '...' || chr(10)), 500)
           FROM regexp_split_to_table(${sessionState.messagesText}, '[.!?\t' || chr(10) || ']+') AS sentence
           WHERE sentence ILIKE '%' || ${query} || '%'
             AND trim(sentence) IS DISTINCT FROM trim(COALESCE(${sessionState.title}, ''))
-          LIMIT 1
         )
         ELSE LEFT(${sessionState.messagesText}, 200)
       END,
       ''
     )`;
+
+  const searchCondition = sql`(
+    ${sessionState.title} ILIKE ${pattern}
+    OR ${sessionState.messagesText} ILIKE ${pattern}
+  )`;
+
+  const whereClause = opts.cursor
+    ? (() => {
+        const { updatedAt, sessionId } = decodeCursor(opts.cursor!);
+        return and(
+          searchCondition,
+          sql`(${sessionState.updatedAt}, ${sessionState.sessionId}) < (${updatedAt}::timestamptz, ${sessionId})`
+        );
+      })()
+    : searchCondition;
 
   const rows = await db
     .select({
@@ -221,22 +235,31 @@ export const searchSessions = async (
       snippet: snippetExpr,
     })
     .from(sessionState)
-    .where(
-      sql`(
-        ${sessionState.title} ILIKE ${pattern}
-        OR ${sessionState.messagesText} ILIKE ${pattern}
-      )`
-    )
-    .orderBy(desc(sessionState.updatedAt))
-    .limit(limit);
+    .where(whereClause)
+    .orderBy(desc(sessionState.updatedAt), desc(sessionState.sessionId))
+    .limit(take);
 
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title ?? "New Chat",
-    messageCount: row.messageCount,
-    lastActivity: toDateString(row.lastActivity),
-    snippet: row.snippet ?? "",
-  }));
+  const hasMore = rows.length > limit;
+  const slice = rows.slice(0, limit);
+
+  const nextCursor =
+    hasMore && slice.length > 0
+      ? encodeCursor(
+          toDateString(slice[slice.length - 1].lastActivity),
+          slice[slice.length - 1].id
+        )
+      : null;
+
+  return {
+    results: slice.map((row): SessionSearchResult => ({
+      id: row.id,
+      title: row.title ?? "New Chat",
+      messageCount: row.messageCount,
+      lastActivity: toDateString(row.lastActivity),
+      snippet: row.snippet ?? "",
+    })),
+    nextCursor,
+  };
 };
 
 export const getOrCreateSession = (sessionId?: string): string => {

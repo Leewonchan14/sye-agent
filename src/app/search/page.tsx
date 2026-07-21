@@ -1,16 +1,16 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 
-import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Search } from "lucide-react";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
+import { Search } from "lucide-react";
 
 interface SearchResult {
   id: string;
@@ -20,10 +20,16 @@ interface SearchResult {
   snippet: string;
 }
 
+interface SearchPageResponse {
+  results: SearchResult[];
+  nextCursor: string | null;
+}
+
 const SearchPage = () => {
   const token = useAuthStore((s) => s.token);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -43,23 +49,42 @@ const SearchPage = () => {
     return () => clearTimeout(t);
   }, [query]);
 
-  const {
-    data: results = [],
-    isFetching,
-    isFetched,
-  } = useQuery({
-    queryKey: ["session-search", debouncedQuery],
-    queryFn: async () => {
-      const params = new URLSearchParams({ q: debouncedQuery });
-      const r = await fetch(`/api/sessions/search?${params}`, {
-        headers: { "x-auth-token": token },
-      });
-      const d = await r.json();
-      return (d.results ?? []) as SearchResult[];
-    },
-    enabled: debouncedQuery.trim().length > 0,
-    staleTime: 30_000,
-  });
+  const { data, isFetching, isFetchingNextPage, isFetched, hasNextPage, fetchNextPage } =
+    useInfiniteQuery({
+      queryKey: ["session-search", debouncedQuery],
+      queryFn: async ({ pageParam }) => {
+        const params = new URLSearchParams({ q: debouncedQuery });
+        if (pageParam) params.set("cursor", pageParam);
+        const r = await fetch(`/api/sessions/search?${params}`, {
+          headers: { "x-auth-token": token },
+        });
+        const d = (await r.json()) as SearchPageResponse;
+        return d;
+      },
+      initialPageParam: "",
+      getNextPageParam: (lastPage) => lastPage?.nextCursor ?? undefined,
+      enabled: debouncedQuery.trim().length > 0,
+      staleTime: 30_000,
+    });
+
+  const results = useMemo(() => data?.pages.flatMap((p) => p.results) ?? [], [data]);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -82,11 +107,12 @@ const SearchPage = () => {
   };
 
   const hasQuery = debouncedQuery.trim().length > 0;
+  const isInitialLoad = isFetching && !isFetched;
 
   return (
     <SidebarLayout activeSessionId="">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
-        {/* Search section — Gemini-like */}
+        {/* Search section */}
         <div className="mt-16 mb-8 text-center md:mt-20">
           <Tooltip>
             <TooltipTrigger render={<span className="inline-flex" />}>
@@ -124,8 +150,8 @@ const SearchPage = () => {
           />
         </div>
 
-        {/* Loading */}
-        {isFetching && (
+        {/* Initial loading */}
+        {isInitialLoad && (
           <div className="flex items-center justify-center py-12">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="inline-block size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -135,7 +161,7 @@ const SearchPage = () => {
         )}
 
         {/* No results */}
-        {!isFetching && isFetched && results.length === 0 && (
+        {!isInitialLoad && isFetched && results.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-sm text-muted-foreground">
               &ldquo;{debouncedQuery}&rdquo;에 대한 대화를 찾지 못했어…
@@ -148,7 +174,8 @@ const SearchPage = () => {
         {results.length > 0 && (
           <div className="space-y-3 pb-12">
             <p className="mb-4 text-xs font-medium text-muted-foreground">
-              총 {results.length}개의 대화를 찾았어요…!
+              총 {results.length}
+              {hasNextPage ? "+" : ""}개의 대화를 찾았어요…!
             </p>
             {results.map((r) => (
               <Link
@@ -171,6 +198,26 @@ const SearchPage = () => {
                 </div>
               </Link>
             ))}
+
+            {/* Sentinel for infinite scroll */}
+            <div ref={sentinelRef} className="h-px" />
+
+            {/* Loading more */}
+            {isFetchingNextPage && (
+              <div className="flex items-center justify-center py-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="inline-block size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  더 불러오는 중…
+                </div>
+              </div>
+            )}
+
+            {/* End of results */}
+            {!hasNextPage && results.length >= 20 && (
+              <p className="py-4 text-center text-xs text-muted-soft">
+                모든 검색 결과를 불러왔어요…!
+              </p>
+            )}
           </div>
         )}
 

@@ -11,12 +11,16 @@ export const GET = async (req: Request) => {
   try {
     const url = new URL(req.url);
     const q = url.searchParams.get("q") ?? "";
+    const cursor = url.searchParams.get("cursor") ?? undefined;
     const limit = Number(url.searchParams.get("limit")) || 20;
 
-    const results = await searchSessions(q, limit);
-    return Response.json({ results });
+    const { results, nextCursor } = await searchSessions(q, {
+      cursor,
+      limit,
+    });
+    return Response.json({ results, nextCursor });
   } catch (error) {
     console.error("Failed to search sessions:", error);
-    return Response.json({ results: [] });
+    return Response.json({ results: [], nextCursor: null });
   }
 };
