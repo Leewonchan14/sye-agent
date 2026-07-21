@@ -22,7 +22,7 @@ export const useSessionSidebarSync = ({
 
   const saveSessionMutation = useMutation({
     mutationFn: async (messages: UIMessage[]) => {
-      const r = await fetch("/api/messages/session-state", {
+      const r = await fetch("/api/sessions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
