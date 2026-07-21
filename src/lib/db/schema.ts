@@ -32,8 +32,8 @@ export const sessionState = pgTable(
   })
 );
 
-export const systemPrompts = pgTable(
-  "system_prompts",
+export const instructions = pgTable(
+  "instructions",
   {
     id: serial("id").primaryKey(),
     label: text("label").notNull(),
@@ -42,7 +42,7 @@ export const systemPrompts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
-    activeIdx: index("system_prompts_active_idx").on(table.isActive),
+    activeIdx: index("instructions_active_idx").on(table.isActive),
   })
 );
 

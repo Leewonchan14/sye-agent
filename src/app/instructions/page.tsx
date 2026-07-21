@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
 
-interface SystemPrompt {
+interface Instructions {
   id: number;
   label: string;
   content: string;
@@ -19,27 +19,27 @@ interface SystemPrompt {
 }
 
 const fetchData = async (token: string) => {
-  const res = await fetch("/api/system-prompt", {
+  const res = await fetch("/api/instructions", {
     headers: { "x-auth-token": token },
   });
-  return res.json() as Promise<{ active: SystemPrompt | null; history: SystemPrompt[] }>;
+  return res.json() as Promise<{ active: Instructions | null; history: Instructions[] }>;
 };
 
 const saveData = async (token: string, label: string, content: string) => {
-  const res = await fetch("/api/system-prompt", {
+  const res = await fetch("/api/instructions", {
     method: "POST",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ label, content }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "저장 실패");
-  return data as { prompt: SystemPrompt };
+  return data as { instruction: Instructions };
 };
 
-const SystemPromptContent = () => {
+const InstructionsContent = () => {
   const token = useAuthStore((s) => s.token);
-  const [active, setActive] = useState<SystemPrompt | null>(null);
-  const [history, setHistory] = useState<SystemPrompt[]>([]);
+  const [active, setActive] = useState<Instructions | null>(null);
+  const [history, setHistory] = useState<Instructions[]>([]);
   const [loading, setLoading] = useState(true);
   const [label, setLabel] = useState("");
   const [content, setContent] = useState("");
@@ -87,7 +87,7 @@ const SystemPromptContent = () => {
     }
   }, [label, content, token]);
 
-  const applyTemplate = (p: SystemPrompt) => {
+  const applyTemplate = (p: Instructions) => {
     setLabel(p.label);
     setContent(p.content);
   };
@@ -227,10 +227,10 @@ const SystemPromptContent = () => {
   );
 };
 
-const SystemPromptPage = () => (
+const InstructionsPage = () => (
   <SidebarLayout>
-    <SystemPromptContent />
+    <InstructionsContent />
   </SidebarLayout>
 );
 
-export default SystemPromptPage;
+export default InstructionsPage;

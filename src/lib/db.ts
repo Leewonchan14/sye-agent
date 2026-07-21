@@ -230,9 +230,9 @@ export const getOrCreateSession = (sessionId?: string): string => {
   return sessionId ?? uuidv4();
 };
 
-const { systemPrompts } = schema;
+const { instructions: instructionsTable } = schema;
 
-export interface SystemPrompt {
+export interface Instructions {
   id: number;
   label: string;
   content: string;
@@ -240,42 +240,40 @@ export interface SystemPrompt {
   createdAt: Date | null;
 }
 
-/** 현재 활성화된 system prompt를 반환합니다. 없으면 null. */
-export const getActiveSystemPrompt = async (): Promise<SystemPrompt | null> => {
+/** 현재 활성화된 지시 사항을 반환합니다. 없으면 null. */
+export const getActiveInstructions = async (): Promise<Instructions | null> => {
   const db = getDb();
   const rows = await db
     .select()
-    .from(systemPrompts)
-    .where(eq(systemPrompts.isActive, true))
+    .from(instructionsTable)
+    .where(eq(instructionsTable.isActive, true))
     .limit(1);
   return rows[0] ?? null;
 };
 
-/** 모든 system prompt를 최신순으로 반환합니다. */
-export const listSystemPrompts = async (): Promise<SystemPrompt[]> => {
+/** 모든 지시 사항을 최신순으로 반환합니다. */
+export const listInstructions = async (): Promise<Instructions[]> => {
   const db = getDb();
-  return db.select().from(systemPrompts).orderBy(desc(systemPrompts.createdAt));
+  return db.select().from(instructionsTable).orderBy(desc(instructionsTable.createdAt));
 };
 
 /**
- * 새 system prompt를 저장하고 해당 prompt를 활성화합니다.
- * 기존 활성 prompt는 비활성화됩니다.
+ * 새 지시 사항을 저장하고 활성화합니다.
+ * 기존 활성 지시 사항은 비활성화됩니다.
  */
-export const saveSystemPrompt = async (
+export const saveInstructions = async (
   label: string,
   content: string
-): Promise<SystemPrompt> => {
+): Promise<Instructions> => {
   const db = getDb();
 
-  // 기존 활성 prompt를 비활성화
   await db
-    .update(systemPrompts)
+    .update(instructionsTable)
     .set({ isActive: false })
-    .where(eq(systemPrompts.isActive, true));
+    .where(eq(instructionsTable.isActive, true));
 
-  // 새 prompt 저장 (활성)
   const rows = await db
-    .insert(systemPrompts)
+    .insert(instructionsTable)
     .values({ label, content, isActive: true })
     .returning();
 

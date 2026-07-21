@@ -2,7 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 import { ToolLoopAgent, isStepCount } from "ai";
 
-import { getActiveSystemPrompt } from "@/lib/db";
+import { getActiveInstructions } from "@/lib/db";
 import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
 import { brandMonitor } from "@/lib/tools/brand-monitoring";
 import { getCurrentTime } from "@/lib/tools/current-time";
@@ -30,10 +30,10 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
 
   const exa = await exaTools();
 
-  // 활성화된 사용자 system prompt가 있으면 기본 instruction 뒤에 추가
-  const userPrompt = await getActiveSystemPrompt();
-  const instructions = userPrompt
-    ? `${AGENT_INSTRUCTIONS}\n\n## 사용자가 등록한 추가 지시사항\n${userPrompt.content}`
+  // 활성화된 사용자 지시 사항이 있으면 기본 instruction 뒤에 추가
+  const active = await getActiveInstructions();
+  const instructions = active
+    ? `${AGENT_INSTRUCTIONS}\n\n## 사용자가 등록한 추가 지시사항\n${active.content}`
     : AGENT_INSTRUCTIONS;
 
   agent = new ToolLoopAgent({

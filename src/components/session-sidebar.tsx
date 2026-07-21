@@ -133,7 +133,7 @@ export const SessionSidebar = ({
             <Button
               variant="ghost"
               className="w-full justify-start"
-              onClick={() => router.push("/system-prompt")}
+              onClick={() => router.push("/instructions")}
             >
               <FileText className="h-4 w-4" />
               지시 사항
