@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { FileText, LogOut, PanelLeft, Plus, Search, Upload } from "lucide-react";
+import { FileText, LogOut, MessageCircle, PanelLeft, Plus, Search, Upload } from "lucide-react";
 
 import { useRouter } from "next/navigation";
 
@@ -137,6 +137,14 @@ export const SessionSidebar = ({
             >
               <FileText className="h-4 w-4" />
               지시 사항
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => router.push("/suggestions")}
+            >
+              <MessageCircle className="h-4 w-4" />
+              추천 질문
             </Button>
           </div>
 

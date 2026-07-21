@@ -50,6 +50,20 @@
       "when": 1784636000000,
       "tag": "0007_rename_system_prompts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784639857928,
+      "tag": "0008_naive_scarecrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784640000000,
+      "tag": "0009_seed_suggestions",
+      "breakpoints": true
     }
   ]
 }

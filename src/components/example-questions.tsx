@@ -2,40 +2,42 @@
 
 import { useCallback } from "react";
 
+import { useQuery } from "@tanstack/react-query";
+
 import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/lib/auth-store";
+
+interface Suggestion {
+  id: number;
+  label: string;
+  prompt: string;
+  sortOrder: number | null;
+  createdAt: string | null;
+}
 
 interface Props {
   onQuestionClick: (q: string) => void;
 }
 
-const suggestions = [
-  { label: "사랑해!", prompt: "사랑해!" },
-  { label: "데이트 코스 추천", prompt: "데이트 코스 추천해줘…!" },
-  {
-    label: "오늘 뭐하지?",
-    prompt:
-      "사당역이랑 충정로역 사이에서 만날건데 신림역, 신대방역, 영등포역, 서울대입구역, 부평역 등에서 만날거야 오늘 데이트 코스 추천해줘…!",
-  },
-  {
-    label: "퇴근후 만나자!",
-    prompt:
-      "퇴근후 (저녁 6시 이후) 충정로랑 서초 사이에서 만날건데 신림역, 신대방역, 영등포역, 서울대입구역 등에서 만날거야 오늘 데이트 코스 추천해줘…!",
-  },
-  { label: "맛집 찾기", prompt: "분위기 좋은 맛집 알려줘…!" },
-  {
-    label: "홍콩관광청 모니터링",
-    prompt:
-      "홍콩관광청에 대해 최근 한 달간 뉴스, 블로그, 인스타그램, 트위터, 커뮤니티에서 어떤 키워드가 나오는지 분석해줘…!",
-  },
-  {
-    label: "파나소닉 모니터링",
-    prompt:
-      "파나소닉 브랜드 모니터링 해줘…! 최근 일주일간 뉴스, 블로그, 인스타그램, 트위터, 커뮤니티랑 커뮤니티 반응이 궁금해…!",
-  },
-  { label: "카톡 대화 검색", prompt: "우리 봤던 영화 뭐였더라…!" },
-];
+const fetchSuggestions = async (token: string) => {
+  const res = await fetch("/api/suggestions", {
+    headers: { "x-auth-token": token },
+  });
+  if (!res.ok) throw new Error("불러오기 실패");
+  return res.json() as Promise<{ suggestions: Suggestion[] }>;
+};
 
 export const ExampleQuestions = ({ onQuestionClick }: Props) => {
+  const token = useAuthStore((s) => s.token);
+
+  const { data } = useQuery({
+    queryKey: ["suggestions"],
+    queryFn: () => fetchSuggestions(token!),
+    enabled: !!token,
+  });
+
+  const suggestions = data?.suggestions ?? [];
+
   const handleClick = useCallback(
     (prompt: string) => {
       onQuestionClick(prompt);
@@ -43,11 +45,13 @@ export const ExampleQuestions = ({ onQuestionClick }: Props) => {
     [onQuestionClick]
   );
 
+  if (suggestions.length === 0) return null;
+
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
       {suggestions.map((s) => (
         <Button
-          key={s.label}
+          key={s.id}
           variant="outline"
           size="sm"
           onClick={() => handleClick(s.prompt)}

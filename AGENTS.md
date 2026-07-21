@@ -51,6 +51,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - **dayjs** 사용 시 기본 locale을 `ko`로 설정하고 timezone을 **KST (UTC+9)**로 고정하세요. (`dayjs.extend(utc).extend(timezone).tz(..., 'Asia/Seoul')`)
 
+# Drizzle ORM
+
+- 데이터베이스 스키마 변경이 필요하면 **`src/lib/db/schema.ts`만 수정**하세요.
+- `drizzle/` 폴더(마이그레이션 파일), `drizzle.config.ts`, `src/lib/db/`의 기타 파일(migration, db.ts 등)은 **직접 수정하지 마세요.**
+- schema 변경 후에는 반드시 아래 명령어를 순서대로 실행하세요.
+  1. `npm run db:generate` — `drizzle/`에 마이그레이션 파일 자동 생성
+  2. `npm run db:migrate` — 변경사항을 데이터베이스에 적용
+
 # Formatting & Linting
 
 코드 수정 후 **반드시** `prettier`와 `eslint`를 실행하여 스타일 일관성을 유지하세요. (커밋 전에 자동으로 실행된다고 가정하지 말고 직접 수행)

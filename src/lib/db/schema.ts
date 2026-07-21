@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   serial,
@@ -43,6 +44,20 @@ export const instructions = pgTable(
   },
   (table) => ({
     activeIdx: index("instructions_active_idx").on(table.isActive),
+  })
+);
+
+export const suggestions = pgTable(
+  "suggestions",
+  {
+    id: serial("id").primaryKey(),
+    label: text("label").notNull(),
+    prompt: text("prompt").notNull(),
+    sortOrder: integer("sort_order"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    sortOrderIdx: index("suggestions_sort_order_idx").on(table.sortOrder),
   })
 );
 
