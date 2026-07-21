@@ -52,6 +52,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - **dayjs** 사용 시 기본 locale을 `ko`로 설정하고 timezone을 **KST (UTC+9)**로 고정하세요. (`dayjs.extend(utc).extend(timezone).tz(..., 'Asia/Seoul')`)
 
+# Database (Neon DB + Drizzle ORM)
+
+- 이 프로젝트의 데이터베이스는 **Neon DB (Serverless PostgreSQL)**를 사용합니다.
+- Neon DB는 Vercel과의 지역적 근접성, 서버리스 환경에 최적화된 cold start, 그리고 PostgreSQL 호환성 때문에 선택되었습니다.
+- 데이터베이스 연결은 **`@neondatabase/serverless`** 드라이버를 통해 이루어집니다.
+  - 서버리스 환경(Serverless Function)에서는 **WebSocket 기반 연결**을 사용하세요. (`neon` import from `@neondatabase/serverless`)
+  - 서버 환경(Node.js)에서는 **TCP 연결**을 사용할 수 있습니다. (`Pool` from `@neondatabase/serverless`)
+- connection string은 환경 변수 `DATABASE_URL`에 저장되어 있습니다.
+- 데이터베이스 스키마가 변경되면 **`npm run db:generate` → `npm run db:migrate`** 순서로 실행하여 Neon DB에 반영하세요.
+
 # Drizzle ORM
 
 - 데이터베이스 스키마 변경이 필요하면 **`src/lib/db/schema.ts`만 수정**하세요.
