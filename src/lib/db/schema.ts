@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  jsonb,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 export const sessionState = pgTable(
   "session_state",
@@ -18,6 +26,28 @@ export const sessionState = pgTable(
     messagesTextTrgmIdx: index("session_state_messages_text_trgm_idx").using(
       "gin",
       sql`${table.messagesText} gin_trgm_ops`
+    ),
+  })
+);
+
+export const kakaoChat = pgTable(
+  "kakao_chat",
+  {
+    id: serial("id").primaryKey(),
+    date: timestamp("date", { withTimezone: true }).notNull(),
+    user: text("user").notNull(),
+    message: text("message").notNull(),
+  },
+  (table) => ({
+    dateIdx: index("kakao_chat_date_idx").on(table.date),
+    messageTrgmIdx: index("kakao_chat_message_trgm_idx").using(
+      "gin",
+      sql`${table.message} gin_trgm_ops`
+    ),
+    dedupIdx: uniqueIndex("kakao_chat_dedup_idx").on(
+      table.date,
+      table.user,
+      table.message
     ),
   })
 );

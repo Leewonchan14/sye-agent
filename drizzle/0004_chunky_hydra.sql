@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "kakao_chat_dedup_idx" ON "kakao_chat" USING btree ("date","user","message");

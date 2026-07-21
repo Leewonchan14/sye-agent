@@ -8,6 +8,27 @@
       "when": 1784627717218,
       "tag": "0000_init_session_state",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784629402633,
+      "tag": "0001_hot_vengeance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784630049900,
+      "tag": "0003_supreme_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784630603091,
+      "tag": "0004_chunky_hydra",
+      "breakpoints": true
     }
   ]
 }
