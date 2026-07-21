@@ -50,7 +50,7 @@ export const saveInstructions = async (
 
   const rows = await db
     .insert(instructionsTable)
-    .values({ label, content })
+    .values({ label, content, isActive: true })
     .returning();
 
   return rows[0];

@@ -47,7 +47,7 @@
     {
       "idx": 7,
       "version": "7",
-      "when": Date.now(),
+      "when": 1784636000000,
       "tag": "0007_rename_system_prompts",
       "breakpoints": true
     }

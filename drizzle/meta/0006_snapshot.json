@@ -181,7 +181,7 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.system_prompts": {
+    "public.instructions": {
       "name": "system_prompts",
       "schema": "",
       "columns": {

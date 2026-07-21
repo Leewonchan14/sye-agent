@@ -458,7 +458,7 @@ const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void 
     return () => clearInterval(iv);
   }, []);
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-1">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center gap-1">
       {/* Character icon */}
       <div className="mb-5">
         <img
