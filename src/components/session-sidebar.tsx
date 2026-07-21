@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { LogOut, PanelLeft, Plus, Search } from "lucide-react";
+import { LogOut, PanelLeft, Plus, Search, Upload } from "lucide-react";
 
 import { useRouter } from "next/navigation";
 
@@ -121,6 +121,14 @@ export const SessionSidebar = ({
             <Button
               variant="ghost"
               className="w-full justify-start"
+              onClick={() => router.push("/search")}
+            >
+              <Search className="h-4 w-4" />
+              대화 검색
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
               onClick={() => router.push("/kakao-chat")}
             >
               <Upload className="h-4 w-4" />
@@ -198,6 +206,16 @@ export const SessionSidebar = ({
           {/* New Chat */}
           <Button variant="ghost" size="icon-lg" onClick={onNew} aria-label="New chat">
             <Plus className="h-5 w-5" />
+          </Button>
+
+          {/* Search */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            onClick={() => router.push("/search")}
+            aria-label="Search"
+          >
+            <Search className="h-5 w-5" />
           </Button>
 
           {/* Spacer */}

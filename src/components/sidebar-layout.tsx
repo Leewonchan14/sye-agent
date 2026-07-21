@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut, Menu, Plus, Search } from "lucide-react";
+import { LogOut, Menu, Plus } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 
 import { useCallback, useState } from "react";
@@ -159,7 +159,9 @@ export const SidebarLayout = ({ children, activeSessionId = "", loading }: Props
       )}
 
       {/* Content */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {children}
+      </div>
     </div>
   );
 };

@@ -1,5 +1,6 @@
-import { v4 as uuidv4 } from "uuid";
+import type { TextUIPart, UIMessage } from "ai";
 import { desc, eq, sql } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 
 import { getDb, schema } from "@/lib/db/db";
 
@@ -8,36 +9,29 @@ const { sessionState } = schema;
 /** 세션의 전체 UIMessage[] 상태를 JSONB로 저장합니다. */
 export const saveSessionState = async (
   sessionId: string,
-  messages: unknown[]
+  messages: UIMessage[]
 ): Promise<void> => {
   const db = getDb();
 
   // messagesText 검색 인덱스를 위해 모든 텍스트 추출
-  const msgs = messages as Array<{
-    role?: string;
-    parts?: Array<{ type: string; text?: string }>;
-  }>;
-
   // Title: 첫 번째 텍스트 파트
   let title: string | null = null;
-  for (const msg of msgs) {
-    const textParts = msg.parts?.filter(
-      (p) => p.type === "text" && p.text?.trim()
-    );
-    if (textParts && textParts.length > 0) {
-      title = textParts[0].text!.trim();
+  for (const msg of messages) {
+    const textParts = msg.parts.filter((p): p is TextUIPart => p.type === "text");
+    const trimmed = textParts.find((p) => p.text.trim());
+    if (trimmed) {
+      title = trimmed.text.trim();
       break;
     }
   }
 
   // messagesText: 모든 메시지의 텍스트를 연결
-  const allText = msgs
-    .flatMap(
-      (msg) =>
-        msg.parts
-          ?.filter((p) => p.type === "text")
-          .map((p) => p.text)
-          .filter(Boolean) ?? []
+  const allText = messages
+    .flatMap((msg) =>
+      msg.parts
+        .filter((p): p is TextUIPart => p.type === "text")
+        .map((p) => p.text)
+        .filter(Boolean)
     )
     .join("\n");
 
@@ -46,7 +40,7 @@ export const saveSessionState = async (
     .values({
       sessionId,
       title,
-      messages: messages as unknown[],
+      messages,
       messagesText: allText || null,
       updatedAt: new Date(),
     })
@@ -54,7 +48,7 @@ export const saveSessionState = async (
       target: sessionState.sessionId,
       set: {
         title,
-        messages: messages as unknown[],
+        messages,
         messagesText: allText || null,
         updatedAt: new Date(),
       },
@@ -62,9 +56,7 @@ export const saveSessionState = async (
 };
 
 /** 세션의 전체 UIMessage[] 상태를 불러옵니다. 없으면 null을 반환합니다. */
-export const getSessionState = async (
-  sessionId: string
-): Promise<unknown[] | null> => {
+export const getSessionState = async (sessionId: string): Promise<UIMessage[] | null> => {
   const db = getDb();
   const rows = await db
     .select({ messages: sessionState.messages })
@@ -73,7 +65,7 @@ export const getSessionState = async (
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  return row.messages as unknown[];
+  return row.messages as UIMessage[];
 };
 
 export interface SessionInfo {
@@ -103,18 +95,11 @@ interface SessionRow {
   lastActivity: Date | null;
 }
 
-const encodeCursor = (
-  updatedAt: string,
-  sessionId: string
-): string =>
+const encodeCursor = (updatedAt: string, sessionId: string): string =>
   Buffer.from(JSON.stringify([updatedAt, sessionId])).toString("base64");
 
-const decodeCursor = (
-  cursor: string
-): { updatedAt: string; sessionId: string } => {
-  const [updatedAt, sessionId] = JSON.parse(
-    Buffer.from(cursor, "base64").toString()
-  );
+const decodeCursor = (cursor: string): { updatedAt: string; sessionId: string } => {
+  const [updatedAt, sessionId] = JSON.parse(Buffer.from(cursor, "base64").toString());
   return { updatedAt, sessionId };
 };
 
@@ -123,8 +108,7 @@ export const listSessions = async (): Promise<SessionInfo[]> => {
   const rows = await db
     .select({
       id: sessionState.sessionId,
-      title:
-        sql<string>`COALESCE(${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`,
+      title: sql<string>`COALESCE(${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`,
       messageCount: sql<number>`jsonb_array_length(${sessionState.messages})`,
       lastActivity: sessionState.updatedAt,
     })
@@ -145,8 +129,7 @@ export const listSessionsPaginated = async (
   const baseQuery = db
     .select({
       id: sessionState.sessionId,
-      title:
-        sql<string>`COALESCE(${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`,
+      title: sql<string>`COALESCE(${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`,
       messageCount: sql<number>`jsonb_array_length(${sessionState.messages})`,
       lastActivity: sessionState.updatedAt,
     })
@@ -160,17 +143,11 @@ export const listSessionsPaginated = async (
       .where(
         sql`(${sessionState.updatedAt}, ${sessionState.sessionId}) < (${updatedAt}::timestamptz, ${sessionId})`
       )
-      .orderBy(
-        desc(sessionState.updatedAt),
-        desc(sessionState.sessionId)
-      )
+      .orderBy(desc(sessionState.updatedAt), desc(sessionState.sessionId))
       .limit(take);
   } else {
     rows = await baseQuery
-      .orderBy(
-        desc(sessionState.updatedAt),
-        desc(sessionState.sessionId)
-      )
+      .orderBy(desc(sessionState.updatedAt), desc(sessionState.sessionId))
       .limit(take);
   }
 
@@ -214,19 +191,16 @@ export const searchSessions = async (
   const pattern = `%${query}%`;
 
   // title / messages_text (trigram index) + JSONB fallback for legacy rows
-  const titleExpr =
-    sql<string>`COALESCE(${sessionState.title}, 
+  const titleExpr = sql<string>`COALESCE(${sessionState.title}, 
       ${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`;
 
   const rows = await db
     .select({
       id: sessionState.sessionId,
       title: titleExpr,
-      messageCount:
-        sql<number>`jsonb_array_length(${sessionState.messages})`,
+      messageCount: sql<number>`jsonb_array_length(${sessionState.messages})`,
       lastActivity: sessionState.updatedAt,
-      snippet:
-        sql<string>`COALESCE(
+      snippet: sql<string>`COALESCE(
           LEFT(${sessionState.messagesText}, 200),
           ${sessionState.messages}->0->'parts'->0->>'text',
           ''

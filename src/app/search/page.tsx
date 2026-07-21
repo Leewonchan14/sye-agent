@@ -1,0 +1,226 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import { SidebarLayout } from "@/components/sidebar-layout";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { useAuthStore } from "@/lib/auth-store";
+
+interface SearchResult {
+  id: string;
+  title: string;
+  messageCount: number;
+  lastActivity: string;
+  snippet: string;
+}
+
+const SearchPage = () => {
+  const token = useAuthStore((s) => s.token);
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Debounce: update debouncedQuery 300ms after user stops typing
+  useEffect(() => {
+    if (!query.trim()) {
+      const t = setTimeout(() => setDebouncedQuery(""), 0);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const {
+    data: results = [],
+    isFetching,
+    isFetched,
+  } = useQuery({
+    queryKey: ["session-search", debouncedQuery],
+    queryFn: async () => {
+      const params = new URLSearchParams({ q: debouncedQuery });
+      const r = await fetch(`/api/sessions/search?${params}`, {
+        headers: { "x-auth-token": token },
+      });
+      const d = await r.json();
+      return (d.results ?? []) as SearchResult[];
+    },
+    enabled: debouncedQuery.trim().length > 0,
+    staleTime: 30_000,
+  });
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter" && results.length > 0) {
+        router.push(`/${results[0].id}`);
+      }
+    },
+    [results, router]
+  );
+
+  const formatDate = (iso: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleDateString("ko-KR", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const css = (k: string) => `var(--${k})`;
+  const hasQuery = debouncedQuery.trim().length > 0;
+
+  return (
+    <SidebarLayout activeSessionId="">
+      <div
+        className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4"
+        style={{ color: css("color-ink") }}
+      >
+        {/* Search section — Gemini-like */}
+        <div className="mt-16 mb-8 text-center md:mt-20">
+          <Avatar size="lg" className="mx-auto mb-4">
+            <AvatarImage src="/munjackgui-thinking.png" alt="치이카와" />
+          </Avatar>
+          <h1 className="text-xl font-normal" style={{ color: css("color-ink") }}>
+            대화 검색
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: css("color-muted") }}>
+            예은님과 나눈 대화를 찾아볼 수 있어요…!
+          </p>
+        </div>
+
+        {/* Search input */}
+        <div
+          className="relative mb-8 rounded-2xl border transition-shadow duration-200 focus-within:shadow-md"
+          style={{
+            borderColor: css("color-hairline"),
+            backgroundColor: css("color-canvas-soft"),
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="검색어를 입력해줘…!"
+            className="w-full bg-transparent px-5 py-4 text-[15px] leading-relaxed outline-none placeholder:opacity-60"
+            style={{ color: css("color-ink") }}
+          />
+        </div>
+
+        {/* Loading */}
+        {isFetching && (
+          <div className="flex items-center justify-center py-12">
+            <div
+              className="flex items-center gap-2 text-sm"
+              style={{ color: css("color-muted") }}
+            >
+              <span
+                className="inline-block size-4 animate-spin rounded-full border-2 border-t-transparent"
+                style={{
+                  borderColor: css("color-primary"),
+                  borderTopColor: "transparent",
+                }}
+              />
+              찾는 중…
+            </div>
+          </div>
+        )}
+
+        {/* No results */}
+        {!isFetching && isFetched && results.length === 0 && (
+          <div className="py-12 text-center">
+            <p className="text-sm" style={{ color: css("color-muted") }}>
+              &ldquo;{debouncedQuery}&rdquo;에 대한 대화를 찾지 못했어…
+            </p>
+            <p className="mt-1 text-xs" style={{ color: css("color-muted-soft") }}>
+              다른 검색어로 시도해볼래…?
+            </p>
+          </div>
+        )}
+
+        {/* Results */}
+        {results.length > 0 && (
+          <div className="space-y-3 pb-12">
+            <p className="mb-4 text-xs font-medium" style={{ color: css("color-muted") }}>
+              총 {results.length}개의 대화를 찾았어요…!
+            </p>
+            {results.map((r) => (
+              <Link
+                key={r.id}
+                href={`/${r.id}`}
+                className="group block rounded-xl border p-4 no-underline transition-all duration-150 hover:shadow-sm"
+                style={{
+                  borderColor: css("color-hairline"),
+                  backgroundColor: css("color-surface"),
+                }}
+              >
+                <h3
+                  className="text-sm leading-snug font-medium transition-colors group-hover:opacity-80"
+                  style={{ color: css("color-ink") }}
+                >
+                  {r.title}
+                </h3>
+                {r.snippet && (
+                  <p
+                    className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed"
+                    style={{ color: css("color-muted") }}
+                  >
+                    {r.snippet}
+                  </p>
+                )}
+                <div
+                  className="mt-2 flex items-center gap-3 text-[11px]"
+                  style={{ color: css("color-muted-soft") }}
+                >
+                  <span>{formatDate(r.lastActivity)}</span>
+                  <span>&middot;</span>
+                  <span>메시지 {r.messageCount}개</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state before search */}
+        {!isFetching && !isFetched && !hasQuery && (
+          <div
+            className="flex flex-col items-center gap-2 py-12 text-center text-sm"
+            style={{ color: css("color-muted-soft") }}
+          >
+            <svg
+              className="mb-2 size-8 opacity-40"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
+            <p>검색어를 입력하면 대화 기록을 찾아줄게…!</p>
+          </div>
+        )}
+      </div>
+    </SidebarLayout>
+  );
+};
+
+export default SearchPage;
