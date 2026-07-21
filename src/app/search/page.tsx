@@ -7,6 +7,7 @@ import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { Search } from "lucide-react";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
@@ -176,19 +177,7 @@ const SearchPage = () => {
         {/* Empty state before search */}
         {!isFetching && !isFetched && !hasQuery && (
           <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-soft">
-            <svg
-              className="mb-2 size-8 opacity-40"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-              />
-            </svg>
+            <Search className="mb-2 size-8 opacity-40" />
             <p>검색어를 입력하면 대화 기록을 찾아줄게…!</p>
           </div>
         )}

@@ -13,133 +13,112 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuthStore } from "@/lib/auth-store";
 import { Trash2 } from "lucide-react";
 
-interface Instructions {
+interface Suggestion {
   id: number;
   label: string;
-  content: string;
-  isActive: boolean;
+  prompt: string;
+  sortOrder: number | null;
   createdAt: string | null;
 }
 
-const fetchData = async (token: string) => {
-  const res = await fetch("/api/instructions", {
+const fetchSuggestions = async (token: string) => {
+  const res = await fetch("/api/suggestions", {
     headers: { "x-auth-token": token },
   });
   if (!res.ok) throw new Error("불러오기 실패");
-  return res.json() as Promise<{ instructions: Instructions[] }>;
+  return res.json() as Promise<{ suggestions: Suggestion[] }>;
 };
 
 const saveData = async ({
   token,
   label,
-  content,
+  prompt,
   id,
+  sortOrder,
 }: {
   token: string;
   label: string;
-  content: string;
+  prompt: string;
   id?: number;
+  sortOrder?: number;
 }) => {
-  const res = await fetch("/api/instructions", {
+  const res = await fetch("/api/suggestions", {
     method: "POST",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
-    body: JSON.stringify({ id, label, content }),
+    body: JSON.stringify({ id, label, prompt, sortOrder }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "저장 실패");
-  return data as { instruction: Instructions };
+  return data as { suggestion: Suggestion };
 };
 
-const toggleActive = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch(`/api/instructions/${id}`, {
-    method: "PATCH",
-    headers: { "x-auth-token": token },
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? "토글 실패");
-  return data as { instruction: Instructions };
-};
-
-const deleteInstruction = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch(`/api/instructions/${id}`, {
+const deleteData = async ({ token, id }: { token: string; id: number }) => {
+  const res = await fetch(`/api/suggestions/${id}`, {
     method: "DELETE",
     headers: { "x-auth-token": token },
   });
   if (!res.ok) throw new Error("삭제 실패");
 };
 
-const InstructionsContent = () => {
+const SuggestionsContent = () => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const confirmDialog = useConfirmDialog();
 
   const [editId, setEditId] = useState<number | undefined>(undefined);
   const [label, setLabel] = useState("");
-  const [content, setContent] = useState("");
+  const [prompt, setPrompt] = useState("");
 
   const invalidate = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ["instructions"] }),
+    () => queryClient.invalidateQueries({ queryKey: ["suggestions"] }),
     [queryClient]
   );
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["instructions"],
-    queryFn: () => fetchData(token!),
+  const { data, isLoading } = useQuery({
+    queryKey: ["suggestions"],
+    queryFn: () => fetchSuggestions(token!),
     enabled: !!token,
   });
 
-  const items = data?.instructions ?? [];
+  const items = data?.suggestions ?? [];
 
   const saveMutation = useMutation({
     mutationFn: saveData,
     onSuccess: () => {
       setLabel("");
-      setContent("");
+      setPrompt("");
       setEditId(undefined);
       invalidate();
     },
   });
 
-  const toggleMutation = useMutation({
-    mutationFn: toggleActive,
-    onSuccess: () => invalidate(),
-  });
-
   const deleteMutation = useMutation({
-    mutationFn: deleteInstruction,
+    mutationFn: deleteData,
     onSuccess: (_data, vars) => {
       if (editId === vars.id) {
         setEditId(undefined);
         setLabel("");
-        setContent("");
+        setPrompt("");
       }
       invalidate();
     },
   });
 
   const handleSave = useCallback(() => {
-    if (!label.trim() || !content.trim() || !token) return;
+    if (!label.trim() || !prompt.trim() || !token) return;
     saveMutation.mutate({
       token,
       label: label.trim(),
-      content: content.trim(),
+      prompt: prompt.trim(),
       id: editId,
     });
-  }, [label, content, editId, token, saveMutation]);
-
-  const handleToggle = useCallback(
-    (id: number) => {
-      if (!token) return;
-      toggleMutation.mutate({ token, id });
-    },
-    [token, toggleMutation]
-  );
+  }, [label, prompt, editId, token, saveMutation]);
 
   const handleDelete = useCallback(
     async (id: number) => {
       if (!token) return;
       const ok = await confirmDialog.confirm({
-        title: "지시 사항 삭제",
+        title: "질문 삭제",
         description: "정말 삭제할까요?",
         destructive: true,
         confirmLabel: "삭제",
@@ -150,20 +129,19 @@ const InstructionsContent = () => {
     [token, deleteMutation, confirmDialog]
   );
 
-  const startEdit = (item: Instructions) => {
+  const startEdit = (item: Suggestion) => {
     setEditId(item.id);
     setLabel(item.label);
-    setContent(item.content);
+    setPrompt(item.prompt);
   };
 
   const cancelEdit = () => {
     setEditId(undefined);
     setLabel("");
-    setContent("");
+    setPrompt("");
   };
 
-  const mutationError =
-    saveMutation.error || toggleMutation.error || deleteMutation.error;
+  const mutationError = saveMutation.error || deleteMutation.error;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
@@ -186,10 +164,10 @@ const InstructionsContent = () => {
             />
           </TooltipContent>
         </Tooltip>
-        <h1 className="text-xl font-normal text-ink">지시 사항</h1>
+        <h1 className="text-xl font-normal text-ink">추천 질문</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          하치와레가 더 똑똑하게…! 데이트 스타일이나 추가하고 싶은 규칙을 알려주면 그걸
-          기억해서 더 찰떡같은 추천을 해준다는 거야…!
+          채팅 화면에 표시될 추천 질문을 관리한다는 거야…! 자주 묻는 걸 등록해두면 버튼
+          하나로 바로 보낼 수 있어…♪
         </p>
       </div>
 
@@ -198,30 +176,25 @@ const InstructionsContent = () => {
         {/* Edit / New form */}
         <div className="rounded-xl border border-hairline bg-surface p-5">
           <h2 className="mb-3 text-sm font-medium text-ink">
-            {editId ? "지시 사항 수정" : "새 지시 사항 등록"}
+            {editId ? "질문 수정" : "새 질문 등록"}
           </h2>
           <p className="mb-3 text-xs text-muted-soft">
             {editId
-              ? "내용을 수정하고 저장하면 바로 적용된다는 거야…!"
-              : "저장하면 바로 적용할 수 있게 등록된다는 거야…!"}
+              ? "내용을 수정하고 저장하면 바로 반영됩니다."
+              : "저장하면 채팅 화면에 추천 질문으로 표시된다는 거야…!"}
           </p>
           <div className="space-y-3">
             <Input
-              placeholder="이름 (예: 데이트 스타일 v2)"
+              placeholder="이름 (예: 오늘 뭐하지?)"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
             <Textarea
-              placeholder={`하치와레에게 추가로 알려줄 내용을 입력해줘…!\n\n예시:\n- "요즘 감성적인 카페 위주로 추천해줘"\n- "예은이는 걱정이 많아서 자주 안아줘…!"\n- "데이트 코스 추천할 때 교통편도 같이 알려줘…!"\n- "브랜드 언급을 모니터링할 때 부정적인 키워드가 보이면 바로 알려줘"\n- "인플루언서 분석 결과에서 1천 팔로워 이상만 알려줘"\n- "경쟁사 비교할 때 우리 브랜드의 점유율 변화를 강조해줘"`}
-              rows={10}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+              placeholder={`하치와레에게 보낼 메시지를 입력해줘…!\n\n예시:\n- "사랑해!"\n- "데이트 코스 추천해줘…!"\n- "분위기 좋은 맛집 알려줘…!"`}
+              rows={4}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
             />
-            {isError && (
-              <p className="text-sm text-error">
-                {error instanceof Error ? error.message : "불러오기 실패"}
-              </p>
-            )}
             {mutationError && (
               <p className="text-sm text-error">
                 {mutationError instanceof Error ? mutationError.message : "오류 발생"}
@@ -235,7 +208,7 @@ const InstructionsContent = () => {
               )}
               <Button
                 className="flex-1"
-                disabled={!label.trim() || !content.trim() || saveMutation.isPending}
+                disabled={!label.trim() || !prompt.trim() || saveMutation.isPending}
                 onClick={handleSave}
               >
                 {saveMutation.isPending ? "저장 중..." : editId ? "수정 완료" : "저장"}
@@ -244,10 +217,10 @@ const InstructionsContent = () => {
           </div>
         </div>
 
-        {/* All instructions list */}
+        {/* All suggestions list */}
         <div className="rounded-xl border border-hairline bg-surface p-5">
           <h2 className="mb-3 text-sm font-medium text-ink">
-            등록된 지시 사항
+            등록된 질문
             {!isLoading && (
               <Badge variant="secondary" className="ml-1.5 font-normal">
                 {items.length}
@@ -258,7 +231,7 @@ const InstructionsContent = () => {
           {isLoading ? (
             <p className="text-sm text-muted-foreground">불러오는 중...</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">등록된 지시 사항이 없습니다.</p>
+            <p className="text-sm text-muted-foreground">등록된 질문이 없습니다.</p>
           ) : (
             <div className="space-y-2">
               {items.map((item) => (
@@ -271,7 +244,6 @@ const InstructionsContent = () => {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    {/* Left: info + content */}
                     <button
                       type="button"
                       className="min-w-0 flex-1 text-left"
@@ -285,41 +257,16 @@ const InstructionsContent = () => {
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                        {item.content}
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        {item.prompt}
                       </p>
                     </button>
-
-                    {/* Right: toggle + delete */}
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {/* Toggle switch */}
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={item.isActive}
-                        disabled={toggleMutation.isPending}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors disabled:opacity-50 ${
-                          item.isActive
-                            ? "border-primary bg-primary"
-                            : "border-border bg-canvas-soft"
-                        }`}
-                        onClick={() => handleToggle(item.id)}
-                      >
-                        <span
-                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                            item.isActive ? "translate-x-4.5" : "translate-x-0.5"
-                          }`}
-                        />
-                      </button>
-
-                      {/* Delete button */}
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         className="text-muted-foreground hover:bg-error/10 hover:text-error"
                         onClick={() => handleDelete(item.id)}
-                        disabled={deleteMutation.isPending}
-                        title="삭제"
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -336,10 +283,10 @@ const InstructionsContent = () => {
   );
 };
 
-const InstructionsPage = () => (
+const SuggestionsPage = () => (
   <SidebarLayout>
-    <InstructionsContent />
+    <SuggestionsContent />
   </SidebarLayout>
 );
 
-export default InstructionsPage;
+export default SuggestionsPage;
