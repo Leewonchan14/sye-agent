@@ -4,12 +4,8 @@ import { kst } from "@/lib/kst";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { sample } from "lodash";
-import { LogOut, Menu, Plus } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import { useRouter } from "next/navigation";
 
 import { useChat } from "@ai-sdk/react";
 import { v4 as uuidv4 } from "uuid";
@@ -28,8 +24,7 @@ import {
 import { ExampleQuestions } from "@/components/example-questions";
 import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
-import { PasswordGate } from "@/components/password-gate";
-import { SessionSidebar } from "@/components/session-sidebar";
+import { SidebarLayout } from "@/components/sidebar-layout";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,143 +41,12 @@ import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
 /* ── ChatShell ── */
 
 export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string }) => {
-  const router = useRouter();
-  const [sessionId, setSessionId] = useState(() => initialSessionId ?? uuidv4());
-  const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
-    defaultValue: false,
-  });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const token = useAuthStore((s) => s.token);
-  const logout = useAuthStore((s) => s.logout);
-  const queryClient = useQueryClient();
-
-  const {
-    data: isValid,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["auth-validate", token ?? ""],
-    queryFn: async () => {
-      if (!token) return await new Promise((res) => setTimeout(() => res(false), 3000));
-      const res = await fetch("/api/auth", {
-        headers: { "x-auth-token": token },
-      });
-      const d = await res.json();
-      return d.valid === true;
-    },
-    retry: 1,
-    staleTime: 0,
-  });
-
-  const onNew = useCallback(() => {
-    setSessionId(uuidv4());
-    queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    router.push("/");
-  }, [router, queryClient]);
-
-  const onSelect = useCallback(
-    (id: string) => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      router.push(`/${id}`);
-    },
-    [router, queryClient]
-  );
-
-  const toggle = useCallback(() => setSidebarOpen((p) => !p), []);
-
-  // Loading: token present but validation pending
-  if (isLoading) {
-    return (
-      <div
-        className="flex min-h-dvh flex-col"
-        style={{ backgroundColor: "var(--color-canvas)" }}
-      >
-        <ChatLoading />
-      </div>
-    );
-  }
-
-  // Not authenticated: no token, invalid token, or query error
-  if (!token || isValid === false || isError) {
-    return <PasswordGate onSuccess={() => {}} />;
-  }
+  const sessionId = initialSessionId ?? uuidv4();
 
   return (
-    <div
-      className="relative flex h-dvh flex-col md:flex-row"
-      style={{ backgroundColor: "var(--color-canvas)" }}
-    >
-      {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        <SessionSidebar
-          activeSessionId={sessionId}
-          onSelect={onSelect}
-          onNew={onNew}
-          isOpen={sidebarOpen}
-          onToggle={toggle}
-        />
-      </div>
-
-      {/* Mobile top bar */}
-      <div
-        className="flex h-12 shrink-0 items-center gap-2 px-3 md:hidden"
-        style={{ borderBottom: "1px solid var(--color-hairline)" }}
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setMobileMenuOpen(true)}
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-        <Avatar size="sm">
-          <AvatarImage src="/munjackgui.png" alt="치이카와" />
-        </Avatar>
-        <span
-          className="flex-1 text-sm font-medium"
-          style={{ color: "var(--color-ink)" }}
-        >
-          치이카와 메이트
-        </span>
-        <Button variant="ghost" size="icon" onClick={onNew} aria-label="New chat">
-          <Plus className="h-5 w-5" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={logout} aria-label="Logout">
-          <LogOut className="h-5 w-5" />
-        </Button>
-      </div>
-
-      {/* Mobile sidebar overlay */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex md:hidden">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <div className="relative h-full w-64">
-            <SessionSidebar
-              activeSessionId={sessionId}
-              onSelect={(id) => {
-                onSelect(id);
-                setMobileMenuOpen(false);
-              }}
-              onNew={() => {
-                onNew();
-                setMobileMenuOpen(false);
-              }}
-              isOpen={true}
-              onToggle={() => setMobileMenuOpen(false)}
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ChatInner key={sessionId} sessionId={sessionId} />
-      </div>
-    </div>
+    <SidebarLayout activeSessionId={sessionId}>
+      <ChatInner key={sessionId} sessionId={sessionId} />
+    </SidebarLayout>
   );
 };
 

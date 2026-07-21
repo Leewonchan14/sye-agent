@@ -3,7 +3,9 @@
 import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { LogOut, PanelLeft, Plus } from "lucide-react";
+import { LogOut, PanelLeft, Plus, Search } from "lucide-react";
+
+import { useRouter } from "next/navigation";
 
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ export const SessionSidebar = ({
   onToggle,
 }: Props) => {
   const tk = useAuthStore((s) => s.token);
+  const router = useRouter();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -110,10 +113,18 @@ export const SessionSidebar = ({
             </Button>
           </div>
 
-          {/* New Chat */}
-          <div className="px-3 pb-3">
+          {/* Actions */}
+          <div className="space-y-1 px-3 pb-3">
             <Button variant="ghost" className="w-full justify-start" onClick={onNew}>
               <Plus className="h-4 w-4" />새 채팅
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => router.push("/kakao-chat")}
+            >
+              <Upload className="h-4 w-4" />
+              카톡 업로드
             </Button>
           </div>
 
