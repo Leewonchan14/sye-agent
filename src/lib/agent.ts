@@ -64,7 +64,7 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
       instruction_delete: instructionDelete,
       instruction_list: instructionList,
     },
-    stopWhen: isStepCount(100),
+    stopWhen: isStepCount(500),
   }) as unknown as ToolLoopAgent;
 
   return agent;
