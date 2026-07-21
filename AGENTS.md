@@ -17,6 +17,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - **shadcn/ui**를 적극 사용하세요. 컴포넌트 추가, 검색, 설치 등은 `shadcn` MCP 도구를 통해 수행할 수 있습니다.
 - UI 관련 질문이 있으면 먼저 `shadcn` MCP를 검색(`search_tool_bm25`)하여 필요한 도구가 있는지 확인하세요.
+- 새로운 UI 컴포넌트를 직접 만들기 전에 **반드시 `shadcn` MCP로 먼저 검색**하여 이미 존재하는 컴포넌트가 있는지 확인한 후, 없을 때만 직접 구현하세요.
 
 # Development server rule
 
@@ -31,6 +32,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Library preference
 
 코드를 직접 구현하기 전에, 해당 기능을 해결해주는 라이브러리가 있는지 먼저 조사하세요. 라이브러리로 해결 가능한 코드는 라이브러리를 적극 사용하고 직접 구현을 피하세요.
+
+# React Query
+
+- 서버 상태 관리, 데이터 fetching, 캐싱, optimistic update 등 관련 기능은 **React Query (TanStack Query)**를 적극 사용하세요. `useEffect` + `fetch` 조합으로 직접 구현하지 말고 React Query의 `useQuery`, `useMutation`, `useQueryClient` 등을 우선 활용하세요.
+- 쿼리 키는 일관된 구조로 관리하고, 필요 시 커스텀 훅으로 래핑하여 재사용성을 높이세요.
 
 # Web search verification
 

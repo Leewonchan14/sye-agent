@@ -20,7 +20,7 @@ export const opencode = createOpenAICompatible({
 
 let agent: ToolLoopAgent | undefined;
 
-/** system prompt가 변경될 때 호출하면 다음 요청에서 새 agent가 생성됩니다. */
+/** 지시 사항이 변경될 때 호출하면 다음 요청에서 새 agent가 생성됩니다. */
 export const invalidateAgent = () => {
   agent = undefined;
 };
@@ -30,10 +30,13 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
 
   const exa = await exaTools();
 
-  // 활성화된 사용자 지시 사항이 있으면 기본 instruction 뒤에 추가
-  const active = await getActiveInstructions();
-  const instructions = active
-    ? `${AGENT_INSTRUCTIONS}\n\n## 사용자가 등록한 추가 지시사항\n${active.content}`
+  // 활성화된 사용자 지시 사항들을 기본 instruction 뒤에 추가
+  const activeList = await getActiveInstructions();
+  const userPart = activeList
+    .map((i) => `[${i.label}]\n${i.content}`)
+    .join("\n\n---\n\n");
+  const instructions = userPart
+    ? `${AGENT_INSTRUCTIONS}\n\n## 사용자가 등록한 추가 지시사항\n${userPart}`
     : AGENT_INSTRUCTIONS;
 
   agent = new ToolLoopAgent({
