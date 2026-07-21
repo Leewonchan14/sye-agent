@@ -1,3 +1,4 @@
+import { kst } from "@/lib/kst";
 import Parser from "rss-parser";
 import { z } from "zod/v4";
 
@@ -299,14 +300,14 @@ const crawlChannel = async (
 const parsePeriod = (
   period: string
 ): { startDate: string; endDate: string; label: string } => {
-  const now = new Date();
+  const now = kst();
 
   // "최근 N일" pattern
   const recentMatch = period.match(/최근\s*(\d+)\s*[일날]/);
   if (recentMatch) {
     const days = parseInt(recentMatch[1], 10);
-    const end = now.toISOString().split("T")[0];
-    const start = new Date(now.getTime() - days * 86400000).toISOString().split("T")[0];
+    const end = now.format("YYYY-MM-DD");
+    const start = now.subtract(days, "day").format("YYYY-MM-DD");
     return { startDate: start, endDate: end, label: `최근 ${days}일` };
   }
 
@@ -324,8 +325,8 @@ const parsePeriod = (
   }
 
   // Default: last 7 days
-  const end = now.toISOString().split("T")[0];
-  const start = new Date(now.getTime() - 7 * 86400000).toISOString().split("T")[0];
+  const end = now.format("YYYY-MM-DD");
+  const start = now.subtract(7, "day").format("YYYY-MM-DD");
   return { startDate: start, endDate: end, label: "최근 7일" };
 };
 

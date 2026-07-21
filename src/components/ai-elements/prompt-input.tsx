@@ -1,5 +1,7 @@
 "use client";
 
+import { kst } from "@/lib/kst";
+
 import {
   Command,
   CommandEmpty,
@@ -146,7 +148,7 @@ const captureScreenshot = async (): Promise<File | null> => {
       return null;
     }
 
-    const timestamp = new Date()
+    const timestamp = kst()
       .toISOString()
       .replaceAll(/[:.]/g, "-")
       .replace("T", "_")

@@ -1,8 +1,10 @@
 "use client";
 
+import { kst } from "@/lib/kst";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { sample } from "lodash";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, Plus } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -144,6 +146,9 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
         >
           치이카와 메이트
         </span>
+        <Button variant="ghost" size="icon" onClick={onNew} aria-label="New chat">
+          <Plus className="h-5 w-5" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={logout} aria-label="Logout">
           <LogOut className="h-5 w-5" />
         </Button>
@@ -567,7 +572,7 @@ const subPhrases = [
 ];
 
 const getTimeGreeting = (): string => {
-  const hour = new Date().getHours();
+  const hour = kst().hour();
   if (hour >= 6 && hour < 11) return "좋은 아침…! 예은님…♪";
   if (hour >= 11 && hour < 14) return "예은님…! 점심은 챙겨 먹었어…?";
   if (hour >= 14 && hour < 18) return "따스한 오후야…! 예은님…♪";

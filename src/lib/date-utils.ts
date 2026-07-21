@@ -1,13 +1,13 @@
-import dayjs from "dayjs";
+import { kst } from "@/lib/kst";
 
 const START_DATE = process.env.NEXT_PUBLIC_COUPLE_START_DATE ?? "2026-04-11";
 
 /** 사귀기 시작한 날로부터 오늘까지 며칠이 지났는지 반환합니다. */
 export const getDDay = (): number | null => {
-  const start = dayjs(START_DATE);
+  const start = kst(START_DATE);
   if (!start.isValid()) return null;
 
-  const today = dayjs().startOf("day");
+  const today = kst().startOf("day");
   const startDay = start.startOf("day");
 
   return today.diff(startDay, "day") + 1; // 1일째부터 시작
