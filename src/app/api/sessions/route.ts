@@ -11,7 +11,7 @@ export const GET = async (req: Request) => {
   try {
     const url = new URL(req.url);
     const cursor = url.searchParams.get("cursor") ?? undefined;
-    const limit = Number(url.searchParams.get("limit")) || 10;
+    const limit = Number(url.searchParams.get("limit")) || 20;
 
     const result = await listSessionsPaginated({ cursor, limit });
     return Response.json(result);
