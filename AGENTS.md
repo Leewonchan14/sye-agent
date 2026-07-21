@@ -40,6 +40,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - 함수 선언 시 `function` 키워드 대신 **arrow function** (`const fn = (...) => { ... }`)만 사용하세요.
 
+# Date & Time
+
+- **dayjs** 사용 시 기본 locale을 `ko`로 설정하고 timezone을 **KST (UTC+9)**로 고정하세요. (`dayjs.extend(utc).extend(timezone).tz(..., 'Asia/Seoul')`)
+
 # Formatting & Linting
 
 코드 수정 후 **반드시** `prettier`와 `eslint`를 실행하여 스타일 일관성을 유지하세요. (커밋 전에 자동으로 실행된다고 가정하지 말고 직접 수행)

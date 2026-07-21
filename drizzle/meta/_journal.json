@@ -36,6 +36,13 @@
       "when": 1784631482614,
       "tag": "0005_brave_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784635403207,
+      "tag": "0006_orange_butterfly",
+      "breakpoints": true
     }
   ]
 }

@@ -194,7 +194,7 @@ const KakaoChatPage = () => {
   return (
     <SidebarLayout>
       <div className="flex min-h-dvh items-center justify-center p-4">
-        <Card className="w-full max-w-lg">
+        <Card className="w-full max-w-2xl">
           <CardHeader>
             <CardTitle>카카오톡 대화 업로드</CardTitle>
             <CardDescription>

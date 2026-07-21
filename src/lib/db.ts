@@ -229,3 +229,55 @@ export const searchSessions = async (
 export const getOrCreateSession = (sessionId?: string): string => {
   return sessionId ?? uuidv4();
 };
+
+const { systemPrompts } = schema;
+
+export interface SystemPrompt {
+  id: number;
+  label: string;
+  content: string;
+  isActive: boolean;
+  createdAt: Date | null;
+}
+
+/** 현재 활성화된 system prompt를 반환합니다. 없으면 null. */
+export const getActiveSystemPrompt = async (): Promise<SystemPrompt | null> => {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(systemPrompts)
+    .where(eq(systemPrompts.isActive, true))
+    .limit(1);
+  return rows[0] ?? null;
+};
+
+/** 모든 system prompt를 최신순으로 반환합니다. */
+export const listSystemPrompts = async (): Promise<SystemPrompt[]> => {
+  const db = getDb();
+  return db.select().from(systemPrompts).orderBy(desc(systemPrompts.createdAt));
+};
+
+/**
+ * 새 system prompt를 저장하고 해당 prompt를 활성화합니다.
+ * 기존 활성 prompt는 비활성화됩니다.
+ */
+export const saveSystemPrompt = async (
+  label: string,
+  content: string
+): Promise<SystemPrompt> => {
+  const db = getDb();
+
+  // 기존 활성 prompt를 비활성화
+  await db
+    .update(systemPrompts)
+    .set({ isActive: false })
+    .where(eq(systemPrompts.isActive, true));
+
+  // 새 prompt 저장 (활성)
+  const rows = await db
+    .insert(systemPrompts)
+    .values({ label, content, isActive: true })
+    .returning();
+
+  return rows[0];
+};

@@ -235,7 +235,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       {/* Error alert */}
       {error && (
         <div
-          className="mx-auto mb-2 flex max-w-180 items-center justify-between rounded-md border px-4 py-2 text-sm"
+          className="mx-auto mb-2 flex w-full max-w-2xl items-center justify-between rounded-md border px-4 py-2 text-sm"
           style={{
             borderColor: "var(--color-error)",
             backgroundColor: "var(--color-canvas-soft)",
@@ -256,7 +256,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         <MessageScrollerProvider autoScroll>
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
-              <MessageScrollerContent className="mx-auto max-w-180 px-4 pt-12">
+              <MessageScrollerContent className="mx-auto w-full max-w-2xl px-4 pt-12">
                 {messages.map((m, idx) => (
                   <MessageScrollerItem
                     key={m.id}
@@ -292,7 +292,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       {/* Input area */}
       {!showLoading && (
         <div className="shrink-0 px-4 pb-6">
-          <div className="mx-auto max-w-180">
+          <div className="mx-auto w-full max-w-2xl">
             <PromptInput
               onSubmit={handlePromptSubmit}
               className="relative flex flex-col rounded-2xl border **:data-[slot=input-group]:focus-within:border **:data-[slot=input-group]:focus-within:ring-0"

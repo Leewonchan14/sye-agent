@@ -1,9 +1,13 @@
 import _dayjs from "dayjs";
+import "dayjs/locale/ko";
+import relativeTime from "dayjs/plugin/relativeTime";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 
+_dayjs.locale("ko");
 _dayjs.extend(utc);
 _dayjs.extend(timezone);
+_dayjs.extend(relativeTime);
 
 const TZ = "Asia/Seoul";
 

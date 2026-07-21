@@ -3,13 +3,14 @@
 import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { LogOut, PanelLeft, Plus, Search, Upload } from "lucide-react";
+import { FileText, LogOut, PanelLeft, Plus, Search, Upload } from "lucide-react";
 
 import { useRouter } from "next/navigation";
 
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
+import { dayjs } from "@/lib/kst";
 
 interface Session {
   id: string;
@@ -134,6 +135,14 @@ export const SessionSidebar = ({
               <Upload className="h-4 w-4" />
               카톡 업로드
             </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => router.push("/system-prompt")}
+            >
+              <FileText className="h-4 w-4" />
+              System Prompt
+            </Button>
           </div>
 
           {/* Session list */}
@@ -167,6 +176,12 @@ export const SessionSidebar = ({
                   }}
                 >
                   <span className="flex-1 truncate">{truncate(s.title, 28)}</span>
+                  <span
+                    className="shrink-0 text-[11px]"
+                    style={{ color: css("color-muted-soft") }}
+                  >
+                    {dayjs(s.lastActivity).fromNow()}
+                  </span>
                 </button>
               );
             })}

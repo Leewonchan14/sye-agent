@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   jsonb,
   pgTable,
@@ -28,6 +29,20 @@ export const sessionState = pgTable(
       "gin",
       sql`${table.messagesText} gin_trgm_ops`
     ),
+  })
+);
+
+export const systemPrompts = pgTable(
+  "system_prompts",
+  {
+    id: serial("id").primaryKey(),
+    label: text("label").notNull(),
+    content: text("content").notNull(),
+    isActive: boolean("is_active").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    activeIdx: index("system_prompts_active_idx").on(table.isActive),
   })
 );
 
