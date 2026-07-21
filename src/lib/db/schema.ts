@@ -7,6 +7,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  vector,
 } from "drizzle-orm/pg-core";
 
 export const sessionState = pgTable(
@@ -37,12 +38,13 @@ export const kakaoChat = pgTable(
     date: timestamp("date", { withTimezone: true }).notNull(),
     user: text("user").notNull(),
     message: text("message").notNull(),
+    embedding: vector("embedding", { dimensions: 384 }),
   },
   (table) => ({
     dateIdx: index("kakao_chat_date_idx").on(table.date),
-    messageTrgmIdx: index("kakao_chat_message_trgm_idx").using(
-      "gin",
-      sql`${table.message} gin_trgm_ops`
+    embeddingIdx: index("kakao_chat_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops")
     ),
     dedupIdx: uniqueIndex("kakao_chat_dedup_idx").on(
       table.date,

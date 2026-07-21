@@ -89,6 +89,8 @@ const toolNameKoreanMap: Record<string, string> = {
   search_naver_place: "네이버 플레이스 검색",
   web_search_exa: "웹에서 찾기",
   web_fetch_exa: "웹 내용 읽기",
+  /* memory search */
+  memory_search: "카톡 대화 찾기",
   /* brand monitoring tools */
   brand_monitor: "데이터 수집 및 분석",
   /* utility */
