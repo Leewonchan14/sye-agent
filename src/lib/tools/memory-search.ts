@@ -4,7 +4,8 @@ import { z } from "zod/v4";
 
 import { getDb } from "@/lib/db/db";
 import { kakaoChat } from "@/lib/db/schema";
-import { embed } from "@/lib/embedding";
+// embed is loaded lazily inside execute() to avoid loading @huggingface/transformers
+// in Vercel serverless (depends on native onnxruntime binary).
 
 const COSINE_DISTANCE_THRESHOLD = 0.5;
 
@@ -74,6 +75,7 @@ export const memoryVectorSearch = tool({
     const db = getDb();
     const conditions = buildDateUserConditions(dateFrom, dateTo, user);
 
+    const { embed } = await import("@/lib/embedding");
     const keywordEmbedding = await embed(keyword);
     const vecLiteral = `[${keywordEmbedding.join(",")}]`;
 

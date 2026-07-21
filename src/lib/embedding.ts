@@ -10,9 +10,8 @@ const MODEL = "Xenova/all-MiniLM-L6-v2";
 const getExtractor = async (): Promise<FeatureExtractor> => {
   if (extractor) return extractor;
 
-  // Dynamic import: @huggingface/transformers depends on onnxruntime native binary
-  // (libonnxruntime.so.1) which is unavailable in Vercel serverless environment.
-  // Lazy import prevents crash on routes that import this module but never call embed().
+  // Dynamic import: @huggingface/transformers uses onnxruntime-node native binary
+  // (libonnxruntime.so.1). We include it via outputFileTracingIncludes in next.config.ts.
   const { pipeline } = await import("@huggingface/transformers");
   const pipe = await pipeline("feature-extraction", MODEL, {
     dtype: "q8",
