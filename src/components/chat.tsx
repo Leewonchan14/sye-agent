@@ -99,17 +99,16 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     }
   }, [initialMessages, setMessages]);
 
-  // Invalidate sessions cache on unmount (catches mid-stream navigation
-  // where onFinish doesn't fire, e.g. browser back, URL change)
-  useEffect(() => {
-    return () => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    };
-  }, [queryClient]);
-
   const [showHearts, setShowHearts] = useState(false);
 
   const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // 타이머 정리: 언마운트 시 예약된 invalidation 취소
+  useEffect(() => {
+    return () => {
+      clearTimeout(invalidateTimerRef.current);
+    };
+  }, []);
 
   const scheduleInvalidate = useCallback(() => {
     if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current);
