@@ -1,5 +1,3 @@
-import { pipeline } from "@huggingface/transformers";
-
 type FeatureExtractor = (
   texts: string[],
   options?: { pooling?: "mean" | "cls"; normalize?: boolean }
@@ -12,6 +10,10 @@ const MODEL = "Xenova/all-MiniLM-L6-v2";
 const getExtractor = async (): Promise<FeatureExtractor> => {
   if (extractor) return extractor;
 
+  // Dynamic import: @huggingface/transformers depends on onnxruntime native binary
+  // (libonnxruntime.so.1) which is unavailable in Vercel serverless environment.
+  // Lazy import prevents crash on routes that import this module but never call embed().
+  const { pipeline } = await import("@huggingface/transformers");
   const pipe = await pipeline("feature-extraction", MODEL, {
     dtype: "q8",
   });
