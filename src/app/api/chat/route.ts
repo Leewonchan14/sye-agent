@@ -2,7 +2,7 @@ import { createAgentUIStreamResponse } from "ai";
 
 import { getAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
-import { saveSessionState } from "@/lib/db";
+import { saveSessionState } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

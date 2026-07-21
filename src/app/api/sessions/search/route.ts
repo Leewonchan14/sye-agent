@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth";
-import { searchSessions } from "@/lib/db";
+import { searchSessions } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

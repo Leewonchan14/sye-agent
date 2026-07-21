@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth";
-import { listSessionsPaginated } from "@/lib/db";
+import { listSessionsPaginated } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

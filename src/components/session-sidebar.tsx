@@ -154,7 +154,7 @@ export const SessionSidebar = ({
                   key={s.id}
                   type="button"
                   onClick={() => onSelect(s.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors${active ? "bg-canvas-card text-ink" : ""}`}
+                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors ${active && "bg-canvas-card text-ink"}`}
                   onMouseEnter={(e) => {
                     if (!active)
                       e.currentTarget.style.backgroundColor = css("color-canvas-soft");

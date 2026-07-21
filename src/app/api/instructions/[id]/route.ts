@@ -1,6 +1,6 @@
 import { invalidateAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
-import { deleteInstructions, toggleInstructionsActive } from "@/lib/db";
+import { deleteInstructions, toggleInstructionsActive } from "@/lib/db/instructions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

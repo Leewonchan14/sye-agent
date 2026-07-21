@@ -2,7 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 import { ToolLoopAgent, isStepCount } from "ai";
 
-import { getActiveInstructions } from "@/lib/db";
+import { getActiveInstructions } from "@/lib/db/instructions";
 import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
 import { brandMonitor } from "@/lib/tools/brand-monitoring";
 import { getCurrentTime } from "@/lib/tools/current-time";

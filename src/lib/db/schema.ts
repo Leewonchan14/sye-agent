@@ -38,7 +38,7 @@ export const instructions = pgTable(
     id: serial("id").primaryKey(),
     label: text("label").notNull(),
     content: text("content").notNull(),
-    isActive: boolean("is_active").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({

@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth";
-import { getSessionState } from "@/lib/db";
+import { getSessionState } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
