@@ -219,28 +219,20 @@ async function searchNaverPlace(
   display: number
 ): Promise<{ items: NaverPlaceSearchItem[] } | { error: string }> {
   const url = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(query)}`;
-  console.log("[searchNaverPlace] fetching", url);
-
   try {
     const res = await fetch(url, { headers: SEARCH_HEADERS });
-    console.log("[searchNaverPlace] status", res.status);
-
     if (!res.ok) {
       return { error: `Naver search ${res.status}: ${res.statusText}` };
     }
 
     const html = await res.text();
-    console.log("[searchNaverPlace] HTML length", html.length);
-
     // Extract __APOLLO_STATE__ using brace-counting (regex can't handle 200KB+ JSON)
     const marker = "__APOLLO_STATE__";
     const apolloIdx = html.indexOf(marker);
     if (apolloIdx === -1) {
-      console.log("[searchNaverPlace] __APOLLO_STATE__ not found, trying broader query");
       // Try extracting placeId from HTML directly
       const placeIdMatch = html.match(/\/place\/(\d{8,})/);
       if (placeIdMatch) {
-        console.log("[searchNaverPlace] found placeId from HTML link:", placeIdMatch[1]);
         const pid = placeIdMatch[1];
         return {
           items: [
@@ -266,7 +258,6 @@ async function searchNaverPlace(
     const eqIdx = html.indexOf("=", apolloIdx);
     const jsonStart = html.indexOf("{", eqIdx);
     if (jsonStart === -1) {
-      console.log("[searchNaverPlace] no JSON object start after __APOLLO_STATE__");
       return { error: "Malformed Apollo State in search page" };
     }
 
@@ -284,16 +275,11 @@ async function searchNaverPlace(
     }
 
     const jsonStr = html.slice(jsonStart, jsonEnd);
-    console.log("[searchNaverPlace] Apollo State JSON length", jsonStr.length);
-
     // Naver uses \u002F (/) and \u0026 (&) unicode escapes
     const cleanJson = jsonStr.replace(/\\u002F/g, "/").replace(/\\u0026/g, "&");
     const apolloState = JSON.parse(cleanJson) as Record<string, unknown>;
-    console.log("[searchNaverPlace] Apollo State keys", Object.keys(apolloState).length);
-
     return parseApolloState(apolloState, display);
   } catch (err) {
-    console.log("[searchNaverPlace] error", String(err));
     return { error: `Naver place search failed: ${String(err)}` };
   }
 }
@@ -342,7 +328,6 @@ function parseApolloState(
           const base = apolloState[baseKey] as Record<string, unknown> | undefined;
           if (base) {
             const coord = base["coordinate"] as Record<string, unknown> | undefined;
-            console.log("[searchNaverPlace] detail page, place:", base["name"]);
             places.push({
               placeId,
               name: String(base["name"] ?? ""),
@@ -362,8 +347,6 @@ function parseApolloState(
       }
     }
   }
-
-  console.log("[searchNaverPlace] parsed places", places.length);
 
   if (places.length === 0) {
     return { error: "No place results found in search page" };
@@ -629,19 +612,9 @@ export const naverTools = {
         items.items.map(async (place) => {
           const result = await fetchPlaceReviews(place.placeId, maxReviews);
           if ("error" in result) {
-            console.log(
-              "[searchNaverPlace] reviews failed for",
-              place.placeId,
-              result.error
-            );
             return { ...place, reviews: [] };
           }
           if (result.reviews.length > 0) {
-            console.log(
-              "[searchNaverPlace] first review keywords for",
-              place.name,
-              result.reviews[0].votedKeywords
-            );
           }
           return {
             ...place,
