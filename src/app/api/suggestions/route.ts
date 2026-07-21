@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth";
-import { listSuggestions, saveSuggestion } from "@/lib/db/suggestions";
+import { DEFAULT_SUGGESTIONS } from "@/lib/data/default-suggestions";
+import { deleteSuggestion, listSuggestions, resetSuggestions, saveSuggestion } from "@/lib/db/suggestions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,4 +34,29 @@ export const POST = async (req: Request) => {
   );
 
   return Response.json({ suggestion });
+};
+
+/** 제안 삭제 */
+export const DELETE = async (req: Request) => {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
+  const { id } = await req.json();
+  if (id == null || isNaN(Number(id))) {
+    return Response.json({ error: "id가 필요합니다." }, { status: 400 });
+  }
+
+  await deleteSuggestion(Number(id));
+
+  return Response.json({ ok: true });
+};
+
+/** 모든 제안을 기본값으로 초기화 */
+export const PATCH = async (req: Request) => {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
+  await resetSuggestions(DEFAULT_SUGGESTIONS);
+
+  return Response.json({ ok: true, count: DEFAULT_SUGGESTIONS.length });
 };

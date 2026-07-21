@@ -54,9 +54,10 @@ const saveData = async ({
 };
 
 const deleteData = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch(`/api/suggestions/${id}`, {
+  const res = await fetch("/api/suggestions", {
     method: "DELETE",
-    headers: { "x-auth-token": token },
+    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
   });
   if (!res.ok) throw new Error("삭제 실패");
 };
@@ -107,8 +108,8 @@ const SuggestionsContent = () => {
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/suggestions/reset", {
-        method: "POST",
+      const res = await fetch("/api/suggestions", {
+        method: "PATCH",
         headers: { "x-auth-token": token! },
       });
       if (!res.ok) throw new Error("초기화 실패");
