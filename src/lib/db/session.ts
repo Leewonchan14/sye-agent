@@ -194,24 +194,37 @@ export const searchSessions = async (
   const titleExpr = sql<string>`COALESCE(${sessionState.title}, 
       ${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`;
 
+  // snippet: 검색어가 포함된 첫 번째 문장을 보여줌
+  // snippet: 검색어가 포함된 첫 번째 문장을 보여줌
+  // 문장 기준: . ! ? 줄바꿈
+  const snippetExpr = sql<string>`COALESCE(
+      CASE
+        WHEN position(lower(${query}) in lower(${sessionState.messagesText})) > 0 THEN
+        (
+          SELECT trim(LEFT(sentence, 200))
+          FROM regexp_split_to_table(${sessionState.messagesText}, '[.!?\t' || chr(10) || ']+') AS sentence
+          WHERE sentence ILIKE '%' || ${query} || '%'
+            AND trim(sentence) IS DISTINCT FROM trim(COALESCE(${sessionState.title}, ''))
+          LIMIT 1
+        )
+        ELSE LEFT(${sessionState.messagesText}, 200)
+      END,
+      ''
+    )`;
+
   const rows = await db
     .select({
       id: sessionState.sessionId,
       title: titleExpr,
       messageCount: sql<number>`jsonb_array_length(${sessionState.messages})`,
       lastActivity: sessionState.updatedAt,
-      snippet: sql<string>`COALESCE(
-          LEFT(${sessionState.messagesText}, 200),
-          ${sessionState.messages}->0->'parts'->0->>'text',
-          ''
-        )`,
+      snippet: snippetExpr,
     })
     .from(sessionState)
     .where(
       sql`(
         ${sessionState.title} ILIKE ${pattern}
         OR ${sessionState.messagesText} ILIKE ${pattern}
-        OR ${sessionState.messages}::text ILIKE ${pattern}
       )`
     )
     .orderBy(desc(sessionState.updatedAt))
