@@ -7,6 +7,12 @@ import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
 import { brandMonitor } from "@/lib/tools/brand-monitoring";
 import { getCurrentTime } from "@/lib/tools/current-time";
 import { exaTools } from "@/lib/tools/exa";
+import {
+  instructionAdd,
+  instructionDelete,
+  instructionEdit,
+  instructionList,
+} from "@/lib/tools/instructions";
 import { memoryKeywordSearch, memoryVectorSearch } from "@/lib/tools/memory-search";
 import { naverTools } from "@/lib/tools/naver";
 
@@ -53,6 +59,10 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
       get_current_time: getCurrentTime,
       memory_keyword_search: memoryKeywordSearch,
       memory_vector_search: memoryVectorSearch,
+      instruction_add: instructionAdd,
+      instruction_edit: instructionEdit,
+      instruction_delete: instructionDelete,
+      instruction_list: instructionList,
     },
     stopWhen: isStepCount(100),
   }) as unknown as ToolLoopAgent;

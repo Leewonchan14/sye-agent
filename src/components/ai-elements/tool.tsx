@@ -94,6 +94,11 @@ const toolNameKoreanMap: Record<string, string> = {
   memory_vector_search: "카톡 의미 검색",
   /* brand monitoring tools */
   brand_monitor: "데이터 수집 및 분석",
+  /* instruction management */
+  instruction_add: "지시 사항 추가",
+  instruction_edit: "지시 사항 수정",
+  instruction_delete: "지시 사항 삭제",
+  instruction_list: "지시 사항 목록",
   /* utility */
   get_current_time: "현재 시각",
 };
