@@ -32,8 +32,7 @@ const suggestions = [
     prompt:
       "파나소닉 브랜드 모니터링 해줘…! 최근 일주일간 뉴스, 블로그, 인스타그램, 트위터, 커뮤니티랑 커뮤니티 반응이 궁금해…!",
   },
-  { label: "대화 검색", prompt: "우리 같이 초밥 먹은 얘기 찾아줘…!" },
-  { label: "크리스마스 대화", prompt: "크리스마스 때 나눈 대화 보여줘…!" },
+  { label: "카톡 대화 검색", prompt: "우리 봤던 영화 뭐였더라…!" },
 ];
 
 export const ExampleQuestions = ({ onQuestionClick }: Props) => {

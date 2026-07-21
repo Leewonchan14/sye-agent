@@ -210,7 +210,7 @@ const InstructionsContent = () => {
               onChange={(e) => setLabel(e.target.value)}
             />
             <Textarea
-              placeholder={`하치와레에게 추가로 알려줄 내용을 입력해줘…!\n\n예시:\n- "요즘 감성적인 카페 위주로 추천해줘"\n- "예은이는 걱정이 많아서 자주 안아줘…!"\n- "데이트 코스 추천할 때 교통편도 같이 알려줘…!"`}
+              placeholder={`하치와레에게 추가로 알려줄 내용을 입력해줘…!\n\n예시:\n- "요즘 감성적인 카페 위주로 추천해줘"\n- "예은이는 걱정이 많아서 자주 안아줘…!"\n- "데이트 코스 추천할 때 교통편도 같이 알려줘…!"\n- "브랜드 언급을 모니터링할 때 부정적인 키워드가 보이면 바로 알려줘"\n- "인플루언서 분석 결과에서 1천 팔로워 이상만 알려줘"\n- "경쟁사 비교할 때 우리 브랜드의 점유율 변화를 강조해줘"`}
               rows={10}
               value={content}
               onChange={(e) => setContent(e.target.value)}
