@@ -3,6 +3,8 @@ import customParseFormat from "dayjs/plugin/customParseFormat";
 import _ from "lodash";
 import Papa from "papaparse";
 
+import { sql } from "drizzle-orm";
+
 import { requireAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db/db";
 import { kakaoChat } from "@/lib/db/schema";
@@ -230,12 +232,55 @@ export const POST = async (req: Request) => {
 
       try {
         const db = getDb();
-        const messages = rows.map((r) => r.message);
-        const total = rows.length;
+        const totalFromCsv = rows.length;
 
-        send("parse", { totalRows: total });
+        send("parse", { totalRows: totalFromCsv });
 
-        // Embedding
+        // ── Dedup: filter out rows already in DB before embedding ──
+        const minDate = rows.reduce(
+          (min, r) => (r.date < min ? r.date : min),
+          rows[0].date
+        );
+        const maxDate = rows.reduce(
+          (max, r) => (r.date > max ? r.date : max),
+          rows[0].date
+        );
+
+        const existingRows = await db
+          .select({
+            date: kakaoChat.date,
+            user: kakaoChat.user,
+            message: kakaoChat.message,
+          })
+          .from(kakaoChat)
+          .where(
+            sql`${kakaoChat.date} >= ${minDate} AND ${kakaoChat.date} <= ${maxDate}`
+          );
+
+        const existingSet = new Set(
+          existingRows.map((r) => `${r.date?.toISOString()}|${r.user}|${r.message}`)
+        );
+
+        const newRows = rows.filter(
+          (r) => !existingSet.has(`${r.date.toISOString()}|${r.user}|${r.message}`)
+        );
+
+        const total = newRows.length;
+        const preFilteredSkipped = totalFromCsv - total;
+
+        if (total === 0) {
+          send("done", {
+            totalRows: totalFromCsv,
+            inserted: 0,
+            skipped: totalFromCsv,
+            summary: `모든 메시지가 이미 존재합니다 (${totalFromCsv}개 중복)`,
+          });
+          controller.close();
+          return;
+        }
+
+        // Embedding (only for new rows)
+        const messages = newRows.map((r) => r.message);
         const embeddings = await embedBatch(messages, (done) => {
           send("embedding", { done, total });
         });
@@ -243,7 +288,7 @@ export const POST = async (req: Request) => {
         // Insert in batches
         let inserted = 0;
         const batchSize = 100;
-        const batches = _.chunk(rows, batchSize);
+        const batches = _.chunk(newRows, batchSize);
 
         for (let i = 0; i < batches.length; i++) {
           const batch = batches[i];
@@ -265,13 +310,13 @@ export const POST = async (req: Request) => {
           send("insert", { inserted, total });
         }
 
-        const skipped = total - inserted;
+        const totalSkipped = preFilteredSkipped + (total - inserted);
 
         send("done", {
-          totalRows: total,
+          totalRows: totalFromCsv,
           inserted,
-          skipped,
-          summary: `${total}개 중 ${inserted}개 저장됨${skipped > 0 ? ` (${skipped}개 중복 제외)` : ""}`,
+          skipped: totalSkipped,
+          summary: `${totalFromCsv}개 중 ${inserted}개 저장됨${totalSkipped > 0 ? ` (${totalSkipped}개 중복 제외)` : ""}`,
         });
       } catch (error) {
         console.error("SSE upload error:", error);
