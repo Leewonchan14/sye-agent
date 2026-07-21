@@ -58,3 +58,12 @@ export const deleteSuggestion = async (id: number): Promise<void> => {
   const db = getDb();
   await db.delete(suggestionsTable).where(eq(suggestionsTable.id, id));
 };
+
+/** 모든 제안을 삭제하고 기본값으로 재설정합니다. */
+export const resetSuggestions = async (
+  defaults: { label: string; prompt: string; sortOrder: number }[]
+): Promise<void> => {
+  const db = getDb();
+  await db.delete(suggestionsTable);
+  await db.insert(suggestionsTable).values(defaults);
+};

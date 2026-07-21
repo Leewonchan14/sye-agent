@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
+import { DEFAULT_SUGGESTIONS } from "@/lib/data/default-suggestions";
 import { Trash2 } from "lucide-react";
 
 interface Suggestion {
@@ -104,6 +105,38 @@ const SuggestionsContent = () => {
     },
   });
 
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/suggestions/reset", {
+        method: "POST",
+        headers: { "x-auth-token": token! },
+      });
+      if (!res.ok) throw new Error("초기화 실패");
+      return res.json() as Promise<{ ok: boolean; count: number }>;
+    },
+    onSuccess: (data) => {
+      setEditId(undefined);
+      setLabel("");
+      setPrompt("");
+      invalidate();
+    },
+  });
+
+  const handleReset = useCallback(async () => {
+    if (!token) return;
+    const ok = await confirmDialog.confirm({
+      title: "질문 초기화",
+      description:
+        "모든 질문이 기본값으로 초기화됩니다. 직접 추가한 질문은 사라지니 주의해줘…!\n\n" +
+        `기본 질문 (${DEFAULT_SUGGESTIONS.length}개):\n` +
+        DEFAULT_SUGGESTIONS.map((s, i) => `${i + 1}. ${s.label}`).join("\n"),
+      destructive: true,
+      confirmLabel: "초기화",
+    });
+    if (!ok) return;
+    resetMutation.mutate();
+  }, [token, resetMutation, confirmDialog]);
+
   const handleSave = useCallback(() => {
     if (!label.trim() || !prompt.trim() || !token) return;
     saveMutation.mutate({
@@ -169,6 +202,17 @@ const SuggestionsContent = () => {
           채팅 화면에 표시될 추천 질문을 관리한다는 거야…! 자주 묻는 걸 등록해두면 버튼
           하나로 바로 보낼 수 있어…♪
         </p>
+        <div className="mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={resetMutation.isPending}
+            onClick={handleReset}
+            className="text-xs text-muted-foreground"
+          >
+            {resetMutation.isPending ? "초기화 중..." : "기본값으로 초기화"}
+          </Button>
+        </div>
       </div>
 
       {/* Content sections */}

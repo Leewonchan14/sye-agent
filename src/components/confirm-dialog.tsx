@@ -57,7 +57,9 @@ export const useConfirmDialog = () => {
         <DialogHeader>
           <DialogTitle>{options.title}</DialogTitle>
           {options.description && (
-            <DialogDescription>{options.description}</DialogDescription>
+            <DialogDescription className="whitespace-pre-wrap">
+              {options.description}
+            </DialogDescription>
           )}
         </DialogHeader>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
