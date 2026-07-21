@@ -8,7 +8,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { SidebarLayout } from "@/components/sidebar-layout";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
 
@@ -90,15 +89,18 @@ const SearchPage = () => {
         <div className="mt-16 mb-8 text-center md:mt-20">
           <Tooltip>
             <TooltipTrigger render={<span className="inline-flex" />}>
-              <Avatar size="lg" className="mx-auto mb-4 cursor-pointer">
-                <AvatarImage src="/munjackgui-thinking.png" alt="치이카와" />
-              </Avatar>
+              <img
+                src="/munjackgui-thinking.png"
+                alt="치이카와"
+                className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
+                style={{ backgroundColor: "var(--color-canvas-soft)" }}
+              />
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={8} align="center">
               <img
                 src="/munjackgui-thinking.png"
                 alt=""
-                className="w-36 rounded-md bg-background object-cover"
+                className="size-36 rounded-md bg-background object-cover"
               />
             </TooltipContent>
           </Tooltip>
