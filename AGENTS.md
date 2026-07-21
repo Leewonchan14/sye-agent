@@ -65,3 +65,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 코드 수정 후 **반드시** `prettier`와 `eslint`를 실행하여 스타일 일관성을 유지하세요. (커밋 전에 자동으로 실행된다고 가정하지 말고 직접 수행)
 
 - 프로젝트에 설정된 대로 `npm run format`, `npm run lint` 등을 실행하세요.
+
+# Vercel Deployment (Bundle Size Limit)
+
+이 프로젝트는 **Vercel**에 배포됩니다. Vercel의 Serverless Function 실행 환경에는 **250MB**의 bundle size 제한이 있습니다. (https://vercel.com/docs/functions/serverless-functions/overview)
+
+- **중요: 최종 번들 크기가 250MB를 초과하지 않도록 주의하세요.**
+- 불필요한 라이브러리나 큰 의존성을 추가하지 마세요.
+- 큰 라이브러리가 필요하다면, 번들 크기에 미치는 영향을 먼저 확인하고 대안이 있는지 검토하세요.
+- `sharp` 등 네이티브 바이너리를 포함하는 패키지는 용량이 매우 크므로, 정말 필요한 경우에만 사용하고 대체 방안을 우선 고려하세요.
+- Prisma 같은 ORM 대신 Drizzle ORM을 선택한 것도 번들 크기 측면에서 유리하기 때문입니다. (Drizzle은 zero-dependency로 가볍습니다.)
