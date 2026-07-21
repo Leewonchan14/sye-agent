@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    build: .
     container_name: sye-db
     restart: unless-stopped
     ports:

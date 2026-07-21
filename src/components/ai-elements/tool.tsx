@@ -90,7 +90,8 @@ const toolNameKoreanMap: Record<string, string> = {
   web_search_exa: "웹에서 찾기",
   web_fetch_exa: "웹 내용 읽기",
   /* memory search */
-  memory_search: "카톡 대화 찾기",
+  memory_keyword_search: "카톡 키워드 검색",
+  memory_vector_search: "카톡 의미 검색",
   /* brand monitoring tools */
   brand_monitor: "데이터 수집 및 분석",
   /* utility */

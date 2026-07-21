@@ -11,17 +11,51 @@ export const saveSessionState = async (
   messages: unknown[]
 ): Promise<void> => {
   const db = getDb();
+
+  // messagesText 검색 인덱스를 위해 모든 텍스트 추출
+  const msgs = messages as Array<{
+    role?: string;
+    parts?: Array<{ type: string; text?: string }>;
+  }>;
+
+  // Title: 첫 번째 텍스트 파트
+  let title: string | null = null;
+  for (const msg of msgs) {
+    const textParts = msg.parts?.filter(
+      (p) => p.type === "text" && p.text?.trim()
+    );
+    if (textParts && textParts.length > 0) {
+      title = textParts[0].text!.trim();
+      break;
+    }
+  }
+
+  // messagesText: 모든 메시지의 텍스트를 연결
+  const allText = msgs
+    .flatMap(
+      (msg) =>
+        msg.parts
+          ?.filter((p) => p.type === "text")
+          .map((p) => p.text)
+          .filter(Boolean) ?? []
+    )
+    .join("\n");
+
   await db
     .insert(sessionState)
     .values({
       sessionId,
+      title,
       messages: messages as unknown[],
+      messagesText: allText || null,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: sessionState.sessionId,
       set: {
+        title,
         messages: messages as unknown[],
+        messagesText: allText || null,
         updatedAt: new Date(),
       },
     });
@@ -47,6 +81,14 @@ export interface SessionInfo {
   title: string;
   messageCount: number;
   lastActivity: string;
+}
+
+export interface SessionSearchResult {
+  id: string;
+  title: string;
+  messageCount: number;
+  lastActivity: string;
+  snippet: string;
 }
 
 export interface SessionsPage {
@@ -159,6 +201,55 @@ const toDateString = (d: Date | string | null): string => {
   if (!d) return new Date(0).toISOString();
   if (typeof d === "string") return d;
   return d.toISOString();
+};
+
+export const searchSessions = async (
+  query: string,
+  limit: number = 20
+): Promise<SessionSearchResult[]> => {
+  const db = getDb();
+
+  if (!query.trim()) return [];
+
+  const pattern = `%${query}%`;
+
+  // title / messages_text (trigram index) + JSONB fallback for legacy rows
+  const titleExpr =
+    sql<string>`COALESCE(${sessionState.title}, 
+      ${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`;
+
+  const rows = await db
+    .select({
+      id: sessionState.sessionId,
+      title: titleExpr,
+      messageCount:
+        sql<number>`jsonb_array_length(${sessionState.messages})`,
+      lastActivity: sessionState.updatedAt,
+      snippet:
+        sql<string>`COALESCE(
+          LEFT(${sessionState.messagesText}, 200),
+          ${sessionState.messages}->0->'parts'->0->>'text',
+          ''
+        )`,
+    })
+    .from(sessionState)
+    .where(
+      sql`(
+        ${sessionState.title} ILIKE ${pattern}
+        OR ${sessionState.messagesText} ILIKE ${pattern}
+        OR ${sessionState.messages}::text ILIKE ${pattern}
+      )`
+    )
+    .orderBy(desc(sessionState.updatedAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title ?? "New Chat",
+    messageCount: row.messageCount,
+    lastActivity: toDateString(row.lastActivity),
+    snippet: row.snippet ?? "",
+  }));
 };
 
 export const getOrCreateSession = (sessionId?: string): string => {
