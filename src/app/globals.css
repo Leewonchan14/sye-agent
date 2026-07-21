@@ -5,7 +5,28 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+  --color-canvas: var(--color-canvas);
+  --color-canvas-soft: var(--color-canvas-soft);
+  --color-canvas-strong: var(--color-canvas-strong);
   --color-canvas-card: hsl(355 25% 92%);
+  --color-surface: var(--color-surface);
+  --color-surface-soft: var(--color-surface-soft);
+  --color-surface-card: var(--color-surface-card);
+  --color-ink: var(--color-ink);
+  --color-body: var(--color-body);
+  --color-body-strong: var(--color-body-strong);
+  --color-muted-soft: var(--color-muted-soft);
+  --color-hairline: var(--color-hairline);
+  --color-hairline-soft: var(--color-hairline-soft);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-disabled: var(--color-primary-disabled);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+  --color-dark: var(--color-dark);
+  --color-dark-soft: var(--color-dark-soft);
+  --color-on-dark: var(--color-on-dark);
+  --color-on-dark-soft: var(--color-on-dark-soft);
   /* shadcn legacy — bridge to Tailwind v4 utility classes */
   --color-background: var(--background);
   --color-foreground: var(--foreground);

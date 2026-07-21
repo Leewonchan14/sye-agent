@@ -85,14 +85,9 @@ export const SessionSidebar = ({
 
   return (
     <aside
-      className="flex h-dvh shrink-0 flex-col transition-all duration-200 ease-out"
-      style={{
-        width: isOpen ? 288 : 52,
-        backgroundColor: css("color-canvas"),
-        borderRight: `1px solid ${css("color-hairline")}`,
-        color: css("color-ink"),
-        overflow: "hidden",
-      }}
+      className={`flex h-dvh shrink-0 flex-col overflow-hidden border-r border-hairline bg-canvas text-ink transition-all duration-200 ease-out ${
+        isOpen ? "w-[288px]" : "w-13"
+      }`}
     >
       {isOpen ? (
         <>
@@ -141,17 +136,14 @@ export const SessionSidebar = ({
               onClick={() => router.push("/system-prompt")}
             >
               <FileText className="h-4 w-4" />
-              System Prompt
+              지시 사항
             </Button>
           </div>
 
           {/* Session list */}
           <nav className="flex-1 overflow-y-auto px-2 py-1">
             {!loading && !sessions.length && (
-              <div
-                className="px-3 py-4 text-xs"
-                style={{ color: css("color-muted-soft") }}
-              >
+              <div className="px-3 py-4 text-xs text-muted-soft">
                 아직 채팅이 없습니다
               </div>
             )}
@@ -162,11 +154,7 @@ export const SessionSidebar = ({
                   key={s.id}
                   type="button"
                   onClick={() => onSelect(s.id)}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors"
-                  style={{
-                    backgroundColor: active ? css("color-canvas-card") : "transparent",
-                    color: active ? css("color-ink") : css("color-muted"),
-                  }}
+                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors${active ? "bg-canvas-card text-ink" : ""}`}
                   onMouseEnter={(e) => {
                     if (!active)
                       e.currentTarget.style.backgroundColor = css("color-canvas-soft");
@@ -176,10 +164,7 @@ export const SessionSidebar = ({
                   }}
                 >
                   <span className="flex-1 truncate">{truncate(s.title, 28)}</span>
-                  <span
-                    className="shrink-0 text-[11px]"
-                    style={{ color: css("color-muted-soft") }}
-                  >
+                  <span className="shrink-0 text-[11px] text-muted-soft">
                     {dayjs(s.lastActivity).fromNow()}
                   </span>
                 </button>
@@ -188,10 +173,7 @@ export const SessionSidebar = ({
             {/* Infinite scroll sentinel */}
             <div ref={sentinelRef} className="h-px" />
             {isFetchingNextPage && (
-              <div
-                className="px-3 py-3 text-center text-xs"
-                style={{ color: css("color-muted-soft") }}
-              >
+              <div className="px-3 py-3 text-center text-xs text-muted-soft">
                 불러오는 중…
               </div>
             )}

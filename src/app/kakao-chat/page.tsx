@@ -3,15 +3,11 @@
 import { useCallback, useRef, useState } from "react";
 
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
+import { Upload } from "lucide-react";
 
 type SseEvent =
   | { event: "parse"; totalRows: number }
@@ -193,168 +189,170 @@ const KakaoChatPage = () => {
 
   return (
     <SidebarLayout>
-      <div className="flex min-h-dvh items-center justify-center p-4">
-        <Card className="w-full max-w-2xl">
-          <CardHeader>
-            <CardTitle>카카오톡 대화 업로드</CardTitle>
-            <CardDescription>
-              카카오톡에서 내보낸 CSV 파일을 업로드하면{" "}
-              <span className="font-semibold text-foreground">kakao_chat</span> 테이블이
-              자동으로 업데이트됩니다. 중복 메시지는 자동으로 제외됩니다.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={onFileChange}
-            />
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
+        {/* Header */}
+        <div className="mt-16 mb-8 text-center md:mt-20">
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <Avatar size="lg" className="mx-auto mb-4 cursor-pointer">
+                <AvatarImage src="/munjackgui-thinking.png" alt="치이카와" />
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={8} align="center">
+              <img
+                src="/munjackgui-thinking.png"
+                alt=""
+                className="w-36 rounded-md bg-background object-cover"
+              />
+            </TooltipContent>
+          </Tooltip>
+          <h1 className="text-xl font-normal text-ink">카카오톡 대화 업로드</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            예은님과 원찬님의 카톡 대화를 업로드하면 하치와레가 더 똑똑하게 기억한…는
+            뜻이야…!
+            <br />
+            중복은 알아서 걸러진다는 거야…!
+          </p>
+        </div>
 
-            {/* Drop zone */}
-            <div
-              role="button"
-              tabIndex={0}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
-                dragOver
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
-              }`}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onClick={onPick}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") onPick();
-              }}
-            >
-              <svg
-                className="mb-2 size-8 text-muted-foreground"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+        {/* Content */}
+        <div className="mb-12 rounded-xl border border-hairline bg-surface p-6">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={onFileChange}
+          />
+
+          {/* Drop zone */}
+          <div
+            role="button"
+            tabIndex={0}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+              dragOver ? "border-primary bg-primary/10" : "border-hairline"
+            }`}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onClick={onPick}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") onPick();
+            }}
+          >
+            <Upload className="mb-2 size-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              {dragOver ? "여기에 놓아줘…!" : "카톡 내보내기 CSV 파일을 업로드해줘…!"}
+            </p>
+            <p className="mt-1 text-xs text-muted-soft">
+              카카오톡 &gt; 대화방 설정 &gt; 대화 내용 내보내기
+            </p>
+          </div>
+
+          {/* Upload state */}
+          {uploadState.status === "uploading" && (
+            <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
+              <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              파일 올리는 중…
+            </div>
+          )}
+
+          {uploadState.status === "parsing" && (
+            <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
+              <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              {uploadState.totalRows
+                ? `${uploadState.totalRows.toLocaleString()}개 행…! 대화를 읽었…다는 거야!?`
+                : "대화를 읽고 있어…!"}
+            </div>
+          )}
+
+          {uploadState.status === "embedding" && (
+            <div className="space-y-1.5 pt-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">뜻을 기억하고 있어…!</span>
+                <span className="font-medium text-muted-foreground tabular-nums">
+                  {uploadState.done.toLocaleString()} /{" "}
+                  {uploadState.totalRows.toLocaleString()}
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-canvas-soft">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{
+                    width: `${Math.round((uploadState.done / uploadState.totalRows) * 100)}%`,
+                  }}
                 />
-              </svg>
-              <p className="text-sm text-muted-foreground">
-                {dragOver
-                  ? "파일을 여기에 놓으세요"
-                  : "CSV 파일을 드래그하거나 클릭하여 선택하세요"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                KakaoTalk_Chat_*.csv 형식
+              </div>
+            </div>
+          )}
+
+          {uploadState.status === "inserting" && (
+            <div className="space-y-1.5 pt-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">하나씩 저장하고 있어…!</span>
+                <span className="font-medium text-muted-foreground tabular-nums">
+                  {uploadState.inserted.toLocaleString()} /{" "}
+                  {uploadState.totalRows.toLocaleString()}
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-canvas-soft">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{
+                    width: `${Math.min(100, Math.round((uploadState.inserted / uploadState.totalRows) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {uploadState.status === "error" && (
+            <div className="mt-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+              {uploadState.message}
+            </div>
+          )}
+
+          {uploadState.status === "done" && (
+            <div className="pt-4">
+              <div className="rounded-lg border border-hairline bg-canvas-soft p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">읽은 대화</span>
+                  <span className="font-medium">
+                    {uploadState.totalRows.toLocaleString()}개
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-muted-foreground">기억한 대화</span>
+                  <span className="font-medium text-success">
+                    {uploadState.inserted.toLocaleString()}개
+                  </span>
+                </div>
+                {uploadState.skipped > 0 && (
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-muted-foreground">이미 아는 대화</span>
+                    <span className="font-medium text-muted-soft">
+                      {uploadState.skipped.toLocaleString()}개
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                {uploadState.summary}
               </p>
             </div>
+          )}
 
-            {/* Upload state */}
-            {uploadState.status === "uploading" && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                파일 업로드 중…
-              </div>
-            )}
-
-            {uploadState.status === "parsing" && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                {uploadState.totalRows
-                  ? `CSV 파싱 완료 (${uploadState.totalRows.toLocaleString()}개 행)`
-                  : "CSV 파싱 중…"}
-              </div>
-            )}
-
-            {uploadState.status === "embedding" && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">임베딩 생성 중…</span>
-                  <span className="font-medium text-muted-foreground tabular-nums">
-                    {uploadState.done.toLocaleString()} /{" "}
-                    {uploadState.totalRows.toLocaleString()}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-300"
-                    style={{
-                      width: `${Math.round((uploadState.done / uploadState.totalRows) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {uploadState.status === "inserting" && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">데이터 저장 중…</span>
-                  <span className="font-medium text-muted-foreground tabular-nums">
-                    {uploadState.inserted.toLocaleString()} /{" "}
-                    {uploadState.totalRows.toLocaleString()}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, Math.round((uploadState.inserted / uploadState.totalRows) * 100))}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {uploadState.status === "error" && (
-              <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
-                {uploadState.message}
-              </div>
-            )}
-
-            {uploadState.status === "done" && (
-              <div className="space-y-2">
-                <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">전체</span>
-                    <span className="font-medium">
-                      {uploadState.totalRows.toLocaleString()}개
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-muted-foreground">저장됨</span>
-                    <span className="font-medium text-green-600 dark:text-green-400">
-                      {uploadState.inserted.toLocaleString()}개
-                    </span>
-                  </div>
-                  {uploadState.skipped > 0 && (
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-muted-foreground">중복 제외</span>
-                      <span className="font-medium text-muted-foreground">
-                        {uploadState.skipped.toLocaleString()}개
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-center text-sm text-muted-foreground">
-                  {uploadState.summary}
-                </p>
-              </div>
-            )}
-
+          <div className="pt-4">
             <Button
               className="w-full"
               variant="outline"
               disabled={uploadState.status === "uploading"}
               onClick={onPick}
             >
-              {uploadState.status === "uploading" ? "업로드 중..." : "파일 선택하기"}
+              {uploadState.status === "uploading" ? "올리는 중…" : "파일 고르기…!"}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </SidebarLayout>
   );

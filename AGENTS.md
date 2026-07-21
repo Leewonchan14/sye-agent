@@ -39,6 +39,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Code style
 
 - 함수 선언 시 `function` 키워드 대신 **arrow function** (`const fn = (...) => { ... }`)만 사용하세요.
+- 조건부 클래스명은 삼항연산자(`condition ? "class" : ""`) 대신 **&& 연산자**(`condition && "class"`)를 사용하세요. (예: `{active ? "bg-card text-ink" : ""}` → `{active && "bg-card text-ink"}`)
 
 # Date & Time
 
