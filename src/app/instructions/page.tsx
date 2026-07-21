@@ -51,9 +51,10 @@ const saveData = async ({
 };
 
 const toggleActive = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch(`/api/instructions/${id}`, {
+  const res = await fetch("/api/instructions", {
     method: "PATCH",
-    headers: { "x-auth-token": token },
+    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "토글 실패");
@@ -61,9 +62,10 @@ const toggleActive = async ({ token, id }: { token: string; id: number }) => {
 };
 
 const deleteInstruction = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch(`/api/instructions/${id}`, {
+  const res = await fetch("/api/instructions", {
     method: "DELETE",
-    headers: { "x-auth-token": token },
+    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
   });
   if (!res.ok) throw new Error("삭제 실패");
 };
