@@ -117,13 +117,13 @@ export const SidebarLayout = ({ children, activeSessionId = "", loading }: Props
           <Menu className="h-5 w-5" />
         </Button>
         <Avatar size="sm">
-          <AvatarImage src="/munjackgui.png" alt="치이카와" />
+          <AvatarImage src="/munjackgui.png" alt="하치와레" />
         </Avatar>
         <span
           className="flex-1 text-sm font-medium"
           style={{ color: "var(--color-ink)" }}
         >
-          치이카와 메이트
+          하치와레 메이트
         </span>
         <Button variant="ghost" size="icon" onClick={onNew} aria-label="New chat">
           <Plus className="h-5 w-5" />

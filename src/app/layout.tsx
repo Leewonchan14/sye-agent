@@ -26,29 +26,29 @@ const SITE_URL = BASE_URL.startsWith("http") ? BASE_URL : `https://${BASE_URL}`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "원찬 & 예은 — 둘만의 데이트",
+  title: "하치와레 메이트",
   description:
-    "이원찬과 성예은, 둘만의 특별한 데이트를 함께 계획하는 공간이에요…♪ 작고 귀여운 치이카와가 메이트로 함께해요.",
+    "작고 귀여운 하치와레가 메이트로 도와줄게요♪",
   icons: {
     icon: [{ url: "/munjackgui.png", sizes: "384x384", type: "image/png" }],
     apple: { url: "/munjackgui.png", sizes: "384x384", type: "image/png" },
   },
   openGraph: {
     url: SITE_URL,
-    title: "원찬 & 예은 — 둘만의 데이트",
-    description: "이원찬과 성예은, 둘만의 특별한 데이트를 함께 계획하는 공간이에요…♪",
+    title: "하치와레 메이트",
+    description: "하치와레 메이트가 도와줄게요♪",
     images: [
       {
         url: "/munjackgui.png",
         width: 384,
         height: 384,
-        alt: "치이카와",
+        alt: "하치와레",
       },
       {
         url: "/munjackgui-thinking.png",
         width: 200,
         height: 200,
-        alt: "치이카와 생각중",
+        alt: "하치와레 생각중",
       },
     ],
     type: "website",
@@ -56,8 +56,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "원찬 & 예은 — 둘만의 데이트",
-    description: "둘만의 특별한 데이트 플래너…♪",
+    title: "하치와레 메이트",
+    description: "하치와레 메이트가 도와줄게요♪",
     images: ["/munjackgui.png"],
   },
 };

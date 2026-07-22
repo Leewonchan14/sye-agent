@@ -95,9 +95,9 @@ export const SessionSidebar = ({
           <div className="flex h-14 items-center justify-between px-4">
             <div className="flex items-center gap-2">
               <Avatar size="sm">
-                <AvatarImage src="/munjackgui.png" alt="치이카와" />
+                <AvatarImage src="/munjackgui.png" alt="하치와레" />
               </Avatar>
-              <span className="text-sm font-medium">치이카와 메이트</span>
+              <span className="text-sm font-medium">하치와레 메이트</span>
             </div>
             <Button
               variant="ghost"

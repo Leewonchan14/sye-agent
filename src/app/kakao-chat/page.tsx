@@ -195,7 +195,7 @@ const KakaoChatPage = () => {
             <TooltipTrigger render={<span className="inline-flex" />}>
               <img
                 src="/munjackgui-thinking.png"
-                alt="치이카와"
+                alt="하치와레"
                 className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
                 style={{ backgroundColor: "var(--color-canvas-soft)" }}
               />

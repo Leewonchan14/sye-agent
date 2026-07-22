@@ -272,7 +272,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 {showLoader && (
                   <div className="flex animate-bounce items-center gap-2 px-3 py-2">
                     <Avatar size="sm" className="inline-flex md:hidden">
-                      <AvatarImage src="/munjackgui.png" alt="치이카와" />
+                      <AvatarImage src="/munjackgui.png" alt="하치와레" />
                     </Avatar>
                     <span className="text-sm text-muted-foreground">생각 중이에요…♪</span>
                   </div>
@@ -341,7 +341,7 @@ const ChatLoading = () => {
     <div className="flex flex-1 flex-col items-center justify-center gap-4">
       <img
         src="/munjackgui.png"
-        alt="치이카와"
+        alt="하치와레"
         className="size-20 animate-bounce rounded-full object-cover"
         style={{ backgroundColor: "var(--color-canvas-soft)" }}
       />
@@ -405,7 +405,7 @@ const RotatingPhrase = () => {
     >
       <img
         src="/munjackgui.png"
-        alt="치이카와"
+        alt="하치와레"
         className="size-5 rounded-full object-cover"
         draggable={false}
       />
@@ -462,7 +462,7 @@ const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void 
       <div className="mb-5">
         <img
           src="/munjackgui.png"
-          alt="치이카와"
+          alt="하치와레"
           className="size-16 rounded-full object-cover"
           style={{ backgroundColor: "var(--color-canvas-soft)" }}
           draggable={false}

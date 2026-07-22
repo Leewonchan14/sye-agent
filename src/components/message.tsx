@@ -70,7 +70,7 @@ export const MessageItem = ({
     <Message from="assistant">
       <div className="flex items-start gap-3">
         <Avatar size="default" className="hidden md:inline-flex">
-          <AvatarImage src="/munjackgui.png" alt="치이카와" />
+          <AvatarImage src="/munjackgui.png" alt="하치와레" />
         </Avatar>
         <div className="min-w-0 flex-1">
           {/* Text & reasoning: overflow-visible so table popups/tooltips aren't clipped */}
