@@ -47,7 +47,7 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
 
   agent = new ToolLoopAgent({
     id: "trable-agent",
-    model: opencode("deepseek-v4-flash"),
+    model: opencode("deepseek-v4-pro"),
     providerOptions: {
       opencodeGo: { reasoningEffort: "xhigh" },
     },
