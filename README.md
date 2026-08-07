@@ -24,7 +24,7 @@ npm install
 
 # .env 파일 생성
 cp .env.example .env
-# → SITE_PASSWORD, OPENCODE_GO_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
+# → SITE_PASSWORD, DEEPSEEK_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
 
 npm run dev
 # http://localhost:3000
@@ -32,10 +32,13 @@ npm run dev
 
 ## 환경 변수
 
-| 변수                  | 필수 | 설명                                                 |
-| --------------------- | ---- | ---------------------------------------------------- |
-| `SITE_PASSWORD`       | ✅   | 웹사이트 접속 비밀번호 (예: 0411)                    |
-| `OPENCODE_GO_API_KEY` | ✅   | OpenCode Go API 키 (Deepseek API 호출용 Bearer 토큰) |
+| 변수                  | 필수 | 설명                                              |
+| --------------------- | ---- | ------------------------------------------------- |
+| `SITE_PASSWORD`       | ✅   | 웹사이트 접속 비밀번호 (예: 0411)                 |
+| `DEEPSEEK_API_KEY`    | ✅*  | DeepSeek 공식 API 키 (DeepSeek provider 사용 시)  |
+| `OPENCODE_GO_API_KEY` | ✅*  | OpenCode Go API 키 (OpenCode Go provider 사용 시) |
+
+> *`DEEPSEEK_API_KEY` 또는 `OPENCODE_GO_API_KEY` 중 **활성화된 provider의 키 1개**만 있으면 됩니다. provider 전환 방법은 `src/lib/agent.ts`의 주석을 참고하세요.
 
 | `DATABASE_URL` | ✅ | Neon DB 연결 문자열 |
 | `NAVER_CLIENT_ID` | ✅ | 네이버 검색 API Client ID |
@@ -46,7 +49,8 @@ npm run dev
 
 ```env
 SITE_PASSWORD=0411
-OPENCODE_GO_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
+# OPENCODE_GO_API_KEY=oc_go_...  # OpenCode Go로 전환 시 주석 해제
 DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 NAVER_CLIENT_ID=your_naver_client_id
 NAVER_CLIENT_SECRET=your_naver_client_secret

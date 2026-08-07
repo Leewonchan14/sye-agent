@@ -4,7 +4,7 @@ services:
     container_name: sye-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5460:5432"
     environment:
       POSTGRES_USER: sye
       POSTGRES_PASSWORD: sye_dev_pass

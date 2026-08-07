@@ -14,7 +14,9 @@ export const POST = async (req: Request) => {
 
   // Validate required configuration
   const missing: string[] = [];
-  if (!process.env.OPENCODE_GO_API_KEY) missing.push("OPENCODE_GO_API_KEY");
+  const hasProviderKey =
+    !!process.env.DEEPSEEK_API_KEY || !!process.env.OPENCODE_GO_API_KEY;
+  if (!hasProviderKey) missing.push("DEEPSEEK_API_KEY 또는 OPENCODE_GO_API_KEY");
   if (!process.env.NAVER_CLIENT_ID) missing.push("NAVER_CLIENT_ID");
   if (!process.env.NAVER_CLIENT_SECRET) missing.push("NAVER_CLIENT_SECRET");
 

@@ -1,3 +1,4 @@
+import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 import { ToolLoopAgent, isStepCount } from "ai";
@@ -16,13 +17,34 @@ import {
 import { memoryKeywordSearch, memoryVectorSearch } from "@/lib/tools/memory-search";
 import { naverTools } from "@/lib/tools/naver";
 
-export const opencode = createOpenAICompatible({
+// ─────────────────────────────────────────────
+// LLM Provider 설정 (주석으로 전환)
+// ─────────────────────────────────────────────
+
+// DeepSeek (공식 API) — DEEPSEEK_API_KEY 필요
+// https://platform.deepseek.com/api_keys
+const deepSeek = createDeepSeek({
+  apiKey: process.env.DEEPSEEK_API_KEY ?? "",
+});
+
+// OpenCode Go (구독형) — OPENCODE_GO_API_KEY 필요
+// https://opencode.ai/docs/go/
+const opencode = createOpenAICompatible({
   name: "opencode-go",
   baseURL: "https://opencode.ai/zen/go/v1",
   headers: {
     Authorization: `Bearer ${process.env.OPENCODE_GO_API_KEY}`,
   },
 });
+
+// ── 모델/옵션 선택: 사용할 provider 블록만 주석 해제 ──
+// [DeepSeek] (기본값)
+const model = deepSeek("deepseek-v4-flash");
+const providerOptions = { deepseek: { reasoningEffort: "xhigh" } };
+
+// [OpenCode Go] 전환 시 아래 주석 해제 + 위 DeepSeek 블록 주석 처리
+// const model = opencode("deepseek-v4-flash");
+// const providerOptions = { opencodeGo: { reasoningEffort: "xhigh" } };
 
 let agent: ToolLoopAgent | undefined;
 
@@ -47,10 +69,8 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
 
   agent = new ToolLoopAgent({
     id: "trable-agent",
-    model: opencode("deepseek-v4-pro"),
-    providerOptions: {
-      opencodeGo: { reasoningEffort: "xhigh" },
-    },
+    model,
+    providerOptions,
     instructions,
     tools: {
       ...naverTools,
