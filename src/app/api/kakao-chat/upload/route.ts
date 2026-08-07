@@ -16,7 +16,7 @@ dayjs.extend(customParseFormat);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const COLUMN_ALIASES: Record<string, string> = {
   date: "date",

@@ -6,7 +6,7 @@ import { saveSessionState } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export const POST = async (req: Request) => {
   const authError = await requireAuth(req);
