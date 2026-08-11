@@ -1,7 +1,9 @@
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-import { ToolLoopAgent, isStepCount } from "ai";
+import type { SharedV4ProviderOptions } from "@ai-sdk/provider";
+
+import { isStepCount, type LanguageModel, ToolLoopAgent } from "ai";
 
 import { getActiveInstructions } from "@/lib/db/instructions";
 import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
@@ -18,7 +20,7 @@ import { memoryKeywordSearch, memoryVectorSearch } from "@/lib/tools/memory-sear
 import { naverTools } from "@/lib/tools/naver";
 
 // ─────────────────────────────────────────────
-// LLM Provider 설정 (주석으로 전환)
+// LLM Provider 설정
 // ─────────────────────────────────────────────
 
 // DeepSeek (공식 API) — DEEPSEEK_API_KEY 필요
@@ -29,7 +31,7 @@ const deepSeek = createDeepSeek({
 
 // OpenCode Go (구독형) — OPENCODE_GO_API_KEY 필요
 // https://opencode.ai/docs/go/
-const opencode = createOpenAICompatible({
+const opencodeGo = createOpenAICompatible({
   name: "opencode-go",
   baseURL: "https://opencode.ai/zen/go/v1",
   headers: {
@@ -37,14 +39,43 @@ const opencode = createOpenAICompatible({
   },
 });
 
-// ── 모델/옵션 선택: 사용할 provider 블록만 주석 해제 ──
-// [DeepSeek] (기본값)
-const model = deepSeek("deepseek-v4-flash");
-const providerOptions = { deepseek: { reasoningEffort: "xhigh" } };
+// OpenCode Zen (게이트웨이) — OPENCODE_GO_API_KEY 필요
+// https://opencode.ai/docs/zen/
+const opencodeZen = createOpenAICompatible({
+  name: "opencode-zen",
+  baseURL: "https://opencode.ai/zen/v1",
+  headers: {
+    Authorization: `Bearer ${process.env.OPENCODE_GO_API_KEY}`,
+  },
+});
 
-// [OpenCode Go] 전환 시 아래 주석 해제 + 위 DeepSeek 블록 주석 처리
-// const model = opencode("deepseek-v4-flash");
-// const providerOptions = { opencodeGo: { reasoningEffort: "xhigh" } };
+type LLMProvider = "deepseek" | "opencodeGo" | "opencodeZen";
+
+// ── Provider 전환 토글 (LLM_PROVIDER 값만 교체) ────────────────
+//  "deepseek"    : DeepSeek 공식 API
+//  "opencodeGo"  : OpenCode Go (구독형)
+//  "opencodeZen" : OpenCode Zen (게이트웨이)
+const LLM_PROVIDER: LLMProvider = "opencodeGo";
+
+const PROVIDERS: Record<
+  LLMProvider,
+  { model: LanguageModel; providerOptions: SharedV4ProviderOptions }
+> = {
+  deepseek: {
+    model: deepSeek("deepseek-v4-flash"),
+    providerOptions: { deepseek: { reasoningEffort: "xhigh" } },
+  },
+  opencodeGo: {
+    model: opencodeGo("deepseek-v4-flash"),
+    providerOptions: { opencodeGo: { reasoningEffort: "xhigh" } },
+  },
+  opencodeZen: {
+    model: opencodeZen("deepseek-v4-flash-free"),
+    providerOptions: { opencodeZen: { reasoningEffort: "xhigh" } },
+  },
+};
+
+const { model, providerOptions } = PROVIDERS[LLM_PROVIDER];
 
 let agent: ToolLoopAgent | undefined;
 
