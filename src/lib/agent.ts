@@ -49,13 +49,14 @@ const opencodeZen = createOpenAICompatible({
   },
 });
 
-type LLMProvider = "deepseek" | "opencodeGo" | "opencodeZen";
+type LLMProvider = "deepseek" | "opencodeGo" | "opencodeZen" | "mimo";
 
 // ── Provider 전환 토글 (LLM_PROVIDER 값만 교체) ────────────────
 //  "deepseek"    : DeepSeek 공식 API
 //  "opencodeGo"  : OpenCode Go (구독형)
 //  "opencodeZen" : OpenCode Zen (게이트웨이)
-const LLM_PROVIDER: LLMProvider = "opencodeGo";
+//  "mimo"          : MIMO API
+const LLM_PROVIDER: LLMProvider = "mimo";
 
 const PROVIDERS: Record<
   LLMProvider,
@@ -72,6 +73,10 @@ const PROVIDERS: Record<
   opencodeZen: {
     model: opencodeZen("deepseek-v4-flash-free"),
     providerOptions: { opencodeZen: { reasoningEffort: "xhigh" } },
+  },
+  mimo: {
+    model: opencodeGo("mimo-v2.5"),
+    providerOptions: { opencodeGo: { reasoningEffort: "high" } },
   },
 };
 
