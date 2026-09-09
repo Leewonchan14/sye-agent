@@ -1,7 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod/v4";
 
-import { invalidateAgent } from "@/lib/agent";
 import {
   deleteInstructions,
   listInstructions,
@@ -39,7 +38,6 @@ export const instructionAdd = tool({
   }),
   execute: async ({ label, content }) => {
     const instruction = await saveInstructions(label.trim(), content.trim());
-    invalidateAgent();
     return `"${instruction.label}" 지시 사항이 저장되었습니다. (id: ${instruction.id}, 활성)\n다음 대화부터 이 지시 사항이 하치와레에게 반영됩니다.`;
   },
 });
@@ -69,7 +67,6 @@ export const instructionEdit = tool({
   }),
   execute: async ({ id, label, content }) => {
     const instruction = await saveInstructions(label.trim(), content.trim(), id);
-    invalidateAgent();
     return `"${instruction.label}" 지시 사항이 수정되었습니다. (id: ${instruction.id})\n다음 대화부터 수정된 내용이 반영됩니다.`;
   },
 });
@@ -92,7 +89,6 @@ export const instructionDelete = tool({
     const all = await listInstructions();
     const target = all.find((i) => i.id === id);
     await deleteInstructions(id);
-    invalidateAgent();
     const name = target ? `"${target.label}"` : `id ${id}`;
     return `${name} 지시 사항이 삭제되었습니다. 복구할 수 없습니다.`;
   },

@@ -83,9 +83,6 @@ const PROVIDERS: Record<
 
 const { model, providerOptions } = PROVIDERS[LLM_PROVIDER];
 
-/** Agents are request-scoped; the next request always reads current instructions. */
-export const invalidateAgent = () => {};
-
 export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
   const exa = await exaTools();
 

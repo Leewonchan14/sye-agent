@@ -1,4 +1,3 @@
-import { invalidateAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
 import { deleteInstructions, listInstructions, saveInstructions, toggleInstructionsActive } from "@/lib/db/instructions";
 
@@ -31,9 +30,6 @@ export const POST = async (req: Request) => {
     content.trim(),
     id || undefined
   );
-
-  invalidateAgent();
-
   return Response.json({ instruction });
 };
 
@@ -46,9 +42,7 @@ export const DELETE = async (req: Request) => {
   if (id == null || isNaN(Number(id))) {
     return Response.json({ error: "id가 필요합니다." }, { status: 400 });
   }
-
   await deleteInstructions(Number(id));
-  invalidateAgent();
 
   return Response.json({ ok: true });
 };
@@ -62,9 +56,7 @@ export const PATCH = async (req: Request) => {
   if (id == null || isNaN(Number(id))) {
     return Response.json({ error: "id가 필요합니다." }, { status: 400 });
   }
-
   const instruction = await toggleInstructionsActive(Number(id));
-  invalidateAgent();
 
   return Response.json({ instruction });
 };
