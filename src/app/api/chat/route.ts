@@ -31,7 +31,7 @@ export const POST = async (req: Request) => {
 
   const { messages, sessionId } = await req.json();
 
-  const agent = await getAgent();
+  const agent = await getAgent(sessionId);
 
   return createAgentUIStreamResponse({
     agent,

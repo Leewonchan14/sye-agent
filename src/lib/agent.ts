@@ -36,6 +36,7 @@ const opencodeGo = createOpenAICompatible({
   baseURL: "https://opencode.ai/zen/go/v1",
   headers: {
     Authorization: `Bearer ${process.env.OPENCODE_GO_API_KEY}`,
+    "User-Agent": "sye-agent/1.0",
   },
 });
 
@@ -82,15 +83,23 @@ const PROVIDERS: Record<
 
 const { model, providerOptions } = PROVIDERS[LLM_PROVIDER];
 
+const agents = new Map<string, ToolLoopAgent>();
+
 let agent: ToolLoopAgent | undefined;
 
 /** 지시 사항이 변경될 때 호출하면 다음 요청에서 새 agent가 생성됩니다. */
 export const invalidateAgent = () => {
+  agents.clear();
   agent = undefined;
 };
 
-export const getAgent = async (): Promise<ToolLoopAgent> => {
-  if (agent) return agent;
+export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
+  if (sessionId) {
+    const sessionAgent = agents.get(sessionId);
+    if (sessionAgent) return sessionAgent;
+  } else if (agent) {
+    return agent;
+  }
 
   const exa = await exaTools();
 
@@ -103,10 +112,14 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
     ? `${AGENT_INSTRUCTIONS}\n\n## 사용자가 등록한 추가 지시사항\n${userPart}`
     : AGENT_INSTRUCTIONS;
 
-  agent = new ToolLoopAgent({
+  const createdAgent = new ToolLoopAgent({
     id: "trable-agent",
     model,
     providerOptions,
+    headers:
+      LLM_PROVIDER === "opencodeGo" && sessionId
+        ? { "x-opencode-session": sessionId }
+        : undefined,
     instructions,
     tools: {
       ...naverTools,
@@ -123,5 +136,11 @@ export const getAgent = async (): Promise<ToolLoopAgent> => {
     stopWhen: isStepCount(500),
   }) as unknown as ToolLoopAgent;
 
-  return agent;
+  if (sessionId) {
+    agents.set(sessionId, createdAgent);
+  } else {
+    agent = createdAgent;
+  }
+
+  return createdAgent;
 };
