@@ -56,7 +56,7 @@ type LLMProvider = "deepseek" | "opencodeGo" | "opencodeZen" | "mimo";
 //  "opencodeGo"  : OpenCode Go (구독형)
 //  "opencodeZen" : OpenCode Zen (게이트웨이)
 //  "mimo"          : MIMO API
-const LLM_PROVIDER: LLMProvider = "deepseek";
+const LLM_PROVIDER: LLMProvider = "opencodeGo";
 
 const PROVIDERS: Record<
   LLMProvider,
