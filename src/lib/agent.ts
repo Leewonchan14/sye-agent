@@ -83,24 +83,10 @@ const PROVIDERS: Record<
 
 const { model, providerOptions } = PROVIDERS[LLM_PROVIDER];
 
-const agents = new Map<string, ToolLoopAgent>();
-
-let agent: ToolLoopAgent | undefined;
-
-/** 지시 사항이 변경될 때 호출하면 다음 요청에서 새 agent가 생성됩니다. */
-export const invalidateAgent = () => {
-  agents.clear();
-  agent = undefined;
-};
+/** Agents are request-scoped; the next request always reads current instructions. */
+export const invalidateAgent = () => {};
 
 export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
-  if (sessionId) {
-    const sessionAgent = agents.get(sessionId);
-    if (sessionAgent) return sessionAgent;
-  } else if (agent) {
-    return agent;
-  }
-
   const exa = await exaTools();
 
   // 활성화된 사용자 지시 사항들을 기본 instruction 뒤에 추가
@@ -135,12 +121,6 @@ export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
     },
     stopWhen: isStepCount(500),
   }) as unknown as ToolLoopAgent;
-
-  if (sessionId) {
-    agents.set(sessionId, createdAgent);
-  } else {
-    agent = createdAgent;
-  }
 
   return createdAgent;
 };

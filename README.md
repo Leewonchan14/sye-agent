@@ -9,7 +9,7 @@
 | Framework   | Next.js (App Router)       | 16.2.10                        |
 | AI SDK      | Vercel AI SDK              | 7.0.28                         |
 | Agent       | ToolLoopAgent (AI SDK v7)  | -                              |
-| LLM         | Deepseek                   | deepseek-flash-v4              |
+| LLM         | OpenCode Go              | deepseek-v4-flash              |
 | Database    | Neon (Serverless Postgres) | @neondatabase/serverless 1.1.0 |
 | UI          | shadcn/ui + Tailwind CSS   | v4.3                           |
 | Web Search  | Exa MCP (HTTP, no API key) | https://mcp.exa.ai/mcp         |
@@ -24,7 +24,7 @@ npm install
 
 # .env 파일 생성
 cp .env.example .env
-# → SITE_PASSWORD, DEEPSEEK_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
+# → SITE_PASSWORD, OPENCODE_GO_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
 
 npm run dev
 # http://localhost:3000
@@ -38,7 +38,7 @@ npm run dev
 | `DEEPSEEK_API_KEY`    | ✅*  | DeepSeek 공식 API 키 (DeepSeek provider 사용 시)  |
 | `OPENCODE_GO_API_KEY` | ✅*  | OpenCode Go API 키 (OpenCode Go provider 사용 시) |
 
-> *`DEEPSEEK_API_KEY` 또는 `OPENCODE_GO_API_KEY` 중 **활성화된 provider의 키 1개**만 있으면 됩니다. provider 전환 방법은 `src/lib/agent.ts`의 주석을 참고하세요.
+> 현재 배포 provider는 OpenCode Go입니다. `DEEPSEEK_API_KEY` 또는 `OPENCODE_GO_API_KEY` 중 **활성화된 provider의 키 1개**만 있으면 됩니다. provider 전환 방법은 `src/lib/agent.ts`의 주석을 참고하세요.
 
 | `DATABASE_URL` | ✅ | Neon DB 연결 문자열 |
 | `NAVER_CLIENT_ID` | ✅ | 네이버 검색 API Client ID |
@@ -49,8 +49,7 @@ npm run dev
 
 ```env
 SITE_PASSWORD=0411
-DEEPSEEK_API_KEY=sk-...
-# OPENCODE_GO_API_KEY=oc_go_...  # OpenCode Go로 전환 시 주석 해제
+OPENCODE_GO_API_KEY=oc_go_...
 DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 NAVER_CLIENT_ID=your_naver_client_id
 NAVER_CLIENT_SECRET=your_naver_client_secret
