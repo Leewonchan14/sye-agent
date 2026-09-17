@@ -18,6 +18,7 @@ import {
 } from "@/lib/tools/instructions";
 import { memoryKeywordSearch, memoryVectorSearch } from "@/lib/tools/memory-search";
 import { naverTools } from "@/lib/tools/naver";
+import { playwrightTools } from "@/lib/tools/playwright";
 
 // ─────────────────────────────────────────────
 // LLM Provider 설정
@@ -68,7 +69,7 @@ const PROVIDERS: Record<
     providerOptions: { deepseek: { reasoningEffort: "xhigh" } },
   },
   opencodeGo: {
-    model: opencodeGo("deepseek-v4-flash"),
+    model: opencodeGo("deepseek-v4.1-flash"),
     providerOptions: { opencodeGo: { reasoningEffort: "xhigh" } },
   },
   opencodeZen: {
@@ -84,7 +85,7 @@ const PROVIDERS: Record<
 const { model, providerOptions } = PROVIDERS[LLM_PROVIDER];
 
 export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
-  const exa = await exaTools();
+  const [exa, playwright] = await Promise.all([exaTools(), playwrightTools()]);
 
   // 활성화된 사용자 지시 사항들을 기본 instruction 뒤에 추가
   const activeList = await getActiveInstructions();
@@ -106,6 +107,7 @@ export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
     instructions,
     tools: {
       ...naverTools,
+      ...playwright,
       ...exa,
       brand_monitor: brandMonitor,
       get_current_time: getCurrentTime,

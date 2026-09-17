@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Image from "next/image";
 
+import { Eye, EyeOff } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { useAuthStore } from "@/lib/auth-store";
 
 interface PasswordGateProps {
@@ -14,16 +21,38 @@ interface PasswordGateProps {
 
 export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isShaking, setIsShaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const login = useAuthStore((s) => s.login);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Bitwarden(및 브라우저 자동완성)은 `element.value = ...` 로 값을 직접 대입한 뒤
+   * input/change 이벤트를 발생시킨다. React의 value tracker가 그 대입을 이미 흡수해
+   * onChange가 호출되지 않으므로, 네이티브 이벤트에서 DOM 값을 상태로 동기화한다.
+   */
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    const syncValue = () => setPassword(input.value);
+
+    input.addEventListener("input", syncValue);
+    input.addEventListener("change", syncValue);
+    return () => {
+      input.removeEventListener("input", syncValue);
+      input.removeEventListener("change", syncValue);
+    };
+  }, []);
+
   const handleSubmit = useCallback(
     async (e?: React.SyntheticEvent) => {
       e?.preventDefault();
-      if (!password.trim()) return;
+      // 자동완성으로 채워진 값은 DOM이 원본이므로 제출 시점의 DOM 값을 신뢰한다.
+      const value = inputRef.current?.value ?? password;
+      if (!value.trim()) return;
 
       setIsLoading(true);
       setError("");
@@ -32,7 +61,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         const res = await fetch("/api/auth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({ password: value }),
         });
 
         const data = await res.json();
@@ -56,13 +85,6 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
       }
     },
     [password, onSuccess, login]
-  );
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") handleSubmit();
-    },
-    [handleSubmit]
   );
 
   return (
@@ -105,18 +127,36 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         </p>
 
         <div className="w-full space-y-3">
-          <Input
-            ref={inputRef}
-            type="text"
-            placeholder="비밀번호"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading}
-            className="border-primary! text-center tracking-widest focus-visible:ring-0"
-            autoFocus
-            autoComplete="off"
-          />
+          <InputGroup className="border-primary! has-[[data-slot=input-group-control]:focus-visible]:ring-0">
+            <InputGroupInput
+              ref={inputRef}
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="비밀번호"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
+              className="text-center tracking-widest"
+              autoFocus
+            />
+
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                onClick={() => setShowPassword((visible) => !visible)}
+                disabled={isLoading}
+                aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                className="text-muted-foreground"
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
 
           <Button
             type="submit"
