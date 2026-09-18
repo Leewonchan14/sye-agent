@@ -19,6 +19,7 @@ import {
 import { memoryKeywordSearch, memoryVectorSearch } from "@/lib/tools/memory-search";
 import { naverTools } from "@/lib/tools/naver";
 import { playwrightTools } from "@/lib/tools/playwright";
+import { sandboxTools } from "@/lib/tools/sandbox";
 
 // ─────────────────────────────────────────────
 // LLM Provider 설정
@@ -85,7 +86,11 @@ const PROVIDERS: Record<
 const { model, providerOptions } = PROVIDERS[LLM_PROVIDER];
 
 export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
-  const [exa, playwright] = await Promise.all([exaTools(), playwrightTools()]);
+  const [exa, playwright, sandbox] = await Promise.all([
+    exaTools(),
+    playwrightTools(),
+    sandboxTools(),
+  ]);
 
   // 활성화된 사용자 지시 사항들을 기본 instruction 뒤에 추가
   const activeList = await getActiveInstructions();
@@ -109,6 +114,7 @@ export const getAgent = async (sessionId?: string): Promise<ToolLoopAgent> => {
       ...naverTools,
       ...playwright,
       ...exa,
+      ...sandbox,
       brand_monitor: brandMonitor,
       get_current_time: getCurrentTime,
       memory_keyword_search: memoryKeywordSearch,
