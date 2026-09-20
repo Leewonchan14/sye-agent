@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
 interface Instructions {
   id: number;
@@ -75,9 +75,11 @@ const InstructionsContent = () => {
   const queryClient = useQueryClient();
   const confirmDialog = useConfirmDialog();
 
-  const [editId, setEditId] = useState<number | undefined>(undefined);
-  const [label, setLabel] = useState("");
-  const [content, setContent] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftContent, setDraftContent] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [newContent, setNewContent] = useState("");
 
   const invalidate = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ["instructions"] }),
@@ -92,12 +94,25 @@ const InstructionsContent = () => {
 
   const items = data?.instructions ?? [];
 
-  const saveMutation = useMutation({
+  const closeEditor = () => {
+    setEditingId(null);
+    setDraftLabel("");
+    setDraftContent("");
+  };
+
+  const createMutation = useMutation({
     mutationFn: saveData,
     onSuccess: () => {
-      setLabel("");
-      setContent("");
-      setEditId(undefined);
+      setNewLabel("");
+      setNewContent("");
+      invalidate();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: saveData,
+    onSuccess: () => {
+      closeEditor();
       invalidate();
     },
   });
@@ -110,24 +125,32 @@ const InstructionsContent = () => {
   const deleteMutation = useMutation({
     mutationFn: deleteInstruction,
     onSuccess: (_data, vars) => {
-      if (editId === vars.id) {
-        setEditId(undefined);
-        setLabel("");
-        setContent("");
-      }
+      if (editingId === vars.id) closeEditor();
       invalidate();
     },
   });
 
-  const handleSave = useCallback(() => {
-    if (!label.trim() || !content.trim() || !token) return;
-    saveMutation.mutate({
+  const handleCreate = useCallback(() => {
+    if (!newLabel.trim() || !newContent.trim() || !token) return;
+    createMutation.mutate({
       token,
-      label: label.trim(),
-      content: content.trim(),
-      id: editId,
+      label: newLabel.trim(),
+      content: newContent.trim(),
     });
-  }, [label, content, editId, token, saveMutation]);
+  }, [newLabel, newContent, token, createMutation]);
+
+  const handleUpdate = useCallback(
+    (id: number) => {
+      if (!draftLabel.trim() || !draftContent.trim() || !token) return;
+      updateMutation.mutate({
+        token,
+        label: draftLabel.trim(),
+        content: draftContent.trim(),
+        id,
+      });
+    },
+    [draftLabel, draftContent, token, updateMutation]
+  );
 
   const handleToggle = useCallback(
     (id: number) => {
@@ -153,19 +176,14 @@ const InstructionsContent = () => {
   );
 
   const startEdit = (item: Instructions) => {
-    setEditId(item.id);
-    setLabel(item.label);
-    setContent(item.content);
+    setEditingId(item.id);
+    setDraftLabel(item.label);
+    setDraftContent(item.content);
+    updateMutation.reset();
   };
 
-  const cancelEdit = () => {
-    setEditId(undefined);
-    setLabel("");
-    setContent("");
-  };
-
-  const mutationError =
-    saveMutation.error || toggleMutation.error || deleteMutation.error;
+  const topFormError =
+    createMutation.error ?? toggleMutation.error ?? deleteMutation.error;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
@@ -197,52 +215,43 @@ const InstructionsContent = () => {
 
       {/* Content sections */}
       <div className="space-y-4 pb-12">
-        {/* Edit / New form */}
+        {/* New instruction form */}
         <div className="rounded-xl border border-hairline bg-surface p-5">
-          <h2 className="mb-3 text-sm font-medium text-ink">
-            {editId ? "지시 사항 수정" : "새 지시 사항 등록"}
-          </h2>
+          <h2 className="mb-3 text-sm font-medium text-ink">새 지시 사항 등록</h2>
           <p className="mb-3 text-xs text-muted-soft">
-            {editId
-              ? "내용을 수정하고 저장하면 바로 적용된다는 거야…!"
-              : "저장하면 바로 적용할 수 있게 등록된다는 거야…!"}
+            저장하면 바로 적용할 수 있게 등록된다는 거야…!
           </p>
           <div className="space-y-3">
             <Input
               placeholder="이름 (예: 데이트 스타일 v2)"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
             />
             <Textarea
               placeholder={`하치와레에게 추가로 알려줄 내용을 입력해줘…!\n\n예시:\n- "요즘 감성적인 카페 위주로 추천해줘"\n- "예은이는 걱정이 많아서 자주 안아줘…!"\n- "데이트 코스 추천할 때 교통편도 같이 알려줘…!"\n- "브랜드 언급을 모니터링할 때 부정적인 키워드가 보이면 바로 알려줘"\n- "인플루언서 분석 결과에서 1천 팔로워 이상만 알려줘"\n- "경쟁사 비교할 때 우리 브랜드의 점유율 변화를 강조해줘"`}
               rows={10}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
             />
             {isError && (
               <p className="text-sm text-error">
                 {error instanceof Error ? error.message : "불러오기 실패"}
               </p>
             )}
-            {mutationError && (
+            {topFormError && (
               <p className="text-sm text-error">
-                {mutationError instanceof Error ? mutationError.message : "오류 발생"}
+                {topFormError instanceof Error ? topFormError.message : "오류 발생"}
               </p>
             )}
-            <div className="flex gap-2">
-              {editId && (
-                <Button variant="outline" className="flex-1" onClick={cancelEdit}>
-                  취소
-                </Button>
-              )}
-              <Button
-                className="flex-1"
-                disabled={!label.trim() || !content.trim() || saveMutation.isPending}
-                onClick={handleSave}
-              >
-                {saveMutation.isPending ? "저장 중..." : editId ? "수정 완료" : "저장"}
-              </Button>
-            </div>
+            <Button
+              className="w-full"
+              disabled={
+                !newLabel.trim() || !newContent.trim() || createMutation.isPending
+              }
+              onClick={handleCreate}
+            >
+              {createMutation.isPending ? "저장 중..." : "저장"}
+            </Button>
           </div>
         </div>
 
@@ -263,72 +272,134 @@ const InstructionsContent = () => {
             <p className="text-sm text-muted-foreground">등록된 지시 사항이 없습니다.</p>
           ) : (
             <div className="space-y-2">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className={`rounded-lg border p-3 transition-colors ${
-                    editId === item.id
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-hairline"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    {/* Left: info + content */}
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => startEdit(item)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium">{item.label}</span>
-                        {item.createdAt && (
-                          <span className="shrink-0 text-xs text-muted-soft">
-                            {new Date(item.createdAt).toLocaleDateString("ko-KR")}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                        {item.content}
-                      </p>
-                    </button>
+              {items.map((item) => {
+                const isEditing = editingId === item.id;
+                const isSaving =
+                  updateMutation.isPending && updateMutation.variables?.id === item.id;
+                const saveError =
+                  updateMutation.error && updateMutation.variables?.id === item.id
+                    ? updateMutation.error
+                    : null;
 
-                    {/* Right: toggle + delete */}
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {/* Toggle switch */}
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={item.isActive}
-                        disabled={toggleMutation.isPending}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors disabled:opacity-50 ${
-                          item.isActive
-                            ? "border-primary bg-primary"
-                            : "border-border bg-canvas-soft"
-                        }`}
-                        onClick={() => handleToggle(item.id)}
-                      >
-                        <span
-                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                            item.isActive ? "translate-x-4.5" : "translate-x-0.5"
-                          }`}
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-lg border p-3 transition-colors ${
+                      isEditing ? "border-primary/40 bg-primary/5" : "border-hairline"
+                    }`}
+                  >
+                    {isEditing ? (
+                      <div className="space-y-3">
+                        <Input
+                          placeholder="이름"
+                          value={draftLabel}
+                          onChange={(e) => setDraftLabel(e.target.value)}
                         />
-                      </button>
+                        <Textarea
+                          autoFocus
+                          placeholder="내용"
+                          rows={8}
+                          value={draftContent}
+                          onChange={(e) => setDraftContent(e.target.value)}
+                        />
+                        {saveError && (
+                          <p className="text-sm text-error">
+                            {saveError instanceof Error ? saveError.message : "오류 발생"}
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={closeEditor}
+                            disabled={isSaving}
+                          >
+                            취소
+                          </Button>
+                          <Button
+                            className="flex-1"
+                            disabled={
+                              !draftLabel.trim() || !draftContent.trim() || isSaving
+                            }
+                            onClick={() => handleUpdate(item.id)}
+                          >
+                            {isSaving ? "저장 중..." : "수정 완료"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        {/* Left: info + content */}
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => startEdit(item)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium">
+                              {item.label}
+                            </span>
+                            {item.createdAt && (
+                              <span className="shrink-0 text-xs text-muted-soft">
+                                {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+                            {item.content}
+                          </p>
+                        </button>
 
-                      {/* Delete button */}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:bg-error/10 hover:text-error"
-                        onClick={() => handleDelete(item.id)}
-                        disabled={deleteMutation.isPending}
-                        title="삭제"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
+                        {/* Right: edit + toggle + delete */}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {/* Edit button */}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                            onClick={() => startEdit(item)}
+                            title="편집"
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={item.isActive}
+                            disabled={toggleMutation.isPending}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors disabled:opacity-50 ${
+                              item.isActive
+                                ? "border-primary bg-primary"
+                                : "border-border bg-canvas-soft"
+                            }`}
+                            onClick={() => handleToggle(item.id)}
+                          >
+                            <span
+                              className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                                item.isActive ? "translate-x-4.5" : "translate-x-0.5"
+                              }`}
+                            />
+                          </button>
+
+                          {/* Delete button */}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:bg-error/10 hover:text-error"
+                            onClick={() => handleDelete(item.id)}
+                            disabled={deleteMutation.isPending}
+                            title="삭제"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
