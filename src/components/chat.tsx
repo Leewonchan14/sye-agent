@@ -41,7 +41,10 @@ import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
 /* ── ChatShell ── */
 
 export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string }) => {
-  const sessionId = initialSessionId ?? uuidv4();
+  // 첫 화면(/)의 새 세션 ID는 마운트 시 한 번만 생성한다.
+  // 렌더마다 새로 만들면 리렌더 시 key가 바뀌어 대화가 초기화된다.
+  const [newSessionId] = useState(() => uuidv4());
+  const sessionId = initialSessionId ?? newSessionId;
 
   return (
     <SidebarLayout activeSessionId={sessionId}>
@@ -117,11 +120,21 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     }, 2000);
   }, [queryClient]);
 
+  /**
+   * 첫 화면(/)에서 시작한 대화를 실제 세션 URL(/[sessionId])로 승격한다.
+   * shallow replaceState라 라우트 재렌더(스트리밍 중단) 없이 URL만 바뀐다.
+   */
+  const promoteToSessionUrl = useCallback(() => {
+    if (window.location.pathname !== "/") return;
+    window.history.replaceState(null, "", `/${sessionId}`);
+  }, [sessionId]);
+
   const handlePromptSubmit = useCallback(
     (message: { text: string }) => {
       if (!message.text.trim() || status !== "ready") return;
       const trimmed = message.text.trim();
 
+      promoteToSessionUrl();
       scheduleInvalidate();
 
       // "사랑해" easter egg — trigger hearts
@@ -131,12 +144,14 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       sendMessage({ text: trimmed });
     },
-    [status, sendMessage, scheduleInvalidate]
+    [status, sendMessage, scheduleInvalidate, promoteToSessionUrl]
   );
 
   const handleQuestionClick = useCallback(
     (text: string) => {
       if (status !== "ready") return;
+
+      promoteToSessionUrl();
       scheduleInvalidate();
 
       // "사랑해" easter egg — trigger hearts
@@ -146,7 +161,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       sendMessage({ text });
     },
-    [status, sendMessage, scheduleInvalidate]
+    [status, sendMessage, scheduleInvalidate, promoteToSessionUrl]
   );
 
   /* ── Debounced loading: show ChatLoading only after 300ms ── */
