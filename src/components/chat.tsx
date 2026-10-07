@@ -8,6 +8,7 @@ import { sample } from "lodash";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useChat } from "@ai-sdk/react";
+import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 
 import type { UIMessage } from "ai";
@@ -26,7 +27,6 @@ import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -36,6 +36,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { useAuthStore } from "@/lib/auth-store";
+import { chatErrorMessage } from "@/lib/error-text";
 import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
 
 /* ── ChatShell ── */
@@ -86,6 +87,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     stop,
     error,
     clearError,
+    regenerate,
   } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
@@ -94,6 +96,18 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     }),
     onFinish: handleFinish,
   });
+
+  // BE 에러(설정 누락, LLM 호출 실패 등) 내용을 토스트로 그대로 보여주고 입력창을 다시 열어준다.
+  useEffect(() => {
+    if (!error) return;
+
+    toast.error("메시지를 보내지 못했어요", {
+      description: chatErrorMessage(error),
+      duration: 12_000,
+      action: { label: "다시 시도", onClick: () => regenerate() },
+    });
+    clearError();
+  }, [error, clearError, regenerate]);
 
   // Load saved messages into useChat once query resolves
   useEffect(() => {
@@ -245,23 +259,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       <HeartsOverlay show={showHearts} onDone={() => setShowHearts(false)} />
-
-      {/* Error alert */}
-      {error && (
-        <div
-          className="mx-auto mb-2 flex w-full max-w-2xl items-center justify-between rounded-md border px-4 py-2 text-sm"
-          style={{
-            borderColor: "var(--color-error)",
-            backgroundColor: "var(--color-canvas-soft)",
-            color: "var(--color-error)",
-          }}
-        >
-          <span>{error.message}</span>
-          <Button variant="ghost" size="icon-xs" onClick={clearError} className="ml-2">
-            ✕
-          </Button>
-        </div>
-      )}
 
       {/* Messages */}
       {showLoading ? (
