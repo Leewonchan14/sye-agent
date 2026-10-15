@@ -6,6 +6,11 @@ import type { SharedV4ProviderOptions } from "@ai-sdk/provider";
 import { isStepCount, type LanguageModel, ToolLoopAgent } from "ai";
 
 import { getActiveInstructions } from "@/lib/db/instructions";
+import {
+  createOpenCodeRotatingFetch,
+  getOpenCodeGoPool,
+  getOpenCodeZenPool,
+} from "@/lib/opencode-keys";
 import { AGENT_INSTRUCTIONS } from "@/lib/prompts/agent";
 import { brandMonitor } from "@/lib/tools/brand-monitoring";
 import { getCurrentTime } from "@/lib/tools/current-time";
@@ -31,25 +36,24 @@ const deepSeek = createDeepSeek({
   apiKey: process.env.DEEPSEEK_API_KEY ?? "",
 });
 
-// OpenCode Go (구독형) — OPENCODE_GO_API_KEY 필요
+// OpenCode Go (구독형) — OPENCODE_GO_API_KEYS(콤마 구분 키 목록) 또는 OPENCODE_GO_API_KEY
 // https://opencode.ai/docs/go/
+// Authorization 헤더는 키 풀이 요청마다 주입하고, 키 한도(402/429)면 다음 키로 자동 재시도한다.
 const opencodeGo = createOpenAICompatible({
   name: "opencode-go",
   baseURL: "https://opencode.ai/zen/go/v1",
   headers: {
-    Authorization: `Bearer ${process.env.OPENCODE_GO_API_KEY}`,
     "User-Agent": "sye-agent/1.0",
   },
+  fetch: createOpenCodeRotatingFetch(getOpenCodeGoPool(), "opencode-go"),
 });
 
-// OpenCode Zen (게이트웨이) — OPENCODE_GO_API_KEY 필요
+// OpenCode Zen (게이트웨이) — OPENCODE_ZEN_API_KEYS 또는 OPENCODE_ZEN_API_KEY (없으면 Go 키 폴백)
 // https://opencode.ai/docs/zen/
 const opencodeZen = createOpenAICompatible({
   name: "opencode-zen",
   baseURL: "https://opencode.ai/zen/v1",
-  headers: {
-    Authorization: `Bearer ${process.env.OPENCODE_GO_API_KEY}`,
-  },
+  fetch: createOpenCodeRotatingFetch(getOpenCodeZenPool(), "opencode-zen"),
 });
 
 type LLMProvider = "deepseek" | "opencodeGo" | "opencodeZen" | "mimo";

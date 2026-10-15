@@ -4,6 +4,7 @@ import { getAgent } from "@/lib/agent";
 import { requireAuth } from "@/lib/auth";
 import { saveSessionState } from "@/lib/db/session";
 import { agentErrorMessage } from "@/lib/error-text";
+import { getOpenCodeGoPool, getOpenCodeZenPool } from "@/lib/opencode-keys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,10 @@ export const POST = async (req: Request) => {
   // Validate required configuration
   const missing: string[] = [];
   const hasProviderKey =
-    !!process.env.DEEPSEEK_API_KEY || !!process.env.OPENCODE_GO_API_KEY;
-  if (!hasProviderKey) missing.push("DEEPSEEK_API_KEY 또는 OPENCODE_GO_API_KEY");
+    !!process.env.DEEPSEEK_API_KEY ||
+    getOpenCodeGoPool().size > 0 ||
+    getOpenCodeZenPool().size > 0;
+  if (!hasProviderKey) missing.push("DEEPSEEK_API_KEY 또는 OPENCODE_GO_API_KEYS");
   if (!process.env.NAVER_CLIENT_ID) missing.push("NAVER_CLIENT_ID");
   if (!process.env.NAVER_CLIENT_SECRET) missing.push("NAVER_CLIENT_SECRET");
 

@@ -37,6 +37,9 @@ const result = await generateText({
 });
 ```
 
+> - Go 엔드포인트는 `x-opencode-session` 헤더가 없으면 `400 MissingSessionID`로 거절한다.
+> - 키를 여러 개 쓰는 경우 이 저장소의 `src/lib/opencode-keys.ts` 패턴을 쓴다: `OPENCODE_GO_API_KEYS`(콤마·줄바꿈 구분) 목록에서 요청마다 `Authorization`을 주입하고, 키 한도(402/429)면 다음 키로 자동 재시도 + 소진 키를 일시 차단한다.
+
 ### 방법 B: `ai-sdk-provider-opencode-sdk` (커뮤니티 패키지)
 
 OpenCode SDK를 기반으로 하는 커뮤니티 제공자 패키지. 주간 42K 다운로드.
@@ -145,7 +148,10 @@ const resultWithTools = await generateText({
 ## 환경변수 설정
 
 ```env
-# OpenCode Go API Key (OpenCode Zen Console에서 발급)
+# 여러 개면 콤마·세미콜론·줄바꿈으로 구분 (한도 소진 시 자동 로테이션)
+OPENCODE_GO_API_KEYS="oc_go_...,oc_go_...,oc_go_..."
+
+# 단일 키만 쓸 때 (목록 변수가 없으면 이 변수를 사용)
 OPENCODE_GO_API_KEY="oc_go_..."
 ```
 
