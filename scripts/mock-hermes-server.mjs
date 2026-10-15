@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Hermes API 서버 목(mock) — 로컬에서 `LLM_BACKEND=hermes` 경로를 실제 Hermes 없이 시험한다.
+ * Hermes API 서버 목(mock) — 로컬에서 Hermes 채팅 백엔드를 실제 Hermes 없이 시험한다.
  *
  * 실제 서버가 아니라 Hermes API 서버의 `/api/sessions*` SSE 프로토콜만 흉내내는 개발용 서버다.
  * (실제 프로토콜 참고: hermes-agent `gateway/platforms/api_server.py` — sessions chat/stream)
@@ -8,7 +8,6 @@
  * 사용법:
  *   node scripts/mock-hermes-server.mjs 8971
  *
- *   LLM_BACKEND=hermes \
  *   HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
  *   HERMES_API_KEY=mock-key \
  *   npm run dev

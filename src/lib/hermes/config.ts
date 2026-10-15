@@ -1,19 +1,13 @@
 /**
  * Hermes Agent(hachi 프로필) 백엔드 설정.
  *
- * `LLM_BACKEND=hermes`이면 sye-agent의 agent loop 대신 Hermes 멀티플렉스 게이트웨이의
- * API 서버(hachi 프로필, `/p/hachi/...`)가 대화를 실행한다. 프론트엔드는 그대로이고,
- * Next 서버가 Hermes SSE를 AI SDK UI 메시지 스트림으로 변환해 돌려준다.
+ * 채팅 백엔드는 Hermes 멀티플렉스 게이트웨이의 API 서버(hachi 프로필, `/p/hachi/...`)다.
+ * 프론트엔드는 그대로이고, Next 서버가 Hermes SSE를 AI SDK UI 메시지 스트림으로 변환해
+ * 돌려준다.
  *
  * hachi 쪽 준비: `API_SERVER_ENABLED=true` + `API_SERVER_KEY=<비밀 키>` 후 게이트웨이 재시작,
  * 외부(예: Vercel)에서는 터널로 `127.0.0.1:8642`의 `/p/hachi/*`만 노출한다.
  */
-
-export type ChatBackend = "ai-sdk" | "hermes";
-
-/** 기본값은 기존(ToolLoopAgent) 백엔드 — 배포에서 `LLM_BACKEND=hermes`로 전환한다. */
-export const getChatBackend = (): ChatBackend =>
-  process.env.LLM_BACKEND === "hermes" ? "hermes" : "ai-sdk";
 
 export interface HermesBackendConfig {
   /** Hermes API 서버 base URL(프로필 프리픽스 포함, 끝 슬래시 없음). 예: https://hermes.example.com/p/hachi */
