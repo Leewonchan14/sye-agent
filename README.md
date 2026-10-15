@@ -9,7 +9,7 @@
 | Framework   | Next.js (App Router)       | 16.2.10                        |
 | AI SDK      | Vercel AI SDK              | 7.0.28                         |
 | Agent       | ToolLoopAgent (AI SDK v7)  | -                              |
-| LLM         | OpenCode Go              | deepseek-v4-flash              |
+| LLM         | OpenCode Go                | deepseek-v4.1-flash            |
 | Database    | Neon (Serverless Postgres) | @neondatabase/serverless 1.1.0 |
 | UI          | shadcn/ui + Tailwind CSS   | v4.3                           |
 | Web Search  | Exa MCP (HTTP, no API key) | https://mcp.exa.ai/mcp         |
@@ -24,7 +24,7 @@ npm install
 
 # .env 파일 생성
 cp .env.example .env
-# → SITE_PASSWORD, OPENCODE_GO_API_KEY, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
+# → SITE_PASSWORD, OPENCODE_GO_API_KEYS, NAVER_CLIENT_ID/SECRET, DATABASE_URL 입력
 
 npm run dev
 # http://localhost:3000
@@ -32,13 +32,16 @@ npm run dev
 
 ## 환경 변수
 
-| 변수                  | 필수 | 설명                                              |
-| --------------------- | ---- | ------------------------------------------------- |
-| `SITE_PASSWORD`       | ✅   | 웹사이트 접속 비밀번호 (예: 0411)                 |
-| `DEEPSEEK_API_KEY`    | ✅*  | DeepSeek 공식 API 키 (DeepSeek provider 사용 시)  |
-| `OPENCODE_GO_API_KEY` | ✅*  | OpenCode Go API 키 (OpenCode Go provider 사용 시) |
+| 변수                   | 필수 | 설명                                                                   |
+| ---------------------- | ---- | ---------------------------------------------------------------------- |
+| `SITE_PASSWORD`        | ✅   | 웹사이트 접속 비밀번호 (예: 0411)                                      |
+| `DEEPSEEK_API_KEY`     | ✅*  | DeepSeek 공식 API 키 (DeepSeek provider 사용 시)                       |
+| `OPENCODE_GO_API_KEYS` | ✅*  | OpenCode Go API 키 목록 (콤마·줄바꿈 구분, 한도 소진 시 자동 로테이션) |
+| `OPENCODE_GO_API_KEY`  | ✅*  | OpenCode Go 단일 API 키 (목록 변수가 없을 때 사용)                     |
 
-> 현재 배포 provider는 OpenCode Go입니다. `DEEPSEEK_API_KEY` 또는 `OPENCODE_GO_API_KEY` 중 **활성화된 provider의 키 1개**만 있으면 됩니다. provider 전환 방법은 `src/lib/agent.ts`의 주석을 참고하세요.
+> 현재 배포 provider는 OpenCode Go입니다. `DEEPSEEK_API_KEY` 또는 `OPENCODE_GO_API_KEYS` 중 **활성화된 provider의 키**만 있으면 됩니다. provider 전환 방법은 `src/lib/agent.ts`의 주석을 참고하세요.
+>
+> **다중 키 로테이션**: `OPENCODE_GO_API_KEYS`에 키를 여러 개 넣으면 한 키가 5시간·주간·월간 한도를 소진하거나 계정 잔액이 비었을 때(HTTP 402/429) 같은 요청을 다음 키로 자동 재시도합니다. 소진된 키는 `Retry-After`(없으면 5분, 키 무효 401/403은 30분) 동안 선택에서 제외되고, 대화 세션(`x-opencode-session`)별로 키가 고정돼 프롬프트 캐시가 유지됩니다. 구현: `src/lib/opencode-keys.ts`.
 
 | `DATABASE_URL` | ✅ | Neon DB 연결 문자열 |
 | `NAVER_CLIENT_ID` | ✅ | 네이버 검색 API Client ID |
@@ -49,7 +52,8 @@ npm run dev
 
 ```env
 SITE_PASSWORD=0411
-OPENCODE_GO_API_KEY=oc_go_...
+# 여러 개면 콤마로 구분 (한도 소진 시 자동 로테이션)
+OPENCODE_GO_API_KEYS="oc_go_...,oc_go_...,oc_go_..."
 DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 NAVER_CLIENT_ID=your_naver_client_id
 NAVER_CLIENT_SECRET=your_naver_client_secret
