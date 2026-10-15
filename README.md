@@ -9,7 +9,7 @@
 | Framework   | Next.js (App Router)       | 16.2.10                        |
 | AI SDK      | Vercel AI SDK              | 7.0.28                         |
 | Agent       | ToolLoopAgent (AI SDK v7)  | -                              |
-| LLM         | OpenCode Go              | deepseek-v4-flash              |
+| LLM         | OpenCode Go                | deepseek-v4-flash              |
 | Database    | Neon (Serverless Postgres) | @neondatabase/serverless 1.1.0 |
 | UI          | shadcn/ui + Tailwind CSS   | v4.3                           |
 | Web Search  | Exa MCP (HTTP, no API key) | https://mcp.exa.ai/mcp         |
@@ -111,6 +111,49 @@ Exa MCP는 **API 키 없이** HTTP MCP로 즉시 사용 가능합니다.
 
 모든 API (`/api/chat`, `/api/messages`)는 인증이 필요합니다.
 비밀번호 인증 성공 시 발급된 토큰을 `x-auth-token` 헤더에 포함하여 요청해야 합니다. (클라이언트에서 자동 처리)
+
+## Hermes Agent 백엔드 (실험 — `LLM_BACKEND=hermes`)
+
+에이전트 실행을 이 서버(ToolLoopAgent) 대신 **Hermes Agent의 hachi 프로필**(멀티플렉스 게이트웨이 API 서버)로 위임하는 백엔드다. 기본값은 기존 백엔드(`ai-sdk`)이고, `LLM_BACKEND=hermes`일 때만 켜진다. 프론트엔드는 수정 없이 동작한다 — 이 서버가 Hermes 세션 SSE(`/api/sessions/{id}/chat/stream`)를 AI SDK UI 메시지 스트림으로 변환해 돌려준다.
+
+- 세션 매핑: 앱 세션 ID → Hermes 세션 ID `sye-<sessionId>` (결정적 매핑, 별도 DB 컬럼 없음)
+- 히스토리: Hermes가 대화 트랜스크립트를 소유하고, Neon `session_state`는 사이드바·검색용으로 계속 저장된다
+- 지시 사항(`instructions` 테이블)의 활성 항목은 매 요청 `system_message`로 전달된다
+- 동시 실행 한도(HTTP 429)·일시 오류(5xx)는 백오프와 함께 재시도한다
+
+### 환경 변수
+
+| 변수                    | 필수      | 설명                                                                                      |
+| ----------------------- | --------- | ----------------------------------------------------------------------------------------- |
+| `LLM_BACKEND`           | -         | `hermes`면 Hermes 백엔드 사용 (기본: `ai-sdk`)                                            |
+| `HERMES_API_URL`        | hermes 시 | Hermes API 서버 base URL (프로필 프리픽스 포함). 예: `https://hermes.example.com/p/hachi` |
+| `HERMES_API_KEY`        | hermes 시 | hachi 프로필의 `API_SERVER_KEY` 값                                                        |
+| `HERMES_SESSION_PREFIX` | -         | Hermes 세션 ID 프리픽스 (기본 `sye-`)                                                     |
+| `HERMES_SESSION_KEY`    | -         | 장기 기억 스코프 헤더 `X-Hermes-Session-Key` (기본 `sye-agent`)                           |
+| `HERMES_SYSTEM_MESSAGE` | -         | `system_message` 끝에 덧붙일 문구 (선택)                                                  |
+
+### hachi(서버) 쪽 준비
+
+1. `~/.hermes/profiles/hachi/.env`에 `API_SERVER_ENABLED=true`, `API_SERVER_KEY=<랜덤 키>` 추가 후 게이트웨이 재시작
+2. 외부에서는 터널(예: Cloudflare Tunnel)로 `127.0.0.1:8642`의 `/p/hachi/*`만 노출
+3. 무인 실행이라 승인(approval) 대기가 발생하지 않도록 hachi 승인 설정 확인 (대기가 발생하면 요청이 바로 실패한다)
+
+### 로컬 개발 (Hermes 없이)
+
+```bash
+node scripts/mock-hermes-server.mjs 8971   # Hermes API 서버 목
+
+LLM_BACKEND=hermes \
+HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
+HERMES_API_KEY=mock-key \
+npm run dev
+```
+
+### 알려진 한계 (후속 작업)
+
+- 이전 응답 **재생성(regenerate)** 은 새 턴으로 취급된다 (Hermes 트랜스크립트는 되돌리지 않음)
+- 도구 카드는 이름/인자 + 완료 상태까지 표시된다 (Hermes wire가 아직 결과 프리뷰를 싣지 않음)
+- 앱 전용 도구(네이버·Exa·샌드박스 등)를 Hermes로 이관하기 전까지는 Hermes 쪽 도구(스킬·브라우저·터미널)로 실행된다
 
 ## 배포
 
