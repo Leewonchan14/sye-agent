@@ -27,6 +27,8 @@ const sessions = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomId = (prefix) => `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
+const chunkText = (text, size = 12) =>
+  text.match(new RegExp(`.{1,${size}}`, "gsu")) ?? [];
 
 const sendJson = (res, status, body) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -59,6 +61,15 @@ const checkAuth = (req, res) => {
   return true;
 };
 
+/**
+ * 한 턴을 실서버 wire와 같은 모양으로 흘려보낸다.
+ *  · 모델의 reasoning은 `reasoning.delta`로 스트리밍된다 (게이트웨이가 reasoning_callback 중계)
+ *  · assistant 텍스트(중간 나레이션 포함)는 전부 `assistant.delta`로 스트리밍된다
+ *  · 방금 나간 텍스트는 `tool.progress`(`_thinking`)로 한 번 더 에코되고,
+ *    이어서 `assistant.commentary`가 그 메시지의 끝을 알린다
+ *  · `tool.started`/`tool.completed`에는 결과가 실리지 않는다
+ *  · 도구 결과는 턴 끝 `run.completed.messages`(전체 트랜스크립트)에만 있다
+ */
 const streamTurn = async (req, res, sessionId, userMessage, systemMessage) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -89,12 +100,51 @@ const streamTurn = async (req, res, sessionId, userMessage, systemMessage) => {
       })}\n\n`
     );
   };
+  const streamText = async (text) => {
+    for (const piece of chunkText(text)) {
+      if (closed) return;
+      send("assistant.delta", { message_id: messageId, delta: piece });
+      await sleep(25);
+    }
+  };
 
   console.log(
     `[mock-hermes] turn → message=${JSON.stringify(userMessage)} system_message=${
       systemMessage ? JSON.stringify(systemMessage) : "(none)"
     }`
   );
+
+  const steps = [
+    {
+      narration: `"${userMessage}"를 어떻게 찾을지 정리해 볼게…!`,
+      reasoning: `The user asked "${userMessage}". Let me search the web for it first.`,
+      tool: {
+        name: "web_search",
+        args: { query: userMessage },
+        preview: `"${userMessage}" 검색`,
+        result: {
+          success: true,
+          results: [
+            { title: "춘천 데이트 코스 추천", url: "https://example.com/chuncheon" },
+          ],
+        },
+      },
+    },
+    {
+      narration: "결과가 나왔어! 이제 페이지 내용을 직접 확인해 볼게…!",
+      reasoning: "The search returned one result. Opening it to read the details.",
+      tool: {
+        name: "web_extract",
+        args: { urls: ["https://example.com/chuncheon"] },
+        preview: "example.com/chuncheon",
+        result: {
+          output: "춘천 데이트 코스로 소양강 스카이워크와 감자밭 카페가 인기야.",
+          exit_code: 0,
+          error: null,
+        },
+      },
+    },
+  ];
 
   send("run.started", {
     user_message: { role: "user", content: userMessage },
@@ -103,48 +153,105 @@ const streamTurn = async (req, res, sessionId, userMessage, systemMessage) => {
   send("message.started", { message: { id: messageId, role: "assistant" } });
   await sleep(50);
 
-  for (const chunk of ["사용자 메시지를 읽어볼까…! ", "춘천 정보를 찾아야겠어…! "]) {
+  /** @type {Record<string, unknown>[]} */
+  const transcript = [];
+
+  for (const step of steps) {
+    // 모델이 먼저 생각하고(reasoning.delta), 그 다음 텍스트를 말한다.
+    for (const piece of chunkText(step.reasoning, 24)) {
+      if (closed) return;
+      send("reasoning.delta", { message_id: messageId, delta: piece });
+      await sleep(20);
+    }
+    await streamText(step.narration);
     if (closed) return;
+
     send("tool.progress", {
       message_id: messageId,
       tool_name: "_thinking",
-      delta: chunk,
+      delta: step.narration,
     });
-    await sleep(40);
-  }
+    send("assistant.commentary", {
+      message_id: messageId,
+      text: step.narration,
+      already_streamed: true,
+    });
+    send("tool.started", {
+      message_id: messageId,
+      tool_name: step.tool.name,
+      preview: step.tool.preview,
+      args: step.tool.args,
+    });
+    await sleep(120);
+    if (closed) return;
+    send("tool.completed", {
+      message_id: messageId,
+      tool_name: step.tool.name,
+      preview: null,
+      args: null,
+    });
 
-  send("tool.started", {
-    message_id: messageId,
-    tool_name: "web_search",
-    preview: `"${userMessage}" 검색`,
-    args: { query: userMessage },
-  });
-  await sleep(120);
-  send("tool.completed", {
-    message_id: messageId,
-    tool_name: "web_search",
-    preview: null,
-    args: null,
-  });
+    const callId = randomId("call");
+    transcript.push(
+      {
+        role: "assistant",
+        content: step.narration,
+        tool_calls: [
+          {
+            id: callId,
+            call_id: callId,
+            type: "function",
+            function: { name: step.tool.name, arguments: JSON.stringify(step.tool.args) },
+          },
+        ],
+        finish_reason: "tool_calls",
+        reasoning: step.reasoning,
+        reasoning_content: step.reasoning,
+      },
+      {
+        role: "tool",
+        tool_name: step.tool.name,
+        tool_call_id: callId,
+        content: JSON.stringify(step.tool.result),
+      }
+    );
+  }
 
   res.write(": keepalive\n\n"); // 파서가 건너뛰어야 하는 주석 프레임
 
   const answer = `춘천 데이트라면… 무엇을 좋아하는지에 따라 달라져…! …라는 거야!? (목 서버 응답이야…!)`;
-  for (const piece of answer.match(/.{1,12}/gu) ?? []) {
+  const answerReasoning =
+    "Now I can summarize: 소양강 스카이워크 and 감자밭 카페, both confirmed by the page.";
+  for (const piece of chunkText(answerReasoning, 24)) {
     if (closed) return;
-    send("assistant.delta", { message_id: messageId, delta: piece });
-    await sleep(25);
+    send("reasoning.delta", { message_id: messageId, delta: piece });
+    await sleep(20);
   }
+  await streamText(answer);
+  if (closed) return;
 
   send("assistant.completed", {
     session_id: sessionId,
     message_id: messageId,
     content: answer,
+    completed: true,
+    partial: false,
     runtime: {},
   });
   send("run.completed", {
     session_id: sessionId,
     message_id: messageId,
+    completed: true,
+    messages: [
+      ...transcript,
+      {
+        role: "assistant",
+        content: answer,
+        finish_reason: "stop",
+        reasoning: answerReasoning,
+        reasoning_content: answerReasoning,
+      },
+    ],
     usage: {},
     runtime: {},
   });

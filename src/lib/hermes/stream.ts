@@ -37,19 +37,52 @@ const buildSystemMessage = async (): Promise<string | undefined> => {
   return sections.length > 0 ? sections.join("\n\n") : undefined;
 };
 
+/** 트랜스크립트의 tool 결과 문자열을 카드에 넣을 출력/오류로 나눈다. */
+const parseToolResult = (raw: string): { output: unknown; errorText?: string } => {
+  const text = raw.trim();
+  if (!text) return { output: { status: "completed" } };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { output: text };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { output: parsed };
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const errorText =
+    typeof record.error === "string" && record.error.trim()
+      ? record.error.trim()
+      : undefined;
+
+  if (record.success === false || errorText) {
+    return {
+      output: parsed,
+      errorText: errorText || asString(record.message) || "도구 실행에 실패했어요.",
+    };
+  }
+  return { output: parsed };
+};
+
 /**
  * Hermes SSE 이벤트를 AI SDK UI 메시지 스트림 청크로 변환한다.
  *
  * 매핑:
- *  - `assistant.delta`                → text 파트
+ *  - `assistant.delta`                → text 파트 (중간 나레이션 + 최종 답변 전부, 순서대로)
  *  - `assistant.commentary`(미스트림)  → text 파트
- *  - `tool.progress`(`_thinking`)     → reasoning 파트
+ *  - `reasoning.delta`                → reasoning 파트 (모델의 실제 thinking, 스트리밍)
+ *  - `tool.progress`(`_thinking`)     → reasoning 파트 (직전 텍스트의 에코는 건너뜀)
  *  - `tool.started/completed/failed`  → dynamic tool 파트
  *  - `assistant.completed`            → 델타로 안 흘러간 최종 텍스트만 보충 (중복 방지)
+ *  - `run.completed`                  → 트랜스크립트 백필 (도구 결과 + thinking 폴백)
  *  - `error` / `run.failed`           → 예외로 전환 (스트림 오류 → 클라이언트 토스트)
  *
- * 참고: 이 버전의 Hermes wire는 도구 완료 이벤트에 결과 프리뷰가 실리지 않아
- * 도구 카드는 이름/인자 + 완료 상태까지만 보여준다.
+ * 참고: `tool.completed`에는 결과가 실리지 않아 `run.completed.messages`(턴 전체 트랜스크립트)에서
+ * 채워 넣는다. thinking은 게이트웨이가 `reasoning.delta`로 중계해 주면 그대로 스트리밍하고
+ * (게이트웨이 패치 — README 참고), 안 오는 서버에서는 같은 트랜스크립트로 턴 끝에 백필한다.
  */
 class HermesUIStreamRelay {
   private readonly writer: UIMessageStreamWriter;
@@ -61,6 +94,10 @@ class HermesUIStreamRelay {
   private reasoningCounter = 0;
   private toolCounter = 0;
   private streamedText = "";
+  /** 스트리밍 중 실제로 받은 thinking (에코 제외) — 백필 여부 판단에 쓴다. */
+  private liveReasoning = "";
+  /** 중계한 도구 호출 순서 — `run.completed` 트랜스크립트와 자리를 맞춘다. */
+  private readonly relayedTools: { toolCallId: string; toolName: string }[] = [];
   private readonly openToolCalls = new Map<string, string[]>();
 
   constructor(writer: UIMessageStreamWriter) {
@@ -78,8 +115,13 @@ class HermesUIStreamRelay {
       case "assistant.commentary":
         this.appendCommentary(event.data);
         break;
+      case "reasoning.delta":
+        // 모델의 실제 reasoning 델타 (게이트웨이가 reasoning_callback을 중계한 것)
+        this.appendReasoning(asString(event.data.delta), false);
+        break;
       case "tool.progress":
-        this.appendReasoning(asString(event.data.delta));
+        // `_thinking` 진행 프리뷰 — 대개 방금 나간 텍스트의 에코라 에코는 걸러낸다.
+        this.appendReasoning(asString(event.data.delta), true);
         break;
       case "tool.started":
         this.onToolStarted(event.data);
@@ -92,6 +134,10 @@ class HermesUIStreamRelay {
         break;
       case "assistant.completed":
         this.onAssistantCompleted(asString(event.data.content));
+        break;
+      case "run.completed":
+        // 스트림에 안 실려 온 도구 결과와 실제 thinking을 여기서 채운다.
+        this.onRunCompleted(event.data);
         break;
       case "run.failed":
         // 실서버 wire의 run.failed에는 error/message가 없고
@@ -173,14 +219,23 @@ class HermesUIStreamRelay {
     );
   }
 
-  private appendReasoning(delta: string): void {
-    if (!delta) return;
+  /**
+   * reasoning 파트로 텍스트를 흘린다.
+   * `dropEcho`는 `tool.progress`(`_thinking`)용 — hachi wire의 그 프리뷰는 방금 스트리밍된
+   * assistant 텍스트를 한 번 더 보내는 에코라서, 이미 나간 텍스트와 같으면 버린다
+   * (그대로 두면 답변이 thinking으로 중복 표시된다). `reasoning.delta`는 실제 reasoning이라 그대로 쓴다.
+   */
+  private appendReasoning(delta: string, dropEcho: boolean): void {
+    const text = delta.trim();
+    if (!text || (dropEcho && this.streamedText.endsWith(text))) return;
+
     this.ensureStarted();
     if (!this.reasoningId) {
       this.reasoningId = `reasoning-${++this.reasoningCounter}`;
       this.writer.write({ type: "reasoning-start", id: this.reasoningId });
     }
     this.writer.write({ type: "reasoning-delta", id: this.reasoningId, delta });
+    this.liveReasoning += delta;
   }
 
   private onToolStarted(data: Record<string, unknown>): void {
@@ -204,6 +259,7 @@ class HermesUIStreamRelay {
     const queue = this.openToolCalls.get(toolName) ?? [];
     queue.push(toolCallId);
     this.openToolCalls.set(toolName, queue);
+    this.relayedTools.push({ toolCallId, toolName });
   }
 
   private onToolFinished(data: Record<string, unknown>, failed: boolean): void {
@@ -231,6 +287,7 @@ class HermesUIStreamRelay {
         input: {},
         dynamic: true,
       });
+      this.relayedTools.push({ toolCallId, toolName });
     }
 
     const preview = asString(data.preview);
@@ -257,6 +314,102 @@ class HermesUIStreamRelay {
     this.appendText(
       (this.streamedText && !this.streamedText.endsWith("\n") ? "\n\n" : "") + text
     );
+  }
+
+  /** `run.completed`가 실어 온 턴 전체 트랜스크립트로 스트림의 빈 곳을 메운다. */
+  private onRunCompleted(data: Record<string, unknown>): void {
+    const messages = Array.isArray(data.messages)
+      ? (data.messages as Record<string, unknown>[])
+      : [];
+    if (messages.length === 0) return;
+
+    this.backfillToolResults(messages);
+    this.backfillReasoning(messages);
+  }
+
+  /**
+   * 도구 결과 백필 — `tool.completed` 이벤트에는 결과가 없고 트랜스크립트의
+   * `role: "tool"` 메시지(`tool_call_id`로 연결)에만 있다.
+   */
+  private backfillToolResults(messages: Record<string, unknown>[]): void {
+    const calls: { id: string; name: string }[] = [];
+    const results = new Map<string, string>();
+
+    for (const message of messages) {
+      if (message.role === "assistant" && Array.isArray(message.tool_calls)) {
+        for (const raw of message.tool_calls as Record<string, unknown>[]) {
+          const id = asString(raw.id) || asString(raw.call_id);
+          if (!id) continue;
+          const fn = raw.function as Record<string, unknown> | undefined;
+          calls.push({ id, name: asString(fn?.name) || "tool" });
+        }
+        continue;
+      }
+      if (message.role !== "tool") continue;
+      const id = asString(message.tool_call_id);
+      if (id) results.set(id, asString(message.content));
+    }
+
+    // 중계한 카드 순서와 트랜스크립트의 호출 순서는 같다. 이름이 안 맞으면 결과를
+    // 잘못 붙이지 않도록 건너뛴다(카드에는 완료 상태만 남는다).
+    let cursor = 0;
+    for (const relayed of this.relayedTools) {
+      const index = calls.findIndex(
+        (call, position) => position >= cursor && call.name === relayed.toolName
+      );
+      if (index === -1) continue;
+      cursor = index + 1;
+
+      const result = results.get(calls[index].id);
+      if (result === undefined) continue;
+
+      const { output, errorText } = parseToolResult(result);
+      if (errorText) {
+        this.writer.write({
+          type: "tool-output-error",
+          toolCallId: relayed.toolCallId,
+          errorText,
+          dynamic: true,
+        });
+      } else {
+        this.writer.write({
+          type: "tool-output-available",
+          toolCallId: relayed.toolCallId,
+          output,
+          dynamic: true,
+        });
+      }
+    }
+  }
+
+  /**
+   * thinking 백필 — 실서버는 실제 thinking을 스트리밍하지 않는다(스트리밍 중 오는
+   * `_thinking`은 텍스트 에코). 트랜스크립트의 세그먼트별 `reasoning`을 한 블록으로 모아,
+   * 스트리밍 중 진짜 thinking을 받은 적이 없을 때만 채운다.
+   */
+  private backfillReasoning(messages: Record<string, unknown>[]): void {
+    if (this.liveReasoning.trim()) return;
+
+    const segments: string[] = [];
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      const text = (
+        asString(message.reasoning) || asString(message.reasoning_content)
+      ).trim();
+      if (text) segments.push(text);
+    }
+    if (segments.length === 0) return;
+
+    this.ensureStarted();
+    this.closeText();
+    const reasoningId = `reasoning-${++this.reasoningCounter}`;
+    this.writer.write({ type: "reasoning-start", id: reasoningId });
+    this.writer.write({
+      type: "reasoning-delta",
+      id: reasoningId,
+      delta: segments.join("\n\n"),
+    });
+    this.writer.write({ type: "reasoning-end", id: reasoningId });
   }
 
   private toolInputFrom(data: Record<string, unknown>): unknown {

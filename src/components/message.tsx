@@ -21,7 +21,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { createMessageHelper } from "@/lib/utils";
+import { extractMessageText, isEchoedThinking } from "@/lib/utils";
 
 interface MessageItemProps {
   message: UIMessage;
@@ -38,12 +38,9 @@ export const MessageItem = ({
 
   if (!message.parts || message.parts.length === 0) return null;
 
-  const reasoningText = createMessageHelper(message).extractReasoning() ?? "";
-  const hasReasoning = reasoningText.length > 0;
-
+  // thinking은 step(assistant 메시지)마다 별도 블록으로, 진행 순서 자리에 렌더링한다.
   const lastPart = message.parts.at(-1);
-  const isReasoningStreaming =
-    isLastMessage && isStreaming && lastPart?.type === "reasoning";
+  const answerText = extractMessageText(message);
 
   // User messages: simple bubble
   if (isUser) {
@@ -75,13 +72,20 @@ export const MessageItem = ({
         <div className="min-w-0 flex-1">
           {/* Text & reasoning: overflow-visible so table popups/tooltips aren't clipped */}
           <MessageContent className="w-full overflow-visible">
-            {hasReasoning && (
-              <Reasoning isStreaming={isReasoningStreaming}>
-                <ReasoningTrigger />
-                <ReasoningContent>{reasoningText}</ReasoningContent>
-              </Reasoning>
-            )}
+            {/* 파트 순서 = 실제 진행 순서: thinking → 나레이션 → 도구 카드 → … → 최종 답변 */}
             {message.parts.map((part, idx) => {
+              if (part.type === "reasoning") {
+                if (isEchoedThinking(part.text, answerText)) return null;
+                return (
+                  <Reasoning
+                    key={`${message.id}-${idx}`}
+                    isStreaming={isLastMessage && isStreaming && part === lastPart}
+                  >
+                    <ReasoningTrigger />
+                    <ReasoningContent>{part.text}</ReasoningContent>
+                  </Reasoning>
+                );
+              }
               if (part.type === "text" && part.text) {
                 return (
                   <MessageResponse key={`${message.id}-${idx}`}>
@@ -89,21 +93,8 @@ export const MessageItem = ({
                   </MessageResponse>
                 );
               }
-              if (part.type === "reasoning") return null; // consolidated above
-              if (part.type === "step-start") return null;
-              return null;
-            })}
-          </MessageContent>
-
-          {/* Tool cards outside MessageContent for full width (not constrained by w-fit) */}
-          {(() => {
-            const toolParts = message.parts.filter(isToolUIPart);
-
-            if (toolParts.length === 0) return null;
-
-            return (
-              <div className="mt-4 space-y-1">
-                {toolParts.map((part) => (
+              if (isToolUIPart(part)) {
+                return (
                   <Tool key={part.toolCallId} defaultOpen={false}>
                     {isDynamicToolUIPart(part) ? (
                       <ToolHeader
@@ -121,10 +112,11 @@ export const MessageItem = ({
                       )}
                     </ToolContent>
                   </Tool>
-                ))}
-              </div>
-            );
-          })()}
+                );
+              }
+              return null; // step-start 등
+            })}
+          </MessageContent>
         </div>
       </div>
     </Message>

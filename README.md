@@ -144,10 +144,32 @@ ssh -N -L 8642:127.0.0.1:8642 <hermes-host>
 npm run dev
 ```
 
+### thinking 스트리밍 (게이트웨이 패치 — 권장)
+
+기본 게이트웨이는 모델의 실제 thinking(`reasoning_content`)을 session chat 스트림에 싣지 않는다
+(`tool.progress`의 `_thinking`은 방금 나간 답변 텍스트의 에코일 뿐이다). 앱은 그래서 thinking을
+턴이 끝날 때 `run.completed.messages`에서 백필한다 — 대화는 정상이지만 thinking이 턴 종료 시 한 번에 나타난다.
+
+대신 **실시간 스트리밍**을 원하면 게이트웨이가 `reasoning_callback`을 SSE로 중계하면 된다
+(OpenAI 호환 `/v1/chat/completions` 경로는 이미 그렇게 한다 — `_spawn_stream_agent`의 `_on_reasoning`, #99552).
+`~/.hermes/hermes-agent/gateway/platforms/api_server.py`에 3군데만 추가하면 된다(실서버 적용 완료):
+
+1. 플랫폼 설정 플래그: `self._reasoning_events: bool = _coerce_request_bool(extra.get("reasoning_events"), default=True)`
+   (`tool_progress_events` 옆) — `~/.hermes/config.yaml`의 `gateway.platforms.api_server.reasoning_events: false`로 끌 수 있다
+2. `_handle_session_chat_stream` 안에 콜백 추가:
+   `events.enqueue("reasoning.delta", {"message_id": message_id, "delta": delta})`
+3. 같은 함수의 `_run_agent(...)` 호출에 `reasoning_callback=_reasoning` 전달
+
+적용 후 `systemctl --user restart hermes-gateway.service`. 앱은 `reasoning.delta`가 오면 그대로 스트리밍하고,
+안 오는 서버(패치 전)에서는 자동으로 턴 종료 백필로 동작한다. thinking은 Hermes assistant 메시지(step)마다
+**별도 블록**으로 진행 순서 자리에 렌더링된다 — 도구를 부르기 전 생각, 다음 단계 생각이 각각 따로 접히고 펼쳐진다.
+⚠ `hermes update`가 이 파일을 덮어쓰면 패치가 사라진다 — 그때는 위 3군데를 다시 넣으면 된다(기능 저하만, 오류 없음).
+
 ### 알려진 한계 (후속 작업)
 
 - 이전 응답 **재생성(regenerate)** 은 새 턴으로 취급된다 (Hermes 트랜스크립트는 되돌리지 않음)
-- 도구 카드는 이름/인자 + 완료 상태까지 표시된다 (Hermes wire가 아직 결과 프리뷰를 싣지 않음)
+- 도구 카드의 결과는 **턴이 끝날 때** 채워진다 — Hermes `tool.completed`에 결과가 실리지 않고
+  `run.completed.messages`에만 있어서 그때 백필한다 (thinking은 위 패치 시 실시간, 아니면 같은 시점)
 - 도구는 Hermes 쪽(스킬·브라우저·터미널)에서 실행된다 (앱 전용 도구였던 네이버·Exa·샌드박스 등은 제거됨)
 
 ## 배포
