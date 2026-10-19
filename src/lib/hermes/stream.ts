@@ -94,10 +94,15 @@ class HermesUIStreamRelay {
         this.onAssistantCompleted(asString(event.data.content));
         break;
       case "run.failed":
+        // 실서버 wire의 run.failed에는 error/message가 없고
+        // turn_exit_reason(부분 응답·중단 등)만 실린다.
         throw new Error(
-          asString(event.data.error) ||
+          asString(event.data.turn_exit_reason) ||
+            asString(event.data.error) ||
             asString(event.data.message) ||
-            "하치 실행이 실패했어요."
+            (event.data.partial === true
+              ? "하치 응답이 중간에 끊겼어요. (부분 응답)"
+              : "하치 실행이 실패했어요.")
         );
       case "error":
         throw new Error(

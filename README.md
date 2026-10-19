@@ -35,8 +35,8 @@ npm run dev
 | ----------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SITE_PASSWORD`         | ✅      | 웹사이트 접속 비밀번호 (예: 0411)                                                                                                                                                        |
 | `DATABASE_URL`          | ✅      | Neon DB 연결 문자열                                                                                                                                                                      |
-| `HERMES_API_URL`        | ✅      | Hermes API 서버 base URL (프로필 프리픽스 포함). 예: `https://hermes.example.com/p/hachi`                                                                                                |
-| `HERMES_API_KEY`        | ✅      | hachi 프로필의 `API_SERVER_KEY` 값                                                                                                                                                       |
+| `HERMES_API_URL`        | ✅      | Hermes API 서버 base URL (프로필 프리픽스 포함). 배포: `http(s)://<hermes-host>:8642/p/hachi`, 로컬: SSH 터널 후 `http://127.0.0.1:8642/p/hachi`                                         |
+| `HERMES_API_KEY`        | ✅      | `~/.hermes/profiles/hachi/.env`의 `API_SERVER_KEY` (게이트웨이 default 프로필 키와 다른 값)                                                                                              |
 | `HERMES_SESSION_PREFIX` | -       | Hermes 세션 ID 프리픽스 (기본 `sye-`)                                                                                                                                                    |
 | `HERMES_SESSION_KEY`    | -       | 장기 기억 스코프 헤더 `X-Hermes-Session-Key` (기본 `sye-agent`)                                                                                                                          |
 | `HERMES_SYSTEM_MESSAGE` | -       | `system_message` 끝에 덧붙일 문구 (선택)                                                                                                                                                 |
@@ -48,7 +48,8 @@ npm run dev
 SITE_PASSWORD=0411
 DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 HERMES_API_URL=https://hermes.example.com/p/hachi
-HERMES_API_KEY=your_hermes_api_server_key
+# hachi 프로필(~/.hermes/profiles/hachi/.env)의 API_SERVER_KEY
+HERMES_API_KEY=your_hachi_api_server_key
 
 # 선택: OG 태그 이미지 URL의 도메인을 고정하려면 설정 (기본값: VERCEL_URL 또는 localhost)
 # NEXT_PUBLIC_SITE_URL=https://trable-agent.vercel.app
@@ -89,19 +90,57 @@ CREATE TABLE IF NOT EXISTS session_state (
 - 지시 사항(`instructions` 테이블)의 활성 항목은 매 요청 `system_message`로 전달된다
 - 동시 실행 한도(HTTP 429)·일시 오류(5xx)는 백오프와 함께 재시도한다
 
-### hachi(서버) 쪽 준비
+### Hermes(서버) 쪽 준비
 
-1. `~/.hermes/profiles/hachi/.env`에 `API_SERVER_ENABLED=true`, `API_SERVER_KEY=<랜덤 키>` 추가 후 게이트웨이 재시작
-2. 외부에서는 터널(예: Cloudflare Tunnel)로 `127.0.0.1:8642`의 `/p/hachi/*`만 노출
-3. 무인 실행이라 승인(approval) 대기가 발생하지 않도록 hachi 승인 설정 확인 (대기가 발생하면 요청이 바로 실패한다)
+멀티플렉스 게이트웨이(`gateway.multiplex_profiles: true`)에서 `/p/hachi/*`는 **default 프로필이 소유한 공유 리스너**(기본 `127.0.0.1:8642`)가 서빙하고, 인증만 hachi 프로필 키를 쓴다 — 그래서 키를 두 곳에 **서로 다른 값**으로 넣는다.
 
-### 로컬 개발 (Hermes 없이)
+1. **default 프로필** — `~/.hermes/.env` (리스너를 여는 주체)
+
+   ```bash
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=<openssl rand -hex 32>
+   API_SERVER_HOST=0.0.0.0     # 외부(Vercel 등)에서 접속할 때만. 기본은 127.0.0.1
+   ```
+
+2. **hachi 프로필** — `~/.hermes/profiles/hachi/.env` (`/p/hachi` 인증 전용, 자체 리스너 없음)
+
+   ```bash
+   API_SERVER_KEY=<openssl rand -hex 32>   # default 키와 다른 값, 16자 이상
+   ```
+
+3. 게이트웨이 재시작 후 확인
+
+   ```bash
+   systemctl --user restart hermes-gateway.service
+   ss -ltn | grep 8642
+   curl -s -H "Authorization: Bearer <hachi 키>" http://127.0.0.1:8642/p/hachi/v1/models
+   ```
+
+4. 외부에서 접속한다면 호스트 방화벽까지 (Oracle 이미지 기본 규칙은 마지막이 REJECT → 그 **앞**에 삽입)
+
+   ```bash
+   sudo iptables -I INPUT 6 -p tcp -m state --state NEW --dport 8642 -j ACCEPT
+   sudo netfilter-persistent save
+   # 그리고 OCI VCN Security List(또는 NSG)에 TCP 8642 수신 규칙 추가
+   ```
+
+- 키 스코프: `/p/hachi/*`는 hachi 키만 통과(default 키는 401), unprefixed `/v1/*`는 default 키만 통과
+- 노출하지 않으려면 SSH 터널만 써도 된다(아래 로컬 개발) — 이 엔드포인트는 터미널 실행 권한을 가진 에이전트라, 공개 시 Bearer 키가 유일한 방어선이다
+- 승인(approval): hachi 기본값은 `approvals.mode: smart` — 승인 대기(`approval.request`)가 발생하면 웹앱에는 승인 UI가 없어 그 턴이 실패한다. 무인 운영이 필요하면 hachi `config.yaml`의 `approvals` 설정을 점검할 것
+
+### 로컬 개발
 
 ```bash
-node scripts/mock-hermes-server.mjs 8971   # Hermes API 서버 목
-
+# 1) 목 서버로 띄우기 (Hermes 없이)
+node scripts/mock-hermes-server.mjs 8971
 HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
 HERMES_API_KEY=mock-key \
+npm run dev
+
+# 2) 실제 Hermes에 붙이기 — SSH 터널(공개 노출 없음)
+ssh -N -L 8642:127.0.0.1:8642 <hermes-host>
+# .env: HERMES_API_URL=http://127.0.0.1:8642/p/hachi
+#       HERMES_API_KEY=<hachi 키>
 npm run dev
 ```
 
@@ -115,5 +154,12 @@ npm run dev
 
 Vercel에 배포 시 Neon DB는 Vercel Marketplace에서 자동 연결됩니다.
 별도의 `vercel.json` 설정 불필요 (Next.js가 자동 감지).
+
+Hermes 백엔드 env:
+
+| 변수             | 값                                                                            |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `HERMES_API_URL` | `http(s)://<hermes-host>:8642/p/hachi` (프로필 프리픽스 포함, 끝 슬래시 없이) |
+| `HERMES_API_KEY` | hachi 프로필의 `API_SERVER_KEY`                                               |
 
 Git push는 사용자가 직접 실행합니다.
