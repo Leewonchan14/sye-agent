@@ -34,18 +34,13 @@ export class HermesApiError extends Error {
   }
 }
 
-/** chat/stream이 보내는 named SSE 이벤트. */
-export interface HermesEvent {
+/** chat/stream이 보내는 named SSE 이벤트 — payload 타입은 소비자가 정한다. */
+export interface HermesSseFrame<TData> {
   type: string;
-  data: Record<string, unknown>;
+  data: TData;
 }
 
-const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
-const MAX_OPEN_ATTEMPTS = 3;
-const RETRY_BASE_DELAY_MS = 700;
 const MAX_ERROR_TEXT_LENGTH = 400;
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const requestHeaders = (config: HermesBackendConfig): Record<string, string> => ({
   Authorization: `Bearer ${config.apiKey}`,
@@ -53,6 +48,15 @@ const requestHeaders = (config: HermesBackendConfig): Record<string, string> => 
   // 장기 기억 스코프 — 헤더가 없으면 세션 단위로 갈라진다.
   "X-Hermes-Session-Key": config.sessionKey,
 });
+
+/** 다른 Hermes 엔드포인트(run API 등)에서도 같은 인증/스코프 헤더를 쓴다. */
+export const hermesRequestHeaders = requestHeaders;
+
+/** Hermes 오류 응답(`{"error": … | {"message": …}}`)에서 읽는 필드. */
+interface HermesErrorBody {
+  error?: unknown;
+  message?: unknown;
+}
 
 /** Hermes 오류 응답(`{"error":{"message":…}}`)에서 읽을 수 있는 메시지를 뽑는다. */
 export const readHermesErrorMessage = async (res: Response): Promise<string> => {
@@ -64,11 +68,12 @@ export const readHermesErrorMessage = async (res: Response): Promise<string> => 
     let message: string | undefined;
     if (text.startsWith("{")) {
       try {
-        const body = JSON.parse(text) as Record<string, unknown>;
+        const body = JSON.parse(text) as HermesErrorBody;
         const error = body.error;
         if (typeof error === "string") message = error;
-        else if (error && typeof error === "object") {
-          const nested = (error as Record<string, unknown>).message;
+        else if (error && typeof error === "object" && "message" in error) {
+          // 타입 가드가 좁힌 값만 검사한다 (구조를 단정하지 않는다).
+          const nested = error.message;
           if (typeof nested === "string") message = nested;
         }
         if (!message && typeof body.message === "string") message = body.message;
@@ -127,7 +132,47 @@ export const ensureHermesSession = async (
   throw new HermesApiError(await readHermesErrorMessage(createRes), createRes.status);
 };
 
-const parseSSEFrame = (frame: string): HermesEvent | null => {
+/** Hermes 세션 트랜스크립트의 한 줄 (툴 결과·reasoning 백필에 쓴다). */
+export interface HermesTranscriptMessage {
+  role: string;
+  content?: string | null;
+  tool_name?: string | null;
+  tool_call_id?: string | null;
+  tool_calls?: {
+    id?: string;
+    call_id?: string;
+    function?: { name?: string; arguments?: string };
+  }[];
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+  finish_reason?: string | null;
+}
+
+/** `GET /api/sessions/{id}/messages` 응답. */
+interface HermesMessagesResponse {
+  data?: unknown;
+}
+
+/** 세션 트랜스크립트를 읽는다 — 실패해도 대화는 계속되도록 빈 배열로 폴백한다. */
+export const readHermesSessionMessages = async (
+  config: HermesBackendConfig,
+  sessionId: string,
+  limit = 200
+): Promise<HermesTranscriptMessage[]> => {
+  try {
+    const res = await fetch(
+      `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=${limit}`,
+      { headers: requestHeaders(config) }
+    );
+    if (!res.ok) return [];
+    const body = (await res.json()) as HermesMessagesResponse;
+    return Array.isArray(body.data) ? (body.data as HermesTranscriptMessage[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const parseSSEFrame = <TData>(frame: string): HermesSseFrame<TData> | null => {
   let eventName: string | undefined;
   const dataLines: string[] = [];
 
@@ -142,18 +187,17 @@ const parseSSEFrame = (frame: string): HermesEvent | null => {
   if (dataLines.length === 0) return null;
   try {
     const parsed: unknown = JSON.parse(dataLines.join("\n"));
-    const data =
-      parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-    return { type: eventName ?? "message", data };
+    if (!parsed || typeof parsed !== "object") return null;
+    return { type: eventName ?? "message", data: parsed as TData };
   } catch {
     return null;
   }
 };
 
 /** SSE 본문을 프레임 단위로 파싱해 named 이벤트를 순서대로 흘려보낸다. */
-export const readHermesSSE = async function* (
+export const readHermesSSE = async function* <TData>(
   body: ReadableStream<Uint8Array>
-): AsyncGenerator<HermesEvent> {
+): AsyncGenerator<HermesSseFrame<TData>> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -168,7 +212,7 @@ export const readHermesSSE = async function* (
       while (boundary !== -1) {
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
-        const event = parseSSEFrame(frame);
+        const event = parseSSEFrame<TData>(frame);
         if (event) yield event;
         boundary = buffer.indexOf("\n\n");
       }
@@ -176,60 +220,4 @@ export const readHermesSSE = async function* (
   } finally {
     reader.releaseLock();
   }
-};
-
-export interface HermesChatStreamOptions {
-  userMessage: string;
-  systemMessage?: string;
-  signal?: AbortSignal;
-}
-
-/**
- * `/api/sessions/{id}/chat/stream` 연결을 열고 SSE 이벤트 제너레이터를 반환한다.
- * 동시 실행 한도(429)·일시 오류(5xx)는 백오프와 함께 재시도한다.
- */
-export const openHermesChatStream = async (
-  config: HermesBackendConfig,
-  sessionId: string,
-  options: HermesChatStreamOptions
-): Promise<AsyncGenerator<HermesEvent>> => {
-  const url = `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/chat/stream`;
-  const body = JSON.stringify({
-    message: options.userMessage,
-    ...(options.systemMessage ? { system_message: options.systemMessage } : {}),
-  });
-
-  let lastError = new HermesApiError("Hermes 백엔드에 연결하지 못했어요.");
-
-  for (let attempt = 1; attempt <= MAX_OPEN_ATTEMPTS; attempt++) {
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: requestHeaders(config),
-        body,
-        signal: options.signal,
-      });
-    } catch (error) {
-      if (options.signal?.aborted) throw error;
-      const detail = error instanceof Error ? error.message : String(error);
-      lastError = new HermesApiError(`Hermes 백엔드에 연결하지 못했어요: ${detail}`);
-      if (attempt < MAX_OPEN_ATTEMPTS) {
-        await sleep(RETRY_BASE_DELAY_MS * attempt);
-        continue;
-      }
-      throw lastError;
-    }
-
-    if (res.ok && res.body) return readHermesSSE(res.body);
-
-    lastError = new HermesApiError(await readHermesErrorMessage(res), res.status);
-    if (attempt < MAX_OPEN_ATTEMPTS && RETRYABLE_STATUS.has(res.status)) {
-      await sleep(RETRY_BASE_DELAY_MS * attempt);
-      continue;
-    }
-    throw lastError;
-  }
-
-  throw lastError;
 };

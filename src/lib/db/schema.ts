@@ -1,3 +1,4 @@
+import type { UIMessageChunk } from "ai";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -5,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -58,6 +60,46 @@ export const suggestions = pgTable(
   },
   (table) => ({
     sortOrderIdx: index("suggestions_sort_order_idx").on(table.sortOrder),
+  })
+);
+
+/**
+ * 진행 중인(또는 막 끝난) 채팅 턴 하나의 상태.
+ *
+ * Vercel 함수는 300초에서 죽고, 그때 Hermes로 가는 SSE도 끊긴다. 그래서 턴은 Hermes의
+ * 디태치 런(`/v1/runs`)으로 돌리고, 앱은 `chat_turn_frames`에 UI 스트림 청크를 적어 두었다가
+ * 브라우저가 끊긴 지점(offset)부터 재생해 이어 붙인다.
+ */
+export const chatTurns = pgTable(
+  "chat_turns",
+  {
+    sessionId: text("session_id").primaryKey(),
+    hermesRunId: text("hermes_run_id").notNull(),
+    // running | completed | failed | cancelled
+    status: text("status").notNull().default("running"),
+    /** 로그에 기록된 UI 청크 개수 (다음 offset). */
+    nextOffset: integer("next_offset").notNull().default(0),
+    /** 마지막으로 소비한 Hermes run 이벤트 seq. */
+    hermesSeq: integer("hermes_seq").notNull().default(-1),
+    /** 실패 시 사용자에게 보여줄 오류 메시지. */
+    error: text("error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    updatedIdx: index("chat_turns_updated_idx").on(table.updatedAt),
+  })
+);
+
+/** 한 턴의 UI 스트림 청크 로그 — offset 순서대로 재생하면 같은 화면이 복원된다. */
+export const chatTurnFrames = pgTable(
+  "chat_turn_frames",
+  {
+    sessionId: text("session_id").notNull(),
+    offset: integer("offset").notNull(),
+    chunk: jsonb("chunk").$type<UIMessageChunk>().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sessionId, table.offset] }),
   })
 );
 

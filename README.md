@@ -83,12 +83,37 @@ CREATE TABLE IF NOT EXISTS session_state (
 
 ## Hermes Agent 백엔드 (hachi 프로필)
 
-에이전트 실행은 **Hermes Agent의 hachi 프로필**(멀티플렉스 게이트웨이 API 서버)이 담당하는 유일한 채팅 백엔드다. 프론트엔드는 그대로 동작한다 — 이 서버가 Hermes 세션 SSE(`/api/sessions/{id}/chat/stream`)를 AI SDK UI 메시지 스트림으로 변환해 돌려준다.
+에이전트 실행은 **Hermes Agent의 hachi 프로필**(멀티플렉스 게이트웨이 API 서버)이 담당하는 유일한 채팅 백엔드다.
+앱은 Hermes의 **디태치 런 API**(`/v1/runs`)로 턴을 돌리고, 런 이벤트를 AI SDK UI 메시지 스트림으로 중계한다.
 
 - 세션 매핑: 앱 세션 ID → Hermes 세션 ID `sye-<sessionId>` (결정적 매핑, 별도 DB 컬럼 없음)
 - 히스토리: Hermes가 대화 트랜스크립트를 소유하고, Neon `session_state`는 사이드바·검색용으로 계속 저장된다
-- 지시 사항(`instructions` 테이블)의 활성 항목은 매 요청 `system_message`로 전달된다
-- 동시 실행 한도(HTTP 429)·일시 오류(5xx)는 백오프와 함께 재시도한다
+- 지시 사항(`instructions` 테이블)의 활성 항목은 매 요청 `instructions`로 전달된다
+
+### 왜 세션 SSE가 아니라 `/v1/runs`인가 (Vercel 300초 한도)
+
+Vercel 함수 수명은 **스트리밍 응답 시간을 포함**하고(Hobby 300s), 함수가 죽으면 그 순간 Hermes로 가는
+SSE도 끊긴다. 세션 채팅 스트림(`/api/sessions/{id}/chat/stream`)은 그때 게이트웨이가
+`agent.interrupt("SSE client disconnected")`로 **런 자체를 중단**시켜 진행 중이던 작업이 사라졌다.
+
+`/v1/runs`는 반대로:
+
+1. `POST /v1/runs`가 **run_id를 즉시** 돌려주고 런은 백그라운드에서 계속된다 (클라이언트가 끊겨도 안 죽는다)
+2. 이벤트를 **seq와 함께 보관**하고 `GET /v1/runs/{id}/events?last_seq=`로 언제든 이어서 읽을 수 있다
+
+그래서 앱은:
+
+| 단계                                | 하는 일                                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/chat`                    | 런 시작 → UI 청크를 브라우저로 흘리며 **모든 청크를 `chat_turn_frames`에 offset과 함께 기록** (Neon)                           |
+| 소프트 데드라인                     | 기본 240초(= `CHAT_SOFT_DEADLINE_MS`)에서 **스스로** 스트림을 닫는다 (Vercel이 죽이기 전에)                                    |
+| `GET /api/chat/{sessionId}/stream`  | 브라우저가 커서(`message-metadata`의 offset/keepParts)를 들고 재접속 → 놓친 프레임만 재생 + 살아 있는 런에 `last_seq`로 재부착 |
+| `POST /api/chat/{sessionId}/cancel` | 사용자가 정지를 누를 때만 `POST /v1/runs/{id}/stop`으로 런을 끊는다 (브라우저가 그냥 떠난 경우는 런을 살려 둔다)               |
+
+- 열려 있던 파트(스트리밍 중이던 텍스트/도구 카드)는 재개 시 커서 기준으로 잘라내고 그 파트의 `*-start`부터 재생한다 — 중복/유실 없이 화면이 복원된다
+- 페이지 새로고침·네트워크 끊김·함수 타임아웃 모두 같은 경로로 복구된다
+- 도구 카드의 인자·전체 결과는 턴이 끝날 때 세션 트랜스크립트(`/api/sessions/{id}/messages`)에서 백필한다
+- 동시 실행 한도(HTTP 429)·일시 오류(5xx)는 그대로 런 시작 단계에서 처리된다
 
 ### Hermes(서버) 쪽 준비
 
@@ -137,6 +162,13 @@ HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
 HERMES_API_KEY=mock-key \
 npm run dev
 
+# 1-1) 이어받기(resume) 경로까지 로컬에서 보려면 소프트 데드라인을 짧게:
+MOCK_TURN_MS=9000 node scripts/mock-hermes-server.mjs 8971   # 턴이 9초 동안 흐르는 목
+HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
+HERMES_API_KEY=mock-key \
+CHAT_SOFT_DEADLINE_MS=3000 \
+npm run dev    # → 3초마다 스트림이 끊기고 브라우저가 이어받아 완주한다
+
 # 2) 실제 Hermes에 붙이기 — SSH 터널(공개 노출 없음)
 ssh -N -L 8642:127.0.0.1:8642 <hermes-host>
 # .env: HERMES_API_URL=http://127.0.0.1:8642/p/hachi
@@ -146,30 +178,37 @@ npm run dev
 
 ### thinking 스트리밍 (게이트웨이 패치 — 권장)
 
-기본 게이트웨이는 모델의 실제 thinking(`reasoning_content`)을 session chat 스트림에 싣지 않는다
-(`tool.progress`의 `_thinking`은 방금 나간 답변 텍스트의 에코일 뿐이다). 앱은 그래서 thinking을
-턴이 끝날 때 `run.completed.messages`에서 백필한다 — 대화는 정상이지만 thinking이 턴 종료 시 한 번에 나타난다.
+기본 게이트웨이는 모델의 실제 thinking(`reasoning_content`)을 API 스트림에 싣지 않는다
+(`reasoning.available` / `tool.progress`의 `_thinking`은 잘린 진행 프리뷰일 뿐이다). 패치 없이도 앱은
+턴이 끝날 때 세션 트랜스크립트의 `reasoning`으로 thinking을 백필하지만, 턴 종료 시점에 한 번에 나타난다.
 
-대신 **실시간 스트리밍**을 원하면 게이트웨이가 `reasoning_callback`을 SSE로 중계하면 된다
+**실시간 스트리밍**은 게이트웨이가 `reasoning_callback`을 SSE로 중계하면 된다
 (OpenAI 호환 `/v1/chat/completions` 경로는 이미 그렇게 한다 — `_spawn_stream_agent`의 `_on_reasoning`, #99552).
-`~/.hermes/hermes-agent/gateway/platforms/api_server.py`에 3군데만 추가하면 된다(실서버 적용 완료):
+실서버에는 아래 두 파일 패치가 적용돼 있다(`~/.hermes/patches/*.patch`로 보관):
 
-1. 플랫폼 설정 플래그: `self._reasoning_events: bool = _coerce_request_bool(extra.get("reasoning_events"), default=True)`
-   (`tool_progress_events` 옆) — `~/.hermes/config.yaml`의 `gateway.platforms.api_server.reasoning_events: false`로 끌 수 있다
-2. `_handle_session_chat_stream` 안에 콜백 추가:
-   `events.enqueue("reasoning.delta", {"message_id": message_id, "delta": delta})`
-3. 같은 함수의 `_run_agent(...)` 호출에 `reasoning_callback=_reasoning` 전달
+| 파일                                   | 추가한 것                                                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway/platforms/api_server.py`      | 플랫폼 플래그 `reasoning_events`(기본 on) + `_handle_session_chat_stream`에 `_reasoning` 콜백 → `reasoning.delta` SSE                             |
+| `gateway/platforms/api_server_runs.py` | `_execute_run`에 `_reasoning_cb`를 추가하고 `_create_agent(..., reasoning_callback=_reasoning_cb)`로 연결 → `/v1/runs` 이벤트로 `reasoning.delta` |
 
-적용 후 `systemctl --user restart hermes-gateway.service`. 앱은 `reasoning.delta`가 오면 그대로 스트리밍하고,
-안 오는 서버(패치 전)에서는 자동으로 턴 종료 백필로 동작한다. thinking은 Hermes assistant 메시지(step)마다
-**별도 블록**으로 진행 순서 자리에 렌더링된다 — 도구를 부르기 전 생각, 다음 단계 생각이 각각 따로 접히고 펼쳐진다.
-⚠ `hermes update`가 이 파일을 덮어쓰면 패치가 사라진다 — 그때는 위 3군데를 다시 넣으면 된다(기능 저하만, 오류 없음).
+```bash
+# 재적용 (hermes update로 패치가 사라졌을 때)
+cd ~/.hermes/hermes-agent && git apply ~/.hermes/patches/api_server_reasoning_delta.patch \
+  && git apply ~/.hermes/patches/runs_reasoning_delta.patch
+systemctl --user restart hermes-gateway.service
+```
+
+- 앱은 `reasoning.delta`가 오면 그대로 스트리밍하고, 안 오는 서버(패치 전)에서는 자동으로 턴 종료 백필로 동작한다(기능 저하만, 오류 없음)
+- thinking은 Hermes assistant 메시지(step)마다 **별도 블록**으로 진행 순서 자리에 렌더링된다 — 도구를 부르기 전 생각, 다음 단계 생각이 각각 따로 접히고 펼쳐진다
+- 끄고 싶으면 `~/.hermes/config.yaml`의 `gateway.platforms.api_server.reasoning_events: false`
 
 ### 알려진 한계 (후속 작업)
 
 - 이전 응답 **재생성(regenerate)** 은 새 턴으로 취급된다 (Hermes 트랜스크립트는 되돌리지 않음)
-- 도구 카드의 결과는 **턴이 끝날 때** 채워진다 — Hermes `tool.completed`에 결과가 실리지 않고
-  `run.completed.messages`에만 있어서 그때 백필한다 (thinking은 위 패치 시 실시간, 아니면 같은 시점)
+- 도구 카드의 인자·전체 결과는 **턴이 끝날 때** 채워진다 — `tool.completed`에는 잘린(≤500자) 요약만 있어서
+  종료 시 세션 트랜스크립트에서 백필한다 (thinking은 게이트웨이 패치 시 실시간)
+- `chat_turn_frames`는 턴 하나의 UI 청크 로그를 담는다 — 같은 세션에서 새 턴이 시작되면 지우고,
+  하루 지난 행은 요청 경로에서 best-effort로 청소한다
 - 도구는 Hermes 쪽(스킬·브라우저·터미널)에서 실행된다 (앱 전용 도구였던 네이버·Exa·샌드박스 등은 제거됨)
 
 ## 배포
@@ -179,9 +218,10 @@ Vercel에 배포 시 Neon DB는 Vercel Marketplace에서 자동 연결됩니다.
 
 Hermes 백엔드 env:
 
-| 변수             | 값                                                                            |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `HERMES_API_URL` | `http(s)://<hermes-host>:8642/p/hachi` (프로필 프리픽스 포함, 끝 슬래시 없이) |
-| `HERMES_API_KEY` | hachi 프로필의 `API_SERVER_KEY`                                               |
+| 변수                    | 값                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `HERMES_API_URL`        | `http(s)://<hermes-host>:8642/p/hachi` (프로필 프리픽스 포함, 끝 슬래시 없이) |
+| `HERMES_API_KEY`        | hachi 프로필의 `API_SERVER_KEY`                                               |
+| `CHAT_SOFT_DEADLINE_MS` | 선택 — 스트림을 스스로 닫는 시각 (기본 240000ms = Vercel 300s 한도보다 짧게)  |
 
 Git push는 사용자가 직접 실행합니다.
