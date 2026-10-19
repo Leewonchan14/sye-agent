@@ -2,8 +2,14 @@
 /**
  * Hermes API 서버 목(mock) — 로컬에서 Hermes 채팅 백엔드를 실제 Hermes 없이 시험한다.
  *
- * 실제 서버가 아니라 Hermes API 서버의 `/api/sessions*` SSE 프로토콜만 흉내내는 개발용 서버다.
- * (실제 프로토콜 참고: hermes-agent `gateway/platforms/api_server.py` — sessions chat/stream)
+ * 앱이 실제로 쓰는 표면만 흉내낸다:
+ *   POST   /v1/runs                        런 시작 (run_id 즉시 반환)
+ *   GET    /v1/runs/{id}                   상태 + 최종 output
+ *   GET    /v1/runs/{id}/events?last_seq=  seq 이후 이벤트 재생 + 이어서 구독
+ *   POST   /v1/runs/{id}/stop              런 중단
+ *   POST   /api/sessions                   세션 생성
+ *   GET    /api/sessions/{id}              세션 조회
+ *   GET    /api/sessions/{id}/messages     트랜스크립트 (도구 결과·thinking 백필용)
  *
  * 사용법:
  *   node scripts/mock-hermes-server.mjs 8971
@@ -14,16 +20,20 @@
  *
  * 옵션:
  *   MOCK_HERMES_API_KEY=<key>  베어러 키 (기본 mock-key)
- *   MOCK_429_FIRST=1           세션당 첫 chat/stream 요청을 429로 거절(재시도 로직 확인용)
+ *   MOCK_TURN_MS=<ms>          턴 하나가 흘러가는 시간 (기본 6000)
+ *   MOCK_429_FIRST=1           세션당 첫 런 시작을 429로 거절
  */
 import { createServer } from "node:http";
 
 const port = Number(process.argv[2] ?? 8971);
 const apiKey = process.env.MOCK_HERMES_API_KEY ?? "mock-key";
+const turnMs = Number(process.env.MOCK_TURN_MS ?? 6000);
 const rejectFirst = process.env.MOCK_429_FIRST === "1";
 
 /** @type {Map<string, { title: string | null, streamAttempts: number }>} */
 const sessions = new Map();
+/** @type {Map<string, any>} */
+const runs = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomId = (prefix) => `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
@@ -61,84 +71,28 @@ const checkAuth = (req, res) => {
   return true;
 };
 
-/**
- * 한 턴을 실서버 wire와 같은 모양으로 흘려보낸다.
- *  · 모델의 reasoning은 `reasoning.delta`로 스트리밍된다 (게이트웨이가 reasoning_callback 중계)
- *  · assistant 텍스트(중간 나레이션 포함)는 전부 `assistant.delta`로 스트리밍된다
- *  · 방금 나간 텍스트는 `tool.progress`(`_thinking`)로 한 번 더 에코되고,
- *    이어서 `assistant.commentary`가 그 메시지의 끝을 알린다
- *  · `tool.started`/`tool.completed`에는 결과가 실리지 않는다
- *  · 도구 결과는 턴 끝 `run.completed.messages`(전체 트랜스크립트)에만 있다
- */
-const streamTurn = async (req, res, sessionId, userMessage, systemMessage) => {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream; charset=utf-8",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Hermes-Session-Id": sessionId,
-  });
-
-  let closed = false;
-  res.on("error", () => {});
-  req.on("close", () => {
-    closed = true;
-  });
-
-  const messageId = randomId("msg");
-  const runId = randomId("run");
-  let seq = 0;
-  const send = (event, data) => {
-    if (closed) return;
-    seq += 1;
-    res.write(
-      `event: ${event}\ndata: ${JSON.stringify({
-        session_id: sessionId,
-        run_id: runId,
-        seq,
-        ts: Date.now() / 1000,
-        ...data,
-      })}\n\n`
-    );
-  };
-  const streamText = async (text) => {
-    for (const piece of chunkText(text)) {
-      if (closed) return;
-      send("assistant.delta", { message_id: messageId, delta: piece });
-      await sleep(25);
-    }
-  };
-
-  console.log(
-    `[mock-hermes] turn → message=${JSON.stringify(userMessage)} system_message=${
-      systemMessage ? JSON.stringify(systemMessage) : "(none)"
-    }`
-  );
-
+/** 턴 하나의 이벤트/트랜스크립트를 만든다 (실서버 wire와 같은 순서). */
+const buildTurn = (sessionId, userMessage) => {
   const steps = [
     {
-      narration: `"${userMessage}"를 어떻게 찾을지 정리해 볼게…!`,
-      reasoning: `The user asked "${userMessage}". Let me search the web for it first.`,
+      reasoning: `The user asked: ${userMessage}. Let me check the current time first.`,
+      narration: `"${userMessage}"라니…! 먼저 시각부터 확인해 볼게…!`,
       tool: {
-        name: "web_search",
-        args: { query: userMessage },
-        preview: `"${userMessage}" 검색`,
-        result: {
-          success: true,
-          results: [
-            { title: "춘천 데이트 코스 추천", url: "https://example.com/chuncheon" },
-          ],
-        },
+        name: "terminal",
+        preview: "date",
+        args: { command: "date" },
+        result: { output: "Mon Oct 19 06:20:00 UTC 2026", exit_code: 0, error: null },
       },
     },
     {
-      narration: "결과가 나왔어! 이제 페이지 내용을 직접 확인해 볼게…!",
-      reasoning: "The search returned one result. Opening it to read the details.",
+      reasoning: "Got the time. Now the disk usage, then I can summarize.",
+      narration: "좋아, 시각 확인 완료! 이제 디스크도 볼게…!",
       tool: {
-        name: "web_extract",
-        args: { urls: ["https://example.com/chuncheon"] },
-        preview: "example.com/chuncheon",
+        name: "terminal",
+        preview: "df -h",
+        args: { command: "df -h" },
         result: {
-          output: "춘천 데이트 코스로 소양강 스카이워크와 감자밭 카페가 인기야.",
+          output: "overlay 45G 24G 21G 53% /",
           exit_code: 0,
           error: null,
         },
@@ -146,49 +100,49 @@ const streamTurn = async (req, res, sessionId, userMessage, systemMessage) => {
     },
   ];
 
-  send("run.started", {
-    user_message: { role: "user", content: userMessage },
-    runtime: {},
-  });
-  send("message.started", { message: { id: messageId, role: "assistant" } });
-  await sleep(50);
+  const answer = `다 확인했어~! 지금 시각이랑 디스크 상태 정리해서 알려줄게…! (목 서버 응답이야…!)`;
+  const answerReasoning = "Everything checked out — time to write the summary.";
 
-  /** @type {Record<string, unknown>[]} */
+  return { steps, answer, answerReasoning, sessionId };
+};
+
+const emitTurn = async (run) => {
+  const { steps, answer, answerReasoning } = run.turn;
+  const messageId = randomId("msg");
   const transcript = [];
+  const perStep = Math.max(200, Math.floor(turnMs / (steps.length + 1) / 6));
+
+  const send = (event, payload) => {
+    if (run.status !== "running") return;
+    run.events.push({
+      id: run.events.length,
+      event,
+      run_id: run.id,
+      timestamp: Date.now() / 1000,
+      ...run.payload(payload),
+    });
+  };
 
   for (const step of steps) {
-    // 모델이 먼저 생각하고(reasoning.delta), 그 다음 텍스트를 말한다.
     for (const piece of chunkText(step.reasoning, 24)) {
-      if (closed) return;
-      send("reasoning.delta", { message_id: messageId, delta: piece });
-      await sleep(20);
+      send("reasoning.delta", { delta: piece });
+      await sleep(perStep);
+      if (run.status !== "running") return finish(run, "cancelled");
     }
-    await streamText(step.narration);
-    if (closed) return;
-
-    send("tool.progress", {
-      message_id: messageId,
-      tool_name: "_thinking",
-      delta: step.narration,
-    });
-    send("assistant.commentary", {
-      message_id: messageId,
-      text: step.narration,
-      already_streamed: true,
-    });
-    send("tool.started", {
-      message_id: messageId,
-      tool_name: step.tool.name,
-      preview: step.tool.preview,
-      args: step.tool.args,
-    });
-    await sleep(120);
-    if (closed) return;
+    for (const piece of chunkText(step.narration)) {
+      send("message.delta", { delta: piece });
+      await sleep(perStep);
+      if (run.status !== "running") return finish(run, "cancelled");
+    }
+    send("message.interim", { text: step.narration, already_streamed: true });
+    send("tool.started", { tool: step.tool.name, preview: step.tool.preview });
+    await sleep(perStep * 2);
+    if (run.status !== "running") return finish(run, "cancelled");
     send("tool.completed", {
-      message_id: messageId,
-      tool_name: step.tool.name,
-      preview: null,
-      args: null,
+      tool: step.tool.name,
+      duration: 0.2,
+      error: false,
+      preview: JSON.stringify(step.tool.result),
     });
 
     const callId = randomId("call");
@@ -217,46 +171,41 @@ const streamTurn = async (req, res, sessionId, userMessage, systemMessage) => {
     );
   }
 
-  res.write(": keepalive\n\n"); // 파서가 건너뛰어야 하는 주석 프레임
-
-  const answer = `춘천 데이트라면… 무엇을 좋아하는지에 따라 달라져…! …라는 거야!? (목 서버 응답이야…!)`;
-  const answerReasoning =
-    "Now I can summarize: 소양강 스카이워크 and 감자밭 카페, both confirmed by the page.";
   for (const piece of chunkText(answerReasoning, 24)) {
-    if (closed) return;
-    send("reasoning.delta", { message_id: messageId, delta: piece });
-    await sleep(20);
+    send("reasoning.delta", { delta: piece });
+    await sleep(perStep);
+    if (run.status !== "running") return finish(run, "cancelled");
   }
-  await streamText(answer);
-  if (closed) return;
+  for (const piece of chunkText(answer)) {
+    send("message.delta", { delta: piece });
+    await sleep(perStep);
+    if (run.status !== "running") return finish(run, "cancelled");
+  }
 
-  send("assistant.completed", {
-    session_id: sessionId,
-    message_id: messageId,
+  transcript.push({
+    role: "assistant",
     content: answer,
-    completed: true,
-    partial: false,
-    runtime: {},
+    finish_reason: "stop",
+    reasoning: answerReasoning,
+    reasoning_content: answerReasoning,
   });
-  send("run.completed", {
-    session_id: sessionId,
-    message_id: messageId,
-    completed: true,
-    messages: [
-      ...transcript,
-      {
-        role: "assistant",
-        content: answer,
-        finish_reason: "stop",
-        reasoning: answerReasoning,
-        reasoning_content: answerReasoning,
-      },
-    ],
-    usage: {},
-    runtime: {},
-  });
-  send("done", {});
-  res.end();
+  run.transcript = transcript;
+  send("run.completed", { output: answer, completed: true, message_id: messageId });
+  finish(run, "completed");
+};
+
+const finish = (run, status) => {
+  if (run.status !== "running") return;
+  run.status = status;
+  run.closed = true;
+  for (const listener of run.listeners) listener();
+  run.listeners.clear();
+};
+
+const sseHeaders = {
+  "Content-Type": "text/event-stream; charset=utf-8",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
 };
 
 const server = createServer(async (req, res) => {
@@ -267,7 +216,10 @@ const server = createServer(async (req, res) => {
   if (!checkAuth(req, res)) return;
 
   const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)$/);
-  const streamMatch = path.match(/^\/api\/sessions\/([^/]+)\/chat\/stream$/);
+  const messagesMatch = path.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+  const runMatch = path.match(/^\/v1\/runs\/([^/]+)$/);
+  const runEventsMatch = path.match(/^\/v1\/runs\/([^/]+)\/events$/);
+  const runStopMatch = path.match(/^\/v1\/runs\/([^/]+)\/stop$/);
 
   if (req.method === "GET" && path === "/health") {
     return sendJson(res, 200, { status: "ok" });
@@ -283,11 +235,23 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "GET" && messagesMatch) {
+    const id = decodeURIComponent(messagesMatch[1]);
+    const session = sessions.get(id);
+    if (!session) return sendError(res, 404, `Session not found: ${id}`);
+    return sendJson(res, 200, {
+      object: "list",
+      session_id: id,
+      data: session.transcript ?? [],
+      pagination: { has_more: false },
+    });
+  }
+
   if (req.method === "POST" && path === "/api/sessions") {
     const body = await readJsonBody(req);
     const id = String(body.id ?? body.session_id ?? randomId("api"));
     if (sessions.has(id)) return sendError(res, 409, `Session already exists: ${id}`);
-    sessions.set(id, { title: body.title ?? null, streamAttempts: 0 });
+    sessions.set(id, { title: body.title ?? null, streamAttempts: 0, transcript: [] });
     console.log(`[mock-hermes] session created: ${id}`);
     return sendJson(res, 201, {
       object: "hermes.session",
@@ -295,22 +259,123 @@ const server = createServer(async (req, res) => {
     });
   }
 
-  if (req.method === "POST" && streamMatch) {
-    const id = decodeURIComponent(streamMatch[1]);
-    const session = sessions.get(id);
-    if (!session) return sendError(res, 404, `Session not found: ${id}`);
-
+  if (req.method === "POST" && path === "/v1/runs") {
     const body = await readJsonBody(req);
-    const message = String(body.message ?? "").trim();
-    if (!message) return sendError(res, 400, "Missing 'message' field");
+    const input = String(body.input ?? "").trim();
+    if (!input) return sendError(res, 400, "Missing 'input' field");
+    const sessionId = String(body.session_id ?? "").trim() || randomId("api");
 
+    if (!sessions.has(sessionId)) {
+      sessions.set(sessionId, {
+        title: input.slice(0, 80),
+        streamAttempts: 0,
+        transcript: [],
+      });
+    }
+    const session = sessions.get(sessionId);
     session.streamAttempts += 1;
     if (rejectFirst && session.streamAttempts === 1) {
-      console.log("[mock-hermes] 429 (MOCK_429_FIRST) — 어댑터의 재시도 확인용");
+      console.log("[mock-hermes] 429 (MOCK_429_FIRST)");
       return sendError(res, 429, "Too many concurrent runs");
     }
 
-    return streamTurn(req, res, id, message, body.system_message);
+    const runId = randomId("run");
+    const run = {
+      id: runId,
+      sessionId,
+      status: "running",
+      events: [],
+      listeners: new Set(),
+      transcript: [],
+      turn: buildTurn(sessionId, input),
+      payload: (payload) => payload,
+    };
+    runs.set(runId, run);
+    console.log(
+      `[mock-hermes] run started: ${runId} session=${sessionId} input=${JSON.stringify(input)}`
+    );
+
+    void emitTurn(run)
+      .catch((error) => console.error("[mock-hermes] turn failed", error))
+      .finally(() => {
+        session.transcript = run.transcript ?? session.transcript;
+      });
+
+    return sendJson(res, 200, { run_id: runId, status: "started", replayed: false });
+  }
+
+  if (req.method === "GET" && runMatch) {
+    const run = runs.get(decodeURIComponent(runMatch[1]));
+    if (!run) return sendError(res, 404, "Run not found");
+    const output = run.transcript?.at(-1)?.content ?? "";
+    return sendJson(res, 200, {
+      object: "hermes.run",
+      run_id: run.id,
+      status: run.status,
+      session_id: run.sessionId,
+      last_event: run.events.at(-1)?.event ?? null,
+      output,
+    });
+  }
+
+  if (req.method === "POST" && runStopMatch) {
+    const run = runs.get(decodeURIComponent(runStopMatch[1]));
+    if (!run) return sendError(res, 404, "Run not found");
+    finish(run, "cancelled");
+    return sendJson(res, 200, {
+      object: "hermes.run",
+      run_id: run.id,
+      status: "cancelled",
+    });
+  }
+
+  if (req.method === "GET" && runEventsMatch) {
+    const run = runs.get(decodeURIComponent(runEventsMatch[1]));
+    if (!run) return sendError(res, 404, "Run not found");
+
+    const rawLastSeq = req.headers["last-event-id"] ?? url.searchParams.get("last_seq");
+    const parsedSeq = Number(rawLastSeq);
+    const lastSeq = Number.isFinite(parsedSeq) ? Math.floor(parsedSeq) : -1;
+
+    res.writeHead(200, sseHeaders);
+    res.write(": open\n\n");
+
+    let cursor = 0;
+    const writeNew = () => {
+      while (cursor < run.events.length) {
+        const event = run.events[cursor];
+        cursor += 1;
+        if (event.id <= lastSeq) continue;
+        const { id, ...payload } = event;
+        res.write(`id: ${id}\ndata: ${JSON.stringify({ ...payload, seq: id })}\n\n`);
+      }
+    };
+
+    writeNew();
+    if (run.status !== "running") {
+      res.write(": stream closed\n\n");
+      return res.end();
+    }
+
+    const listener = () => {
+      writeNew();
+      if (run.status !== "running") {
+        res.write(": stream closed\n\n");
+        res.end();
+      }
+    };
+    run.listeners.add(listener);
+
+    const keepalive = setInterval(() => res.write(": keepalive\n\n"), 5000);
+    req.on("close", () => {
+      clearInterval(keepalive);
+      run.listeners.delete(listener);
+    });
+    res.on("close", () => {
+      clearInterval(keepalive);
+      run.listeners.delete(listener);
+    });
+    return;
   }
 
   return sendError(res, 404, `Not found: ${req.method} ${path}`);
@@ -321,6 +386,6 @@ server.listen(port, "127.0.0.1", () => {
     `[mock-hermes] Hermes API server mock listening on http://127.0.0.1:${port}`
   );
   console.log(
-    `[mock-hermes] base URL 예: http://127.0.0.1:${port}/p/hachi (API key: ${apiKey})`
+    `[mock-hermes] base URL 예: http://127.0.0.1:${port}/p/hachi (API key: ${apiKey}, turn: ${turnMs}ms)`
   );
 });

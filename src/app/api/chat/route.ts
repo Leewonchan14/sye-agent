@@ -2,18 +2,58 @@ import type { UIMessage } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { requireAuth } from "@/lib/auth";
-import { saveSessionState } from "@/lib/db/session";
+import { getActiveInstructions } from "@/lib/db/instructions";
+import { pruneChatTurns, startChatTurn } from "@/lib/db/turn";
 import { agentErrorMessage } from "@/lib/error-text";
-import { getHermesConfig, missingHermesEnv } from "@/lib/hermes/config";
-import { runHermesTurn } from "@/lib/hermes/stream";
+import { ensureHermesSession } from "@/lib/hermes/client";
+import {
+  getHermesConfig,
+  missingHermesEnv,
+  toHermesSessionId,
+} from "@/lib/hermes/config";
+import { startHermesRun } from "@/lib/hermes/run-client";
+import { runTurnStream } from "@/lib/hermes/turn-stream";
+import { extractMessageText } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * 채팅 백엔드 — Hermes Agent(hachi 프로필)가 유일한 경로다.
- * 프론트엔드는 그대로: Hermes 세션 SSE를 AI SDK UI 메시지 스트림으로 변환해 돌려준다.
+ * 스트림을 열어 두는 최대 시간 — Vercel 함수 한도(300s)보다 짧게 잡아 **스스로** 닫는다.
+ * 그때 브라우저는 커서를 들고 `/api/chat/{sessionId}/stream`으로 이어받고, 런은 계속 산다.
+ */
+const softDeadlineMs = Number(process.env.CHAT_SOFT_DEADLINE_MS ?? 240_000);
+
+/**
+ * DB의 활성 사용자 지시 사항(+선택 env 문구)을 `instructions`로 만든다.
+ * Hermes는 이 값을 프로필 기본 프롬프트(SOUL) 위에 덧입힌다.
+ */
+const buildInstructions = async (): Promise<string | undefined> => {
+  const sections: string[] = [];
+
+  try {
+    const activeList = await getActiveInstructions();
+    const userPart = activeList
+      .map((instruction) => `[${instruction.label}]\n${instruction.content}`)
+      .join("\n\n---\n\n");
+    if (userPart) sections.push(`## 사용자가 등록한 추가 지시사항\n${userPart}`);
+  } catch (error) {
+    // 지시 사항을 못 읽어도 대화는 계속된다 (DB 일시 오류 등).
+    console.error("[chat:hermes] failed to load active instructions:", error);
+  }
+
+  const extra = (process.env.HERMES_SYSTEM_MESSAGE ?? "").trim();
+  if (extra) sections.push(extra);
+
+  return sections.length > 0 ? sections.join("\n\n") : undefined;
+};
+
+/**
+ * 채팅 백엔드 — Hermes Agent(hachi 프로필)의 **디태치 런**(`/v1/runs`)으로 턴을 돌린다.
+ *
+ * 턴은 Vercel 함수 수명과 분리돼 있다: 함수가 죽어도 런은 계속되고, 브라우저는 커서를 들고
+ * 재개 라우트로 이어받는다(자세한 흐름은 `turn-stream.ts` 주석 참고).
  */
 export const POST = async (req: Request) => {
   const authError = await requireAuth(req);
@@ -46,31 +86,54 @@ export const POST = async (req: Request) => {
     return Response.json({ error: "sessionId가 필요합니다." }, { status: 400 });
   }
 
+  const lastMessage = messages.at(-1);
+  if (!lastMessage || lastMessage.role !== "user") {
+    throw new Error(
+      "새 사용자 메시지가 필요해요. (이전 응답 재생성은 아직 지원되지 않아요)"
+    );
+  }
+  const userText = extractMessageText(lastMessage).trim();
+  if (!userText) throw new Error("보낼 사용자 메시지가 비어 있어요.");
+
   const config = getHermesConfig();
+  const hermesSessionId = toHermesSessionId(config, sessionId);
+
+  // 오래된 턴 로그 청소 (best-effort) — 대화 흐름을 막지 않는다.
+  void pruneChatTurns().catch(() => {});
 
   const stream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      await runHermesTurn({
+      const instructions = await buildInstructions();
+      await ensureHermesSession(config, hermesSessionId, userText);
+
+      const hermesRunId = await startHermesRun(config, {
+        sessionId: hermesSessionId,
+        input: userText,
+        instructions,
+      });
+      await startChatTurn(sessionId, hermesRunId);
+
+      await runTurnStream({
         writer,
         config,
         sessionId,
-        uiMessages: messages,
-        abortSignal: req.signal,
+        hermesSessionId,
+        softDeadlineMs,
+        signal: req.signal,
+        turn: {
+          sessionId,
+          hermesRunId,
+          status: "running",
+          nextOffset: 0,
+          hermesSeq: -1,
+          error: null,
+        },
       });
     },
     onError: (error) => {
-      console.error("[chat:hermes] stream error:", error);
+      console.error("[chat:runs] stream error:", error);
       return agentErrorMessage(error);
-    },
-    onEnd: async ({ messages: allMessages }) => {
-      // Hermes가 대화 히스토리를 소유하지만, 사이드바/검색/히스토리 UI를 위해
-      // Neon에도 상태를 저장한다.
-      try {
-        await saveSessionState(sessionId, allMessages);
-      } catch (err) {
-        console.error("Failed to save session state:", err);
-      }
     },
   });
 

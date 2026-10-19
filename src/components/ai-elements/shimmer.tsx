@@ -1,12 +1,16 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { MotionProps } from "motion/react";
+import type { MotionProps, MotionValue } from "motion/react";
 import { motion } from "motion/react";
-import type { CSSProperties, ElementType, JSX } from "react";
+import type { CSSProperties, ElementType, JSX, ReactNode } from "react";
 import { memo, useMemo } from "react";
 
-type MotionHTMLProps = MotionProps & Record<string, unknown>;
+/** 이 파일이 motion 요소에 넘기는 props만 명시한다 (motion의 children은 MotionValue도 받는다). */
+type MotionHTMLProps = MotionProps & {
+  className?: string;
+  children?: ReactNode | MotionValue<number> | MotionValue<string>;
+};
 
 // Cache motion components at module level to avoid creating during render
 const motionComponentCache = new Map<

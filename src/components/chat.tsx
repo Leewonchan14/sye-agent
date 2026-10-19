@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 
 import type { UIMessage } from "ai";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, isToolUIPart } from "ai";
 
 import {
   PromptInput,
@@ -38,6 +38,66 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import { chatErrorMessage } from "@/lib/error-text";
 import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
+
+/* ── 끊긴 턴 이어받기 헬퍼 ── */
+
+/** 서버가 `message-metadata`로 보내 주는 이어받기 커서. */
+interface StreamMetadata {
+  /** 재생을 시작할 프레임 offset (열린 파트의 시작). */
+  streamOffset?: number;
+  /** 이 앞의 파트는 그대로 두고 그 뒤부터 재생한다. */
+  keepParts?: number;
+  /** 턴이 끝났는지 — false면 브라우저가 이어받는다. */
+  streamDone?: boolean;
+}
+
+/** 이 앱이 쓰는 메시지 타입 — metadata가 위 커서로 좁혀진다. */
+type StreamUIMessage = UIMessage<StreamMetadata>;
+
+/**
+ * 세션별 이어받기 커서 — 서버가 파트 경계마다 `message-metadata`로 알려준 지점.
+ * (전송 계층의 재접속 콜백이 렌더 밖에서 읽어야 해서 ref 대신 모듈 스코프에 둔다.)
+ */
+const streamCursorBySession = new Map<string, { offset: number; keepParts: number }>();
+const readStreamCursor = (sessionId: string): { offset: number; keepParts: number } =>
+  streamCursorBySession.get(sessionId) ?? { offset: 0, keepParts: 0 };
+
+/** 이어받기 전 — 경계 이후(열려 있던) 파트를 버려 재생으로 다시 만들 수 있게 한다. */
+const truncateLastAssistant = (
+  messages: StreamUIMessage[],
+  keepParts: number
+): StreamUIMessage[] => {
+  const last = messages.at(-1);
+  if (!last || last.role !== "assistant" || last.parts.length <= keepParts)
+    return messages;
+  return [...messages.slice(0, -1), { ...last, parts: last.parts.slice(0, keepParts) }];
+};
+
+/** 이어받지 못한 턴을 중단 상태로 표시한다 — 도구 카드가 스피너로 굳지 않게. */
+const markLastInterrupted = (
+  messages: StreamUIMessage[],
+  label = "턴이 중단됐어요."
+): StreamUIMessage[] => {
+  const last = messages.at(-1);
+  if (!last || last.role !== "assistant") return messages;
+
+  const parts = last.parts.map((part) => {
+    if (
+      isToolUIPart(part) &&
+      (part.state === "input-available" || part.state === "input-streaming")
+    ) {
+      // 출력 없이 끝난 카드 — 스피너 대신 오류 상태로 굳힌다.
+      return {
+        ...part,
+        state: "output-error",
+        errorText: label,
+      } as unknown as StreamUIMessage["parts"][number];
+    }
+    return part;
+  });
+  const metadata: StreamMetadata = { ...last.metadata, streamDone: true };
+  return [...messages.slice(0, -1), { ...last, parts, metadata }];
+};
 
 /* ── ChatShell ── */
 
@@ -88,11 +148,21 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     error,
     clearError,
     regenerate,
-  } = useChat({
+    resumeStream,
+  } = useChat<StreamUIMessage>({
+    id: sessionId,
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { sessionId },
       headers: { "x-auth-token": tk },
+      // 끊긴 턴 이어받기 — 서버가 이 GET으로 프레임을 재생하고 런에 다시 붙는다.
+      prepareReconnectToStreamRequest: () => ({
+        api: `/api/chat/${sessionId}/stream`,
+        headers: {
+          "x-auth-token": tk ?? "",
+          "x-stream-offset": String(readStreamCursor(sessionId).offset),
+        },
+      }),
     }),
     onFinish: handleFinish,
   });
@@ -115,6 +185,106 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       setMessages(initialMessages as Parameters<typeof setMessages>[0]);
     }
   }, [initialMessages, setMessages]);
+
+  /**
+   * 스트림이 `finish` 없이 끊겼으면(소프트 데드라인·네트워크·탭 절전) 이어받는다.
+   * 커서(offset/keepParts)는 서버가 파트 경계마다 보내 준 `message-metadata`에서 온다.
+   *
+   * 재개 스트림도 소프트 데드라인에 걸려 다시 끊길 수 있으므로, 더 진행이 없을 때까지
+   * 루프로 이어받는다. 세 번 연속 커서가 그대로면 이어받을 게 없다고 보고 중단으로 표시한다.
+   */
+  const resumeLoopRef = useRef(false);
+  const lastOffsetRef = useRef(-1);
+  const noProgressRef = useRef(0);
+  /** 재개 루프가 최신 메시지 상태를 읽도록 하는 참조 (React 상태는 클로저에 갇힌다). */
+  const rawMessagesRef = useRef<StreamUIMessage[]>([]);
+
+  useEffect(() => {
+    rawMessagesRef.current = rawMessages;
+  }, [rawMessages]);
+
+  useEffect(() => {
+    const last = rawMessages.at(-1);
+    if (!last || last.role !== "assistant") {
+      noProgressRef.current = 0;
+      lastOffsetRef.current = -1;
+      return;
+    }
+
+    const meta: StreamMetadata = last.metadata ?? {};
+    if (typeof meta.streamOffset === "number") {
+      streamCursorBySession.set(sessionId, {
+        offset: meta.streamOffset,
+        keepParts: meta.keepParts ?? 0,
+      });
+    }
+    if (meta.streamDone || typeof meta.streamOffset !== "number") return;
+    if (status !== "ready" || resumeLoopRef.current) return;
+
+    resumeLoopRef.current = true;
+    void (async () => {
+      try {
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const current = rawMessagesRef.current.at(-1);
+          if (!current || current.role !== "assistant") return;
+          const currentMeta: StreamMetadata = current.metadata ?? {};
+          if (currentMeta.streamDone || typeof currentMeta.streamOffset !== "number")
+            return;
+
+          if (currentMeta.streamOffset === lastOffsetRef.current) {
+            noProgressRef.current += 1;
+            if (noProgressRef.current > 3) {
+              // 더 이상 이어받을 게 없다 — 중단으로 표시하고 스피너를 멈춘다.
+              toast.error("턴이 중단됐어요", {
+                description: "연결이 끊겨 이어받지 못했어요. 다시 시도해 주세요.",
+                duration: 10_000,
+              });
+              setMessages((prev) => markLastInterrupted(prev));
+              return;
+            }
+          } else {
+            noProgressRef.current = 0;
+            lastOffsetRef.current = currentMeta.streamOffset;
+          }
+
+          // 열려 있던 파트는 경계까지만 남기고 자른 뒤 재생으로 다시 만든다.
+          // 커서(전송 헤더)와 자르는 기준을 같은 metadata에서 맞춰야 파트가 유실되지 않는다.
+          streamCursorBySession.set(sessionId, {
+            offset: currentMeta.streamOffset,
+            keepParts: currentMeta.keepParts ?? 0,
+          });
+          setMessages((prev) => truncateLastAssistant(prev, currentMeta.keepParts ?? 0));
+          await resumeStream();
+          // 재개 스트림이 끝난 뒤 상태 반영을 기다렸다가 다시 판단한다.
+          const { promise: settled, resolve: settle } = Promise.withResolvers<void>();
+          setTimeout(settle, 300);
+          await settled;
+        }
+      } catch (resumeError) {
+        console.error("[chat] resume failed:", resumeError);
+      } finally {
+        resumeLoopRef.current = false;
+      }
+    })();
+  }, [rawMessages, status, setMessages, resumeStream]);
+
+  /**
+   * 정지 버튼 — 브라우저 스트림만 끊으면 서버의 디태치 런은 계속 살아 있으므로,
+   * 런도 함께 멈추도록 cancel API를 부른다. 화면은 곧바로 "중단"으로 표시해
+   * 이어받기 루프/오류 토스트가 뒤따르지 않게 한다.
+   */
+  const handleStop = useCallback(() => {
+    streamCursorBySession.delete(sessionId);
+    noProgressRef.current = 0;
+    lastOffsetRef.current = -1;
+    setMessages((prev) => markLastInterrupted(prev, "사용자가 멈췄어요."));
+    clearError();
+    void fetch(`/api/chat/${sessionId}/cancel`, {
+      method: "POST",
+      headers: { "x-auth-token": tk ?? "" },
+    }).catch(() => {});
+    stop();
+  }, [sessionId, tk, stop, setMessages, clearError]);
 
   const [showHearts, setShowHearts] = useState(false);
 
@@ -322,7 +492,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 <PromptInputTools>
                   <RotatingPhrase />
                 </PromptInputTools>
-                <PromptInputSubmit status={status} onStop={stop} />
+                <PromptInputSubmit status={status} onStop={handleStop} />
               </PromptInputFooter>
             </PromptInput>
           </div>

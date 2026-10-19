@@ -15,8 +15,12 @@ const pickMessage = (body: unknown): string | null => {
   if (typeof body === "string") return body;
   if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
 
-  const record = body as Record<string, unknown>;
-  const nested = record.error ?? record.message ?? record.detail;
+  // `in` 가드로 좁힌 값만 읽는다 (본문 구조를 단정하지 않는다).
+  const nested =
+    ("error" in body ? body.error : undefined) ??
+    ("message" in body ? body.message : undefined) ??
+    ("detail" in body ? body.detail : undefined);
+
   return typeof nested === "string" ? nested : pickMessage(nested);
 };
 
