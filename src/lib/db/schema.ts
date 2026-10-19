@@ -81,6 +81,8 @@ export const chatTurns = pgTable(
     nextOffset: integer("next_offset").notNull().default(0),
     /** 마지막으로 소비한 Hermes run 이벤트 seq. */
     hermesSeq: integer("hermes_seq").notNull().default(-1),
+    /** 이 턴을 시작시킨 사용자 메시지 — 브라우저가 사라진 턴을 복구할 때 되살린다. */
+    userText: text("user_text"),
     /** 실패 시 사용자에게 보여줄 오류 메시지. */
     error: text("error"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

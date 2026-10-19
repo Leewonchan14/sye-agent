@@ -13,6 +13,8 @@ export interface ChatTurn {
   status: ChatTurnStatus;
   nextOffset: number;
   hermesSeq: number;
+  /** 이 턴을 시작시킨 사용자 메시지 — 브라우저가 사라진 턴을 복구할 때 쓴다. */
+  userText: string | null;
   error: string | null;
 }
 
@@ -27,23 +29,26 @@ const toChatTurn = (row: typeof chatTurns.$inferSelect): ChatTurn => ({
   status: row.status as ChatTurnStatus,
   nextOffset: row.nextOffset,
   hermesSeq: row.hermesSeq,
+  userText: row.userText,
   error: row.error,
 });
 
 /** 새 턴을 시작한다 — 같은 세션의 이전 턴 프레임 로그는 버린다. */
 export const startChatTurn = async (
   sessionId: string,
-  hermesRunId: string
+  hermesRunId: string,
+  userText: string
 ): Promise<void> => {
   const db = getDb();
   await db.delete(chatTurnFrames).where(eq(chatTurnFrames.sessionId, sessionId));
   await db
     .insert(chatTurns)
-    .values({ sessionId, hermesRunId })
+    .values({ sessionId, hermesRunId, userText })
     .onConflictDoUpdate({
       target: chatTurns.sessionId,
       set: {
         hermesRunId,
+        userText,
         status: "running",
         nextOffset: 0,
         hermesSeq: -1,

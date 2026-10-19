@@ -112,7 +112,7 @@ export const POST = async (req: Request) => {
         input: userText,
         instructions,
       });
-      await startChatTurn(sessionId, hermesRunId);
+      await startChatTurn(sessionId, hermesRunId, userText);
 
       await runTurnStream({
         writer,
@@ -127,6 +127,7 @@ export const POST = async (req: Request) => {
           status: "running",
           nextOffset: 0,
           hermesSeq: -1,
+          userText,
           error: null,
         },
       });

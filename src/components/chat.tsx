@@ -38,6 +38,7 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import { chatErrorMessage } from "@/lib/error-text";
 import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
+import { extractMessageText } from "@/lib/utils";
 
 /* ── 끊긴 턴 이어받기 헬퍼 ── */
 
@@ -49,6 +50,8 @@ interface StreamMetadata {
   keepParts?: number;
   /** 턴이 끝났는지 — false면 브라우저가 이어받는다. */
   streamDone?: boolean;
+  /** 이 답변이 어느 Hermes 런의 결과인지 — "이미 화면에 있는 턴"인지 판별하는 표식. */
+  turnRunId?: string;
 }
 
 /** 이 앱이 쓰는 메시지 타입 — metadata가 위 커서로 좁혀진다. */
@@ -203,6 +206,58 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     rawMessagesRef.current = rawMessages;
   }, [rawMessages]);
 
+  /**
+   * 재개 루프 — 커서가 더 진행하지 않을 때까지 이어받는다.
+   * 재개 스트림도 소프트 데드라인에 걸려 다시 끊길 수 있어서 루프가 필요하고,
+   * 세 번 연속 커서가 그대로면 이어받을 게 없다고 보고 중단으로 표시한다.
+   */
+  const runResumeLoop = useCallback(async () => {
+    if (resumeLoopRef.current) return;
+    resumeLoopRef.current = true;
+    try {
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const current = rawMessagesRef.current.at(-1);
+        if (!current || current.role !== "assistant") return;
+        const currentMeta: StreamMetadata = current.metadata ?? {};
+        if (currentMeta.streamDone || typeof currentMeta.streamOffset !== "number")
+          return;
+
+        if (currentMeta.streamOffset === lastOffsetRef.current) {
+          noProgressRef.current += 1;
+          if (noProgressRef.current > 3) {
+            // 더 이상 이어받을 게 없다 — 중단으로 표시하고 스피너를 멈춘다.
+            toast.error("턴이 중단됐어요", {
+              description: "연결이 끊겨 이어받지 못했어요. 다시 시도해 주세요.",
+              duration: 10_000,
+            });
+            setMessages((prev) => markLastInterrupted(prev));
+            return;
+          }
+        } else {
+          noProgressRef.current = 0;
+          lastOffsetRef.current = currentMeta.streamOffset;
+        }
+
+        // 열려 있던 파트는 경계까지만 남기고 자른 뒤 재생으로 다시 만든다.
+        // 커서(전송 헤더)와 자르는 기준을 같은 metadata에서 맞춰야 파트가 유실되지 않는다.
+        streamCursorBySession.set(sessionId, {
+          offset: currentMeta.streamOffset,
+          keepParts: currentMeta.keepParts ?? 0,
+        });
+        setMessages((prev) => truncateLastAssistant(prev, currentMeta.keepParts ?? 0));
+        await resumeStream();
+        // 재개 스트림이 끝난 뒤 상태 반영을 기다렸다가 다시 판단한다.
+        const { promise: settled, resolve: settle } = Promise.withResolvers<void>();
+        setTimeout(settle, 300);
+        await settled;
+      }
+    } catch (resumeError) {
+      console.error("[chat] resume failed:", resumeError);
+    } finally {
+      resumeLoopRef.current = false;
+    }
+  }, [sessionId, setMessages, resumeStream]);
+
   useEffect(() => {
     const last = rawMessages.at(-1);
     if (!last || last.role !== "assistant") {
@@ -219,54 +274,94 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       });
     }
     if (meta.streamDone || typeof meta.streamOffset !== "number") return;
-    if (status !== "ready" || resumeLoopRef.current) return;
+    if (status !== "ready") return;
 
-    resumeLoopRef.current = true;
+    void runResumeLoop();
+  }, [rawMessages, status, sessionId, runResumeLoop]);
+
+  /**
+   * 콜드 복구 — 브라우저가 사라진 동안(탭 닫힘·다른 기기) 서버가 기록한 턴을 되살린다.
+   *
+   * 서버는 클라이언트가 떠나도 런과 프레임 기록을 이어 가므로, 다시 열린 화면은
+   * ① 사용자 메시지를 되살리고 ② offset 0부터 전체 프레임을 재생해 답변까지 복원한다.
+   * (프레임 로그는 하루 뒤 정리된다 — 그 안에 돌아오면 복구된다.)
+   */
+  const coldRecoveredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (messagesLoading) return;
+    if (coldRecoveredRef.current === sessionId) return;
+    if (status !== "ready") return;
+
+    const loaded = (initialMessages ?? []) as StreamUIMessage[];
+    const loadedLast = loaded.at(-1);
+    const loadedAssistant = [...loaded].reverse().find((m) => m.role === "assistant");
+    const loadedMeta: StreamMetadata = loadedAssistant?.metadata ?? {};
+
+    // 저장된 상태가 이미 진행 중인 턴을 들고 있으면 위의 재개 경로가 처리한다.
+    if (
+      loadedLast?.role === "assistant" &&
+      !loadedMeta.streamDone &&
+      typeof loadedMeta.streamOffset === "number"
+    ) {
+      return;
+    }
+    // 이미 이 턴의 답변이 저장돼 있으면(재생 완료 후 저장된 상태) 다시 재생하지 않는다.
+    const knownRunId = loadedMeta.turnRunId;
+
+    coldRecoveredRef.current = sessionId;
     void (async () => {
       try {
-        for (let attempt = 0; attempt < 50; attempt++) {
-          const current = rawMessagesRef.current.at(-1);
-          if (!current || current.role !== "assistant") return;
-          const currentMeta: StreamMetadata = current.metadata ?? {};
-          if (currentMeta.streamDone || typeof currentMeta.streamOffset !== "number")
-            return;
+        const r = await fetch(`/api/chat/${sessionId}/turn`, {
+          headers: { "x-auth-token": tk ?? "" },
+        });
+        if (!r.ok) return;
+        const { turn } = (await r.json()) as {
+          turn: { runId: string; userText: string | null } | null;
+        };
+        if (!turn || turn.runId === knownRunId) return;
 
-          if (currentMeta.streamOffset === lastOffsetRef.current) {
-            noProgressRef.current += 1;
-            if (noProgressRef.current > 3) {
-              // 더 이상 이어받을 게 없다 — 중단으로 표시하고 스피너를 멈춘다.
-              toast.error("턴이 중단됐어요", {
-                description: "연결이 끊겨 이어받지 못했어요. 다시 시도해 주세요.",
-                duration: 10_000,
-              });
-              setMessages((prev) => markLastInterrupted(prev));
-              return;
-            }
-          } else {
-            noProgressRef.current = 0;
-            lastOffsetRef.current = currentMeta.streamOffset;
+        const userText = turn.userText?.trim();
+        if (!userText) return;
+
+        // 사용자 메시지를 되살린다(없을 때만) — assistant 메시지는 재생의 `start`가 만든다.
+        // 저장된 상태가 아직 반영 전일 수 있으니, 그때는 DB에서 읽은 메시지를 기준으로 삼는다.
+        setMessages((prev) => {
+          const base = prev.length >= loaded.length ? prev : loaded;
+          const tail = base.at(-1);
+          if (tail?.role === "user" && extractMessageText(tail).trim() === userText) {
+            return base;
           }
+          return [
+            ...base,
+            {
+              id: uuidv4(),
+              role: "user",
+              parts: [{ type: "text", text: userText }],
+            } as StreamUIMessage,
+          ];
+        });
 
-          // 열려 있던 파트는 경계까지만 남기고 자른 뒤 재생으로 다시 만든다.
-          // 커서(전송 헤더)와 자르는 기준을 같은 metadata에서 맞춰야 파트가 유실되지 않는다.
-          streamCursorBySession.set(sessionId, {
-            offset: currentMeta.streamOffset,
-            keepParts: currentMeta.keepParts ?? 0,
-          });
-          setMessages((prev) => truncateLastAssistant(prev, currentMeta.keepParts ?? 0));
-          await resumeStream();
-          // 재개 스트림이 끝난 뒤 상태 반영을 기다렸다가 다시 판단한다.
-          const { promise: settled, resolve: settle } = Promise.withResolvers<void>();
-          setTimeout(settle, 300);
-          await settled;
-        }
-      } catch (resumeError) {
-        console.error("[chat] resume failed:", resumeError);
-      } finally {
-        resumeLoopRef.current = false;
+        // offset 0부터 전체 재생 — 이미 끝난 턴이면 `finish`까지 재생되고
+        // onFinish가 화면 상태를 저장해 다음 방문부터는 재생 없이 복원된다.
+        streamCursorBySession.set(sessionId, { offset: 0, keepParts: 0 });
+        lastOffsetRef.current = -1;
+        noProgressRef.current = 0;
+        await resumeStream();
+        await runResumeLoop(); // 아직 살아 있는 턴이면 이어받는다
+      } catch (coldError) {
+        console.error("[chat] cold resume failed:", coldError);
       }
     })();
-  }, [rawMessages, status, setMessages, resumeStream]);
+  }, [
+    messagesLoading,
+    initialMessages,
+    status,
+    sessionId,
+    tk,
+    setMessages,
+    resumeStream,
+    runResumeLoop,
+  ]);
 
   /**
    * 정지 버튼 — 브라우저 스트림만 끊으면 서버의 디태치 런은 계속 살아 있으므로,
