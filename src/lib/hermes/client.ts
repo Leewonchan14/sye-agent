@@ -3,16 +3,24 @@ import type { HermesBackendConfig } from "./config";
 /**
  * Hermes API 서버 클라이언트 — 세션 리소스 + 채팅 스트림.
  *
- * 프로토콜(참고): `POST /api/sessions/{id}/chat/stream`은 아래 named SSE 이벤트를 보낸다.
+ * 프로토콜(실서버 wire 확인): `POST /api/sessions/{id}/chat/stream`은 아래 named SSE 이벤트를
+ * 보낸다. 모든 `data`는 `{ session_id, run_id, seq, ts, … }` 봉투를 갖는다.
  *  - `run.started` / `message.started`
- *  - `assistant.delta` `{ delta }` — 최종 응답 텍스트 델타
- *  - `assistant.commentary` `{ text, already_streamed }` — 턴 중간 텍스트
- *  - `tool.progress` `{ tool_name, delta }` — `tool_name === "_thinking"`이면 reasoning 델타
- *  - `tool.started` / `tool.completed` / `tool.failed` `{ tool_name, preview, args }`
- *  - `assistant.completed` `{ content }` / `run.completed|failed|cancelled`
- *  - `error` `{ message }` / `done`
+ *  - `assistant.delta` `{ delta }` — assistant 텍스트 전부(중간 나레이션 포함)를 순서대로 스트리밍
+ *  - `reasoning.delta` `{ delta }` — 모델의 실제 thinking 델타 (게이트웨이 패치 필요 — README 참고)
+ *  - `tool.progress` `{ tool_name, delta }` — 방금 나간 텍스트의 에코(`_thinking`) 또는 도구 진행 상황
+ *  - `assistant.commentary` `{ text, already_streamed }` — 중간 assistant 메시지의 끝을 알린다
+ *  - `tool.started` `{ tool_name, args, preview }` / `tool.completed|failed` `{ tool_name }`
+ *    — 완료 이벤트에 결과가 없다
+ *  - `assistant.completed` `{ content }` / `run.completed` `{ messages }` / `run.failed`
+ *  - 도구 결과는 `run.completed.messages`(턴 전체 트랜스크립트)의 `role: "tool"` 메시지
+ *    (`tool_call_id` + `content`)에만 있고, thinking도 게이트웨이 패치 전에는
+ *    `role: "assistant"`의 `reasoning`/`reasoning_content`에만 있다
+ *    → stream.ts가 턴 끝에 이 값으로 UI 스트림을 백필한다
+ *  - `error` `{ message }` / `done` / `approval.request`
  *
  * 스트림이 ~10초간 조용하면 `: keepalive` 주석 프레임이 온다 — 파서에서 건너뛴다.
+ * (참고: 트랜스크립트는 `GET /api/sessions/{id}/messages?limit=N`으로도 읽을 수 있다.)
  */
 
 /** Hermes API 서버가 돌려준 오류 (HTTP 상태 포함). */

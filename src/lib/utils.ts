@@ -19,31 +19,17 @@ const getTextParts = (msg: MessageWithParts) =>
     (p): p is MessagePart & { text: string } => p.type === "text" && p.text != null
   ) ?? [];
 
-const getReasoningParts = (msg: MessageWithParts) =>
-  msg.parts?.filter(
-    (p): p is MessagePart & { text: string } => p.type === "reasoning" && p.text != null
-  ) ?? [];
-
-const extractText = (msg: MessageWithParts): string =>
+/** 메시지의 text 파트를 이어붙인 전체 텍스트. */
+export const extractMessageText = (msg: MessageWithParts): string =>
   getTextParts(msg)
     .map((p) => p.text)
     .join("");
 
-const extractReasoning = (msg: MessageWithParts): string | undefined => {
-  const parts = getReasoningParts(msg);
-  return parts.length > 0 ? parts.map((p) => p.text).join("\n\n") : undefined;
-};
-
 /**
- * 메시지 객체를 감싸서 `.extractText()`, `.extractReasoning()` 메서드로
- * text / reasoning 파트를 추출할 수 있게 해주는 헬퍼를 생성합니다.
- *
- * @example
- * const msg = createMessageHelper(message);
- * msg.extractText();      // → "Hello world"
- * msg.extractReasoning(); // → "I think..." | undefined
+ * Hermes 백엔드는 한동안 답변 텍스트를 thinking으로도 저장했다(에코) —
+ * 답변과 같은 문장이면 thinking 파트로 보여주지 않는다.
  */
-export const createMessageHelper = (msg: MessageWithParts) => ({
-  extractText: () => extractText(msg),
-  extractReasoning: () => extractReasoning(msg),
-});
+export const isEchoedThinking = (reasoning: string, messageText: string): boolean => {
+  const text = reasoning.replace(/\s+/g, " ").trim();
+  return text.length === 0 || messageText.replace(/\s+/g, " ").includes(text);
+};

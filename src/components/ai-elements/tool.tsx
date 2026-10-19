@@ -79,6 +79,13 @@ const toolNameKoreanMap: Record<string, string> = {
   /* SDK types */
   invoke: "시키기",
   result: "결과",
+  /* Hermes(hachi) 도구 */
+  terminal: "터미널",
+  browser_exec: "브라우저 실행",
+  skill_view: "스킬 보기",
+  skills_list: "스킬 목록",
+  web_search: "웹에서 찾기",
+  web_extract: "웹 내용 읽기",
   /* dynamic tools from agent.ts */
   search_naver_local: "네이버 동네 찾기",
   search_naver_blog: "네이버 블로그 찾기",
