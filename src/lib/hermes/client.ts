@@ -91,6 +91,12 @@ export const readHermesErrorMessage = async (res: Response): Promise<string> => 
   }
 };
 
+/**
+ * 게이트웨이 호출 타임아웃 — 응답이 없는 요청이 턴 전체(그리고 화면)를 붙잡지 않게 한다.
+ * (`events` 스트림은 정상적으로 오래 열려 있으므로 연결 단계에만 건다.)
+ */
+const GATEWAY_TIMEOUT_MS = 15_000;
+
 const createHermesSession = async (
   config: HermesBackendConfig,
   sessionId: string,
@@ -100,6 +106,7 @@ const createHermesSession = async (
     method: "POST",
     headers: requestHeaders(config),
     body: JSON.stringify({ id: sessionId, ...(title ? { title } : {}) }),
+    signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
   });
 
 const buildTitle = (text: string): string | undefined => {
@@ -117,7 +124,11 @@ export const ensureHermesSession = async (
   titleText?: string
 ): Promise<void> => {
   const url = `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}`;
-  const res = await fetch(url, { method: "GET", headers: requestHeaders(config) });
+  const res = await fetch(url, {
+    method: "GET",
+    headers: requestHeaders(config),
+    signal: AbortSignal.timeout(10_000),
+  });
   if (res.ok) return;
   if (res.status !== 404) {
     throw new HermesApiError(await readHermesErrorMessage(res), res.status);
@@ -162,7 +173,7 @@ export const readHermesSessionMessages = async (
   try {
     const res = await fetch(
       `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=${limit}`,
-      { headers: requestHeaders(config) }
+      { headers: requestHeaders(config), signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS) }
     );
     if (!res.ok) return [];
     const body = (await res.json()) as HermesMessagesResponse;

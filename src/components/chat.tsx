@@ -27,6 +27,7 @@ import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -128,6 +129,16 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     token: tk ?? "",
   });
 
+  /** 답을 받지 못한 사용자 메시지 — 복구할 턴이 없을 때 "다시 시도"를 띄운다. */
+  const [unanswered, setUnanswered] = useState<string | null>(null);
+  const handleFinishAndClear = useCallback(
+    (args: Parameters<typeof handleFinish>[0]) => {
+      setUnanswered(null);
+      handleFinish(args);
+    },
+    [handleFinish]
+  );
+
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: async () => {
@@ -167,8 +178,15 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         },
       }),
     }),
-    onFinish: handleFinish,
+    onFinish: handleFinishAndClear,
   });
+
+  /** effect/콜백이 최신 메시지 상태를 읽도록 하는 참조 (React 상태는 클로저에 갇힌다). */
+  const rawMessagesRef = useRef<StreamUIMessage[]>([]);
+
+  useEffect(() => {
+    rawMessagesRef.current = rawMessages;
+  }, [rawMessages]);
 
   // BE 에러(설정 누락, LLM 호출 실패 등) 내용을 토스트로 그대로 보여주고 입력창을 다시 열어준다.
   useEffect(() => {
@@ -179,6 +197,17 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       duration: 12_000,
       action: { label: "다시 시도", onClick: () => regenerate() },
     });
+
+    // 응답이 하나도 없이 끝났다면 토스트가 사라진 뒤에도 남는 인라인 재시도를 함께 띄운다.
+    const last = rawMessagesRef.current.at(-1);
+    const hasAssistantContent = last?.role === "assistant" && last.parts.length > 0;
+    if (!hasAssistantContent) {
+      const lastUser = [...rawMessagesRef.current]
+        .reverse()
+        .find((message) => message.role === "user");
+      const text = lastUser ? extractMessageText(lastUser).trim() : "";
+      if (text) setUnanswered(text);
+    }
     clearError();
   }, [error, clearError, regenerate]);
 
@@ -202,13 +231,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   /** 이어받기/복구 중 — 스트림이 잠깐 끊긴 구간에도 "생각 중" 표시를 유지한다. */
   const [resuming, setResuming] = useState(false);
   const [recovering, setRecovering] = useState(false);
-  /** 재개 루프가 최신 메시지 상태를 읽도록 하는 참조 (React 상태는 클로저에 갇힌다). */
-  const rawMessagesRef = useRef<StreamUIMessage[]>([]);
-
-  useEffect(() => {
-    rawMessagesRef.current = rawMessages;
-  }, [rawMessages]);
-
   /**
    * 재개 루프 — 커서가 더 진행하지 않을 때까지 이어받는다.
    * 재개 스트림도 소프트 데드라인에 걸려 다시 끊길 수 있어서 루프가 필요하고,
@@ -286,6 +308,50 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   }, [rawMessages, status, sessionId, runResumeLoop]);
 
   /**
+   * 응답이 너무 오래 오지 않을 때(매달린 요청) — 화면이 잠긴 채로 남지 않도록
+   * 요청을 끊고, 서버에 턴이 있으면 이어받고 없으면 "다시 시도" 카드를 띄운다.
+   */
+  const recoverAfterStall = useCallback(async () => {
+    stop();
+    try {
+      const r = await fetch(`/api/chat/${sessionId}/turn`, {
+        headers: { "x-auth-token": tk ?? "" },
+      });
+      const turn = r.ok
+        ? ((await r.json()) as { turn: { runId: string } | null }).turn
+        : null;
+      if (turn) {
+        streamCursorBySession.set(sessionId, { offset: 0, keepParts: 0 });
+        lastOffsetRef.current = -1;
+        noProgressRef.current = 0;
+        await resumeStream();
+        await runResumeLoop();
+        return;
+      }
+      const lastUser = [...rawMessagesRef.current]
+        .reverse()
+        .find((m) => m.role === "user");
+      const text = lastUser ? extractMessageText(lastUser).trim() : "";
+      if (text) setUnanswered(text);
+      toast.error("응답이 오지 않아 요청을 정리했어요", {
+        description: "서버가 응답하지 않았어요. 다시 시도해 주세요.",
+        duration: 10_000,
+      });
+    } catch (error) {
+      console.error("[chat] stall recovery failed:", error);
+    }
+  }, [sessionId, tk, stop, resumeStream, runResumeLoop]);
+
+  // 새 요청이 30초 동안 첫 응답도 못 받으면 매달린 것으로 보고 정리한다.
+  useEffect(() => {
+    if (status !== "submitted") return;
+    const timer = setTimeout(() => {
+      void recoverAfterStall();
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [status, recoverAfterStall]);
+
+  /**
    * 콜드 복구 — 브라우저가 사라진 동안(탭 닫힘·다른 기기) 서버가 기록한 턴을 되살린다.
    *
    * 서버는 클라이언트가 떠나도 런과 프레임 기록을 이어 가므로, 다시 열린 화면은
@@ -337,7 +403,14 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
             await new Promise((settle) => setTimeout(settle, 500));
           }
         }
-        if (!turn || turn.runId === knownRunId) return;
+        if (!turn || turn.runId === knownRunId) {
+          // 복구할 턴이 없는데 마지막이 사용자 메시지라면 응답 없이 멈춘 상태다.
+          if (!turn && loadedLast?.role === "user") {
+            const text = extractMessageText(loadedLast).trim();
+            if (text) setUnanswered(text);
+          }
+          return;
+        }
 
         const userText = turn.userText?.trim();
         if (!userText) return;
@@ -457,6 +530,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       promoteToSessionUrl();
       scheduleInvalidate();
+      setUnanswered(null);
 
       // "사랑해" easter egg — trigger hearts
       if (trimmed.includes("사랑해") || trimmed.includes("좋아해")) {
@@ -474,6 +548,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       promoteToSessionUrl();
       scheduleInvalidate();
+      setUnanswered(null);
 
       // "사랑해" easter egg — trigger hearts
       if (text.includes("사랑해") || text.includes("좋아해")) {
@@ -590,6 +665,23 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                     />
                   </MessageScrollerItem>
                 ))}
+                {unanswered && !showLoader && (
+                  <div className="mx-auto mt-4 flex w-full max-w-2xl items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
+                    <span className="text-sm text-muted-foreground">
+                      응답을 받지 못했어요. 다시 시도할까요?
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setUnanswered(null);
+                        regenerate();
+                      }}
+                    >
+                      다시 시도
+                    </Button>
+                  </div>
+                )}
                 {showLoader && (
                   <div className="flex animate-bounce items-center gap-2 px-3 py-2">
                     <Avatar size="sm" className="inline-flex md:hidden">

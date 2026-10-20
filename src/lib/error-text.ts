@@ -74,11 +74,17 @@ export const agentErrorMessage = (error: unknown): string => {
 const NETWORK_ERROR_PATTERN =
   /failed to fetch|networkerror|load failed|network request failed/i;
 
+/** 매달린 요청을 타임아웃으로 정리한 경우. */
+const TIMEOUT_ERROR_PATTERN = /aborted|timeout|timed out|시간 초과/i;
+
 /** `useChat`의 `error`에서 토스트에 띄울 메시지를 만든다. */
 export const chatErrorMessage = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : "";
   if (NETWORK_ERROR_PATTERN.test(raw)) {
     return "서버에 연결하지 못했어요. 네트워크 상태를 확인해주세요.";
+  }
+  if (TIMEOUT_ERROR_PATTERN.test(raw)) {
+    return "응답이 너무 오래 걸려 요청을 정리했어요. 다시 시도해 주세요.";
   }
   return readableErrorText(raw) || "알 수 없는 오류가 발생했어요.";
 };
