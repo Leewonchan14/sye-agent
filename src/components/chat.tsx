@@ -27,7 +27,6 @@ import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -309,6 +308,26 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
     void runResumeLoop();
   }, [rawMessages, status, sessionId, runResumeLoop]);
+
+  // 답을 받지 못한 사용자 메시지는 **shadcn 토스트**로 알리고 액션으로 재시도한다.
+  useEffect(() => {
+    if (!unanswered || messagesLoading) return;
+    const toastId = `unanswered-${sessionId}`;
+    toast.error("응답을 받지 못했어요", {
+      id: toastId,
+      description: "다시 시도할까요?",
+      duration: Infinity,
+      action: {
+        label: "다시 시도",
+        onClick: () => {
+          toast.dismiss(toastId);
+          setUnanswered(null);
+          regenerate();
+        },
+      },
+      onDismiss: () => setUnanswered(null),
+    });
+  }, [unanswered, messagesLoading, sessionId, regenerate]);
 
   /**
    * 응답이 너무 오래 오지 않을 때(매달린 요청) — 화면이 잠긴 채로 남지 않도록
@@ -668,23 +687,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                     />
                   </MessageScrollerItem>
                 ))}
-                {unanswered && !showLoader && (
-                  <div className="mx-auto mt-4 flex w-full max-w-2xl items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
-                    <span className="text-sm text-muted-foreground">
-                      응답을 받지 못했어요. 다시 시도할까요?
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setUnanswered(null);
-                        regenerate();
-                      }}
-                    >
-                      다시 시도
-                    </Button>
-                  </div>
-                )}
                 {showLoader && (
                   <div className="flex animate-bounce items-center gap-2 px-3 py-2">
                     <Avatar size="sm" className="inline-flex md:hidden">
