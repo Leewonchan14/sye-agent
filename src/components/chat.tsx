@@ -27,6 +27,7 @@ import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -128,6 +129,16 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     token: tk ?? "",
   });
 
+  /** 답을 받지 못한 사용자 메시지 — 복구할 턴이 없을 때 "다시 시도"를 띄운다. */
+  const [unanswered, setUnanswered] = useState<string | null>(null);
+  const handleFinishAndClear = useCallback(
+    (args: Parameters<typeof handleFinish>[0]) => {
+      setUnanswered(null);
+      handleFinish(args);
+    },
+    [handleFinish]
+  );
+
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: async () => {
@@ -167,7 +178,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         },
       }),
     }),
-    onFinish: handleFinish,
+    onFinish: handleFinishAndClear,
   });
 
   // BE 에러(설정 누락, LLM 호출 실패 등) 내용을 토스트로 그대로 보여주고 입력창을 다시 열어준다.
@@ -337,7 +348,14 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
             await new Promise((settle) => setTimeout(settle, 500));
           }
         }
-        if (!turn || turn.runId === knownRunId) return;
+        if (!turn || turn.runId === knownRunId) {
+          // 복구할 턴이 없는데 마지막이 사용자 메시지라면 응답 없이 멈춘 상태다.
+          if (!turn && loadedLast?.role === "user") {
+            const text = extractMessageText(loadedLast).trim();
+            if (text) setUnanswered(text);
+          }
+          return;
+        }
 
         const userText = turn.userText?.trim();
         if (!userText) return;
@@ -457,6 +475,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       promoteToSessionUrl();
       scheduleInvalidate();
+      setUnanswered(null);
 
       // "사랑해" easter egg — trigger hearts
       if (trimmed.includes("사랑해") || trimmed.includes("좋아해")) {
@@ -474,6 +493,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
       promoteToSessionUrl();
       scheduleInvalidate();
+      setUnanswered(null);
 
       // "사랑해" easter egg — trigger hearts
       if (text.includes("사랑해") || text.includes("좋아해")) {
@@ -590,6 +610,23 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                     />
                   </MessageScrollerItem>
                 ))}
+                {unanswered && !showLoader && (
+                  <div className="mx-auto mt-4 flex w-full max-w-2xl items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
+                    <span className="text-sm text-muted-foreground">
+                      응답을 받지 못했어요. 다시 시도할까요?
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setUnanswered(null);
+                        regenerate();
+                      }}
+                    >
+                      다시 시도
+                    </Button>
+                  </div>
+                )}
                 {showLoader && (
                   <div className="flex animate-bounce items-center gap-2 px-3 py-2">
                     <Avatar size="sm" className="inline-flex md:hidden">
