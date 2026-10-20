@@ -44,6 +44,17 @@ export const GET = async (
     return new Response(null, { status: 204 });
   }
 
+  /**
+   * 손상·과대 로그 보호: 예전(다중 writer) 시절 로그는 같은 내용이 수천 번 반복돼
+   * 재생 자체가 화면을 수십 초 막는다. 이미 끝난 턴이면 재생을 포기하고 정리한다 —
+   * 클라이언트는 204를 받고 "중단"으로 마감한다(대화는 세션 트랜스크립트에 남아 있다).
+   */
+  const REPLAY_LIMIT = 2_000;
+  if (turn.status !== "running" && turn.nextOffset - clientOffset > REPLAY_LIMIT) {
+    await clearChatTurn(sessionId);
+    return new Response(null, { status: 204 });
+  }
+
   const config = getHermesConfig();
   const hermesSessionId = toHermesSessionId(config, sessionId);
 

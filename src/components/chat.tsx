@@ -257,7 +257,10 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
               description: "연결이 끊겨 이어받지 못했어요. 다시 시도해 주세요.",
               duration: 10_000,
             });
-            setMessages((prev) => markLastInterrupted(prev));
+            // 마감 상태를 저장해 다음 방문에서 같은 재개를 반복하지 않게 한다.
+            const marked = markLastInterrupted(rawMessagesRef.current);
+            setMessages(marked);
+            handleFinishAndClear({ messages: marked });
             return;
           }
         } else {
@@ -284,7 +287,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       resumeLoopRef.current = false;
       setResuming(false);
     }
-  }, [sessionId, setMessages, resumeStream]);
+  }, [sessionId, setMessages, resumeStream, handleFinishAndClear]);
 
   useEffect(() => {
     const last = rawMessages.at(-1);
