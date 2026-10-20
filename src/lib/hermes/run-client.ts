@@ -87,11 +87,13 @@ export const startHermesRun = async (
   for (let attempt = 1; attempt <= MAX_START_ATTEMPTS; attempt++) {
     let res: Response;
     try {
+      // 시작은 30초 안에 — 매달린 연결은 재시도 대상으로 넘긴다.
+      const timeout = AbortSignal.timeout(30_000);
       res = await fetch(url, {
         method: "POST",
         headers: hermesRequestHeaders(config),
         body,
-        signal: options.signal,
+        signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
       });
     } catch (error) {
       if (options.signal?.aborted) throw error;
@@ -131,7 +133,18 @@ export const openHermesRunEvents = async (
   signal?: AbortSignal
 ): Promise<AsyncGenerator<HermesRunEvent>> => {
   const url = `${config.baseUrl}/v1/runs/${encodeURIComponent(runId)}/events?last_seq=${fromSeq}`;
-  const res = await fetch(url, { headers: hermesRequestHeaders(config), signal });
+  // 이벤트 스트림은 런이 끝날 때까지 열려 있으므로 **연결 단계에만** 타임아웃을 건다.
+  const connect = new AbortController();
+  const connectTimer = setTimeout(() => connect.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: hermesRequestHeaders(config),
+      signal: signal ? AbortSignal.any([signal, connect.signal]) : connect.signal,
+    });
+  } finally {
+    clearTimeout(connectTimer);
+  }
   if (!res.ok || !res.body) {
     throw new HermesApiError(await readHermesErrorMessage(res), res.status);
   }
@@ -161,6 +174,7 @@ export const getHermesRunStatus = async (
   try {
     const res = await fetch(`${config.baseUrl}/v1/runs/${encodeURIComponent(runId)}`, {
       headers: hermesRequestHeaders(config),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
     return (await res.json()) as HermesRunStatus;
@@ -178,6 +192,7 @@ export const stopHermesRun = async (
     await fetch(`${config.baseUrl}/v1/runs/${encodeURIComponent(runId)}/stop`, {
       method: "POST",
       headers: hermesRequestHeaders(config),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch {
     // 정지 실패는 사용자에게 알리지 않는다 — 스트림은 이미 닫혔다.

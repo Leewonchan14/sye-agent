@@ -181,6 +181,13 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     onFinish: handleFinishAndClear,
   });
 
+  /** effect/콜백이 최신 메시지 상태를 읽도록 하는 참조 (React 상태는 클로저에 갇힌다). */
+  const rawMessagesRef = useRef<StreamUIMessage[]>([]);
+
+  useEffect(() => {
+    rawMessagesRef.current = rawMessages;
+  }, [rawMessages]);
+
   // BE 에러(설정 누락, LLM 호출 실패 등) 내용을 토스트로 그대로 보여주고 입력창을 다시 열어준다.
   useEffect(() => {
     if (!error) return;
@@ -190,6 +197,17 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       duration: 12_000,
       action: { label: "다시 시도", onClick: () => regenerate() },
     });
+
+    // 응답이 하나도 없이 끝났다면 토스트가 사라진 뒤에도 남는 인라인 재시도를 함께 띄운다.
+    const last = rawMessagesRef.current.at(-1);
+    const hasAssistantContent = last?.role === "assistant" && last.parts.length > 0;
+    if (!hasAssistantContent) {
+      const lastUser = [...rawMessagesRef.current]
+        .reverse()
+        .find((message) => message.role === "user");
+      const text = lastUser ? extractMessageText(lastUser).trim() : "";
+      if (text) setUnanswered(text);
+    }
     clearError();
   }, [error, clearError, regenerate]);
 
@@ -213,13 +231,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   /** 이어받기/복구 중 — 스트림이 잠깐 끊긴 구간에도 "생각 중" 표시를 유지한다. */
   const [resuming, setResuming] = useState(false);
   const [recovering, setRecovering] = useState(false);
-  /** 재개 루프가 최신 메시지 상태를 읽도록 하는 참조 (React 상태는 클로저에 갇힌다). */
-  const rawMessagesRef = useRef<StreamUIMessage[]>([]);
-
-  useEffect(() => {
-    rawMessagesRef.current = rawMessages;
-  }, [rawMessages]);
-
   /**
    * 재개 루프 — 커서가 더 진행하지 않을 때까지 이어받는다.
    * 재개 스트림도 소프트 데드라인에 걸려 다시 끊길 수 있어서 루프가 필요하고,
@@ -295,6 +306,50 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
     void runResumeLoop();
   }, [rawMessages, status, sessionId, runResumeLoop]);
+
+  /**
+   * 응답이 너무 오래 오지 않을 때(매달린 요청) — 화면이 잠긴 채로 남지 않도록
+   * 요청을 끊고, 서버에 턴이 있으면 이어받고 없으면 "다시 시도" 카드를 띄운다.
+   */
+  const recoverAfterStall = useCallback(async () => {
+    stop();
+    try {
+      const r = await fetch(`/api/chat/${sessionId}/turn`, {
+        headers: { "x-auth-token": tk ?? "" },
+      });
+      const turn = r.ok
+        ? ((await r.json()) as { turn: { runId: string } | null }).turn
+        : null;
+      if (turn) {
+        streamCursorBySession.set(sessionId, { offset: 0, keepParts: 0 });
+        lastOffsetRef.current = -1;
+        noProgressRef.current = 0;
+        await resumeStream();
+        await runResumeLoop();
+        return;
+      }
+      const lastUser = [...rawMessagesRef.current]
+        .reverse()
+        .find((m) => m.role === "user");
+      const text = lastUser ? extractMessageText(lastUser).trim() : "";
+      if (text) setUnanswered(text);
+      toast.error("응답이 오지 않아 요청을 정리했어요", {
+        description: "서버가 응답하지 않았어요. 다시 시도해 주세요.",
+        duration: 10_000,
+      });
+    } catch (error) {
+      console.error("[chat] stall recovery failed:", error);
+    }
+  }, [sessionId, tk, stop, resumeStream, runResumeLoop]);
+
+  // 새 요청이 30초 동안 첫 응답도 못 받으면 매달린 것으로 보고 정리한다.
+  useEffect(() => {
+    if (status !== "submitted") return;
+    const timer = setTimeout(() => {
+      void recoverAfterStall();
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [status, recoverAfterStall]);
 
   /**
    * 콜드 복구 — 브라우저가 사라진 동안(탭 닫힘·다른 기기) 서버가 기록한 턴을 되살린다.
