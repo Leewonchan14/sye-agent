@@ -112,13 +112,16 @@ export const POST = async (req: Request) => {
         input: userText,
         instructions,
       });
-      await startChatTurn(sessionId, hermesRunId);
+      // 이 요청이 턴 로그의 writer다 — 재개 요청들은 heartbeat이 살아 있는 동안 읽기 전용.
+      const writerId = crypto.randomUUID();
+      await startChatTurn(sessionId, hermesRunId, userText, writerId);
 
       await runTurnStream({
         writer,
         config,
         sessionId,
         hermesSessionId,
+        writerId,
         softDeadlineMs,
         signal: req.signal,
         turn: {
@@ -127,6 +130,8 @@ export const POST = async (req: Request) => {
           status: "running",
           nextOffset: 0,
           hermesSeq: -1,
+          userText,
+          writerId,
           error: null,
         },
       });

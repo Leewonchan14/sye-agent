@@ -3,6 +3,7 @@ import type { UIMessageStreamWriter } from "ai";
 import {
   appendChatTurnFrames,
   readChatTurnFrames,
+  touchChatTurnWriter,
   updateChatTurn,
   type ChatTurn,
   type ChatTurnFrame,
@@ -85,6 +86,13 @@ export interface TurnStreamOptions {
   softDeadlineMs: number;
   /** 재개일 때 클라이언트가 받은 마지막 지점 (이 offset부터 프레임을 재생한다). */
   replayFromOffset?: number;
+  /** 이 릴레이의 writer 리스 id (`chat_turns.writer_id`). */
+  writerId: string;
+  /**
+   * true면 프레임 로그를 쓰지 않고 **중계만** 한다 — 다른 릴레이가 살아 있는 writer일 때.
+   * 재개 요청이 동시에 여러 개 붙어도 로그가 섞이지 않게 하는 핵심.
+   */
+  readOnly?: boolean;
   signal?: AbortSignal;
 }
 
@@ -95,6 +103,8 @@ export interface TurnStreamOptions {
  *   파트 경계마다 `message-metadata`로 "여기까지는 안전하게 이어받을 수 있다"를 알린다.
  * - 소프트 데드라인(Vercel 함수 한도보다 짧게)에 걸리면 **finish 없이** 스트림을 닫는다.
  *   브라우저는 커서를 들고 재개 라우트로 다시 붙고, 런은 그대로 살아 있다.
+ * - 브라우저가 떠나도(탭 닫힘·새로고침) **중계만 멈추고 기록은 계속한다** — 턴이 끝날 때까지
+ *   프레임을 남겨 두면 다음 방문이 offset 0부터 재생해 턴 전체를 되살릴 수 있다.
  * - 런이 끝나면 트랜스크립트에서 도구 인자·결과와 thinking을 백필하고 finish를 보낸다.
  */
 class TurnStreamRelay {
@@ -106,6 +116,8 @@ class TurnStreamRelay {
   private readonly softDeadlineMs: number;
   private readonly signal?: AbortSignal;
   private readonly replayFromOffset?: number;
+  private readonly writerId: string;
+  private readonly readOnly: boolean;
   private readonly startedTerminal: boolean;
 
   private offset: number;
@@ -125,6 +137,14 @@ class TurnStreamRelay {
   private pending: ChatTurnFrame[] = [];
   private metadataDirty = false;
   private closed = false;
+  /**
+   * 클라이언트(브라우저)가 떠났는지 — true면 중계(쓰기)만 포기하고 **기록은 계속한다**.
+   * 그래야 탭을 닫아도 턴이 `chat_turn_frames`에 완전히 남고, 다음 방문이 offset 0부터
+   * 재생해 턴 전체(답변 포함)를 되살릴 수 있다.
+   */
+  private writerGone = false;
+  /** 다른 릴레이가 리스를 인계받았는지 — true면 기록을 멈춘다. */
+  private leaseLost = false;
 
   constructor(options: TurnStreamOptions) {
     this.writer = options.writer;
@@ -135,6 +155,8 @@ class TurnStreamRelay {
     this.softDeadlineMs = options.softDeadlineMs;
     this.signal = options.signal;
     this.replayFromOffset = options.replayFromOffset;
+    this.writerId = options.writerId;
+    this.readOnly = options.readOnly === true;
     this.startedTerminal = options.turn.status !== "running";
 
     this.offset = options.turn.nextOffset;
@@ -153,11 +175,20 @@ class TurnStreamRelay {
       const frames = await readChatTurnFrames(this.sessionId, 0);
       for (const frame of frames) {
         if (frame.offset >= this.replayFromOffset) {
-          this.writer.write(frame.chunk);
+          this.writeToClient(frame.chunk);
         }
         this.applyChunk(frame.chunk, frame.offset);
       }
-      await this.persist();
+      if (this.startedTerminal) {
+        // 이미 끝난 턴의 재생 — 프레임에 든 metadata(streamDone: true 포함)가 정답이다.
+        // 여기서 새 커서를 만들면 "아직 진행 중"으로 덮여 화면이 계속 이어받기를 시도한다.
+        this.metadataDirty = false;
+        this.pending = [];
+        return;
+      }
+      // 살아 있는 턴 — 재생 직후 커서를 한 번 내보내 이어받기 지점을 확정한다.
+      // (읽기 전용 릴레이는 기록하지 않는다 — writer의 로그가 유일한 진실이다.)
+      if (!this.readOnly) await this.persist();
     }
     if (this.startedTerminal) return; // 이미 끝난 턴 — 재생만으로 복원된다
 
@@ -169,17 +200,26 @@ class TurnStreamRelay {
   private async consumeEvents(): Promise<void> {
     const abort = new AbortController();
     let softStopped = false;
-    let userAborted = false;
 
     const deadlineTimer = setTimeout(() => {
       softStopped = true;
       abort.abort();
     }, this.softDeadlineMs);
+    /**
+     * 브라우저가 떠났다(탭 닫힘·새로고침·네트워크) — **런도, 기록도 끊지 않는다**.
+     * 중계만 멈추고 스트림이 끝날 때까지 프레임을 내구화해 두면, 다음 방문이
+     * offset 0부터 재생해 턴 전체를 복구할 수 있다. 런을 실제로 멈추는 건
+     * `POST /api/chat/{sessionId}/cancel`뿐이다.
+     */
     const onAbort = () => {
-      userAborted = true;
-      abort.abort();
+      this.writerGone = true;
     };
     this.signal?.addEventListener("abort", onAbort, { once: true });
+
+    // writer 리스 heartbeat — 살아 있음을 알리고, 인계당했으면 조용히 기록을 멈춘다.
+    const heartbeat = setInterval(() => {
+      void this.beat();
+    }, 5_000);
 
     try {
       const events = await openHermesRunEvents(
@@ -191,11 +231,11 @@ class TurnStreamRelay {
       for await (const event of events) {
         if (typeof event.seq === "number") this.hermesSeq = event.seq;
         await this.handleEvent(event);
-        if (this.closed) break;
+        if (this.closed || this.leaseLost) break;
         await this.maybePersist();
       }
 
-      if (!this.closed && !softStopped && !userAborted) {
+      if (!this.closed && !softStopped) {
         // 스트림이 터미널 이벤트 없이 닫혔다 — 상태 조회로 마무리한다.
         const status = await getHermesRunStatus(this.config, this.runId);
         if (status && status.status !== "running") {
@@ -207,11 +247,6 @@ class TurnStreamRelay {
         }
       }
     } catch (error) {
-      if (userAborted) {
-        // 브라우저가 떠났다(새로고침·네트워크) — 런은 그대로 두고 다음 재개를 기다린다.
-        // 사용자가 실제로 멈추려면 `POST /api/chat/{sessionId}/cancel`이 런을 끊는다.
-        return;
-      }
       if (!softStopped) {
         await this.close(
           "failed",
@@ -220,9 +255,11 @@ class TurnStreamRelay {
       }
     } finally {
       clearTimeout(deadlineTimer);
+      clearInterval(heartbeat);
       this.signal?.removeEventListener("abort", onAbort);
       abort.abort();
-      // 소프트 데드라인/사용자 중단 — 남은 프레임을 내구화하고 조용히 닫는다.
+      // 소프트 데드라인/함수 종료 — 남은 프레임을 내구화하고 조용히 닫는다.
+      // (브라우저가 떠난 경우에도 여기까지 모은 프레임은 남는다.)
       if (!this.closed) await this.persist();
     }
   }
@@ -429,6 +466,16 @@ class TurnStreamRelay {
     this.stepOpen = false;
     this.closed = true;
 
+    // 기록은 writer만 한다. 읽기 전용/인계당한 릴레이는 화면에 "끝"만 알린다.
+    const owned = await this.ownsLease();
+    if (!owned) {
+      this.writeToClient({
+        type: "message-metadata",
+        messageMetadata: { turnRunId: this.runId, streamDone: true },
+      } as UIMessageChunk);
+      return;
+    }
+
     await this.persist();
     await updateChatTurn(this.sessionId, {
       status: status === "completed" ? "completed" : failed ? "failed" : "cancelled",
@@ -449,6 +496,15 @@ class TurnStreamRelay {
     if (error) this.emit({ type: "error", errorText: error } as UIMessageChunk);
     this.emit({ type: "finish", finishReason: "error" } as UIMessageChunk);
     this.closed = true;
+
+    const owned = await this.ownsLease();
+    if (!owned) {
+      this.writeToClient({
+        type: "message-metadata",
+        messageMetadata: { turnRunId: this.runId, streamDone: true },
+      } as UIMessageChunk);
+      return;
+    }
 
     await this.persist();
     await updateChatTurn(this.sessionId, {
@@ -557,10 +613,24 @@ class TurnStreamRelay {
 
   private emit(chunk: UIMessageChunk): void {
     const frameOffset = this.offset;
-    this.writer.write(chunk);
+    this.writeToClient(chunk);
     this.pending.push({ offset: frameOffset, chunk });
     this.offset += 1;
     this.applyChunk(chunk, frameOffset);
+  }
+
+  /**
+   * 클라이언트로 청크를 흘린다. 브라우저가 떠난 뒤에는 조용히 버린다 —
+   * 프레임 기록(`emit`)은 계속되어야 하므로 여기서 흐름을 끊지 않는다.
+   */
+  private writeToClient(chunk: UIMessageChunk): void {
+    if (this.writerGone) return;
+    try {
+      this.writer.write(chunk);
+    } catch {
+      // 닫힌 스트림에 쓰면 던진다 — 이후로는 기록만 한다.
+      this.writerGone = true;
+    }
   }
 
   /**
@@ -660,8 +730,31 @@ class TurnStreamRelay {
     if (this.pending.length >= 20 || this.metadataDirty) await this.persist();
   }
 
+  /** 지금도 이 릴레이가 writer인지 — 읽기 전용/인계당한 경우 false. */
+  private async ownsLease(): Promise<boolean> {
+    if (this.readOnly || this.leaseLost) return false;
+    try {
+      return await touchChatTurnWriter(this.sessionId, this.writerId);
+    } catch {
+      return false;
+    }
+  }
+
+  /** writer heartbeat — 5초마다 리스를 갱신하고, 인계당했으면 기록을 멈춘다. */
+  private async beat(): Promise<void> {
+    if (this.readOnly || this.closed || this.leaseLost) return;
+    try {
+      if (!(await touchChatTurnWriter(this.sessionId, this.writerId))) {
+        this.leaseLost = true;
+      }
+    } catch {
+      // heartbeat 실패는 치명적이지 않다 — 다음 tick/persist에서 다시 확인한다.
+    }
+  }
+
   /** 쌓인 프레임과 커서를 DB에 내구화한다. */
   private async persist(): Promise<void> {
+    if (this.readOnly || this.leaseLost) return;
     if (this.pending.length === 0 && !this.metadataDirty) return;
     const frames = this.pending;
     this.pending = [];
@@ -686,10 +779,12 @@ class TurnStreamRelay {
         streamOffset: cursor.streamOffset,
         keepParts: cursor.keepParts,
         streamDone: done,
+        // 이 메시지가 어느 턴(run)의 결과인지 — 화면이 "이미 가진 턴"인지 판별하는 표식.
+        turnRunId: this.runId,
       },
     };
 
-    this.writer.write(chunk);
+    this.writeToClient(chunk);
     this.pending.push({ offset: this.offset, chunk });
     this.offset += 1;
 

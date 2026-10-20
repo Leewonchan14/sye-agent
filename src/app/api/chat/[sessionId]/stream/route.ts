@@ -1,7 +1,7 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { requireAuth } from "@/lib/auth";
-import { clearChatTurn, getChatTurn } from "@/lib/db/turn";
+import { claimChatTurnWriter, clearChatTurn, getChatTurn } from "@/lib/db/turn";
 import { agentErrorMessage } from "@/lib/error-text";
 import { getHermesConfig, toHermesSessionId } from "@/lib/hermes/config";
 import { runTurnStream } from "@/lib/hermes/turn-stream";
@@ -47,6 +47,16 @@ export const GET = async (
   const config = getHermesConfig();
   const hermesSessionId = toHermesSessionId(config, sessionId);
 
+  /**
+   * writer 리스 — 다른 릴레이가 살아 있으면(5초 heartbeat) 이 요청은 **읽기 전용**이다.
+   * 새로고침을 반복해 재개 요청이 여러 개 붙어도 프레임 로그는 한 writer만 쓴다.
+   * writer가 죽어 15초 넘게 조용하면 이 요청이 인계받아 기록을 이어 간다.
+   */
+  const writerId = crypto.randomUUID();
+  const isWriter = await claimChatTurnWriter(sessionId, writerId);
+  // 인계받았다면 그 사이 writer가 남긴 프레임/seq까지 반영된 최신 상태로 시작한다.
+  const currentTurn = (isWriter ? await getChatTurn(sessionId) : null) ?? turn;
+
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       await runTurnStream({
@@ -54,7 +64,9 @@ export const GET = async (
         config,
         sessionId,
         hermesSessionId,
-        turn,
+        turn: currentTurn,
+        writerId,
+        readOnly: !isWriter,
         softDeadlineMs,
         signal: req.signal,
         replayFromOffset: clientOffset,
