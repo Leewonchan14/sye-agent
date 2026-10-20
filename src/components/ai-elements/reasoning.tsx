@@ -225,7 +225,7 @@ const streamdownPlugins = { cjk, code, math, mermaid };
  * 스크롤 추적은 대화 영역과 같은 엔진(use-stick-to-bottom)을 재사용한다:
  * 새 내용을 따라 내려가다가, 사용자가 위로 스크롤하면 멈춘다.
  */
-const REASONING_MAX_HEIGHT = "max-h-[60vh]";
+const REASONING_MAX_HEIGHT = "max-h-64";
 
 export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => {
