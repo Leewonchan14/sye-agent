@@ -1,5 +1,5 @@
 import type { UIMessageChunk } from "ai";
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 
@@ -15,6 +15,8 @@ export interface ChatTurn {
   hermesSeq: number;
   /** 이 턴을 시작시킨 사용자 메시지 — 브라우저가 사라진 턴을 복구할 때 쓴다. */
   userText: string | null;
+  /** 지금 이 턴 로그를 쓰는 릴레이 id (동시 쓰기 방지 리스). */
+  writerId: string | null;
   error: string | null;
 }
 
@@ -30,6 +32,7 @@ const toChatTurn = (row: typeof chatTurns.$inferSelect): ChatTurn => ({
   nextOffset: row.nextOffset,
   hermesSeq: row.hermesSeq,
   userText: row.userText,
+  writerId: row.writerId,
   error: row.error,
 });
 
@@ -37,18 +40,20 @@ const toChatTurn = (row: typeof chatTurns.$inferSelect): ChatTurn => ({
 export const startChatTurn = async (
   sessionId: string,
   hermesRunId: string,
-  userText: string
+  userText: string,
+  writerId: string
 ): Promise<void> => {
   const db = getDb();
   await db.delete(chatTurnFrames).where(eq(chatTurnFrames.sessionId, sessionId));
   await db
     .insert(chatTurns)
-    .values({ sessionId, hermesRunId, userText })
+    .values({ sessionId, hermesRunId, userText, writerId })
     .onConflictDoUpdate({
       target: chatTurns.sessionId,
       set: {
         hermesRunId,
         userText,
+        writerId,
         status: "running",
         nextOffset: 0,
         hermesSeq: -1,
@@ -65,6 +70,47 @@ export const getChatTurn = async (sessionId: string): Promise<ChatTurn | null> =
     .where(eq(chatTurns.sessionId, sessionId))
     .limit(1);
   return rows.length > 0 ? toChatTurn(rows[0]) : null;
+};
+
+/**
+ * 턴 로그의 writer 리스를 인계받는다.
+ *
+ * **살아 있는 writer가 없을 때만** 성공한다(`updated_at`이 `staleMs`보다 오래됨).
+ * 살아 있는 동안에는 기존 writer가 5초마다 heartbeat를 찍으므로, 재개 요청이
+ * 여러 개 붙어도 쓰기 권한은 하나뿐이다 — 프레임 로그가 섞이지 않는다.
+ */
+export const claimChatTurnWriter = async (
+  sessionId: string,
+  writerId: string,
+  staleMs = 15_000
+): Promise<boolean> => {
+  const staleBefore = new Date(Date.now() - staleMs);
+  const result = await getDb()
+    .update(chatTurns)
+    .set({ writerId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(chatTurns.sessionId, sessionId),
+        sql`${chatTurns.status} = 'running'`,
+        or(isNull(chatTurns.writerId), lt(chatTurns.updatedAt, staleBefore))
+      )
+    );
+  return (result.rowCount ?? 0) > 0;
+};
+
+/**
+ * writer heartbeat + 리스 확인. `false`면 다른 릴레이가 인계했다는 뜻 —
+ * 이 릴레이는 즉시 쓰기를 멈춰야 한다.
+ */
+export const touchChatTurnWriter = async (
+  sessionId: string,
+  writerId: string
+): Promise<boolean> => {
+  const result = await getDb()
+    .update(chatTurns)
+    .set({ updatedAt: new Date() })
+    .where(and(eq(chatTurns.sessionId, sessionId), eq(chatTurns.writerId, writerId)));
+  return (result.rowCount ?? 0) > 0;
 };
 
 /** UI 청크를 offset 순서대로 적재한다 (재개 시 재생용). */
@@ -93,9 +139,20 @@ export const updateChatTurn = async (
   patch: ChatTurnPatch
 ): Promise<void> => {
   if (Object.keys(patch).length === 0) return;
+  const { nextOffset, hermesSeq, ...rest } = patch;
   await getDb()
     .update(chatTurns)
-    .set({ ...patch, updatedAt: new Date() })
+    .set({
+      ...rest,
+      updatedAt: new Date(),
+      // 동시 writer/재생이 겹쳐도 카운터는 절대 뒤로 가지 않는다.
+      ...(nextOffset !== undefined
+        ? { nextOffset: sql`GREATEST(${chatTurns.nextOffset}, ${nextOffset})` }
+        : {}),
+      ...(hermesSeq !== undefined
+        ? { hermesSeq: sql`GREATEST(${chatTurns.hermesSeq}, ${hermesSeq})` }
+        : {}),
+    })
     .where(eq(chatTurns.sessionId, sessionId));
 };
 

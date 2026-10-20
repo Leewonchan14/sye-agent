@@ -199,6 +199,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const resumeLoopRef = useRef(false);
   const lastOffsetRef = useRef(-1);
   const noProgressRef = useRef(0);
+  /** 이어받기/복구 중 — 스트림이 잠깐 끊긴 구간에도 "생각 중" 표시를 유지한다. */
+  const [resuming, setResuming] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   /** 재개 루프가 최신 메시지 상태를 읽도록 하는 참조 (React 상태는 클로저에 갇힌다). */
   const rawMessagesRef = useRef<StreamUIMessage[]>([]);
 
@@ -214,6 +217,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const runResumeLoop = useCallback(async () => {
     if (resumeLoopRef.current) return;
     resumeLoopRef.current = true;
+    setResuming(true);
     try {
       for (let attempt = 0; attempt < 50; attempt++) {
         const current = rawMessagesRef.current.at(-1);
@@ -222,7 +226,8 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         if (currentMeta.streamDone || typeof currentMeta.streamOffset !== "number")
           return;
 
-        if (currentMeta.streamOffset === lastOffsetRef.current) {
+        // 커서가 제자리거나 **뒤로 가면** 진행이 없는 것 — 무한 루프/왕복을 막는다.
+        if (currentMeta.streamOffset <= lastOffsetRef.current) {
           noProgressRef.current += 1;
           if (noProgressRef.current > 3) {
             // 더 이상 이어받을 게 없다 — 중단으로 표시하고 스피너를 멈춘다.
@@ -255,6 +260,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       console.error("[chat] resume failed:", resumeError);
     } finally {
       resumeLoopRef.current = false;
+      setResuming(false);
     }
   }, [sessionId, setMessages, resumeStream]);
 
@@ -311,13 +317,26 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     coldRecoveredRef.current = sessionId;
     void (async () => {
       try {
-        const r = await fetch(`/api/chat/${sessionId}/turn`, {
-          headers: { "x-auth-token": tk ?? "" },
-        });
-        if (!r.ok) return;
-        const { turn } = (await r.json()) as {
-          turn: { runId: string; userText: string | null } | null;
-        };
+        // 답 없는 사용자 메시지가 마지막이면, POST가 아직 턴을 만들기 전일 수 있다 —
+        // 약 3초 동안 재시도해 "생각 중" 표시가 사라지는 구간을 메운다.
+        const attempts = loadedLast?.role === "user" ? 7 : 1;
+        let turn: { runId: string; userText: string | null } | null = null;
+        setRecovering(true);
+        for (let attempt = 0; attempt < attempts; attempt++) {
+          const r = await fetch(`/api/chat/${sessionId}/turn`, {
+            headers: { "x-auth-token": tk ?? "" },
+          });
+          if (r.ok) {
+            const body = (await r.json()) as {
+              turn: { runId: string; userText: string | null } | null;
+            };
+            turn = body.turn ?? null;
+          }
+          if (turn) break;
+          if (attempt < attempts - 1) {
+            await new Promise((settle) => setTimeout(settle, 500));
+          }
+        }
         if (!turn || turn.runId === knownRunId) return;
 
         const userText = turn.userText?.trim();
@@ -350,6 +369,8 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         await runResumeLoop(); // 아직 살아 있는 턴이면 이어받는다
       } catch (coldError) {
         console.error("[chat] cold resume failed:", coldError);
+      } finally {
+        setRecovering(false);
       }
     })();
   }, [
@@ -408,6 +429,27 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     window.history.replaceState(null, "", `/${sessionId}`);
   }, [sessionId]);
 
+  /**
+   * 방금 보낸 사용자 메시지를 먼저 저장한다 — 응답이 오기 전에 새로고침해도
+   * 대화에서 사라지지 않게. 최종 상태는 `onFinish`가 다시 저장한다.
+   */
+  const persistUserMessage = useCallback(
+    (text: string) => {
+      const message: StreamUIMessage = {
+        id: uuidv4(),
+        role: "user",
+        parts: [{ type: "text", text }],
+      };
+      handleFinish({
+        messages: [...rawMessagesRef.current, message] as Parameters<
+          typeof handleFinish
+        >[0]["messages"],
+      });
+      return message;
+    },
+    [handleFinish]
+  );
+
   const handlePromptSubmit = useCallback(
     (message: { text: string }) => {
       if (!message.text.trim() || status !== "ready") return;
@@ -421,9 +463,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         setShowHearts(true);
       }
 
-      sendMessage({ text: trimmed });
+      sendMessage(persistUserMessage(trimmed));
     },
-    [status, sendMessage, scheduleInvalidate, promoteToSessionUrl]
+    [status, sendMessage, scheduleInvalidate, promoteToSessionUrl, persistUserMessage]
   );
 
   const handleQuestionClick = useCallback(
@@ -438,9 +480,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         setShowHearts(true);
       }
 
-      sendMessage({ text });
+      sendMessage(persistUserMessage(text));
     },
-    [status, sendMessage, scheduleInvalidate, promoteToSessionUrl]
+    [status, sendMessage, scheduleInvalidate, promoteToSessionUrl, persistUserMessage]
   );
 
   /* ── Debounced loading: show ChatLoading only after 300ms ── */
@@ -497,6 +539,8 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
 
   const showLoader = useMemo(() => {
     if (status === "submitted") return true;
+    // 복구/이어받기 중에는 스트림 사이의 빈 구간에도 "생각 중"을 유지한다.
+    if ((recovering || resuming) && status === "ready") return true;
 
     const lastMessage = messages.at(-1);
     if (status !== "streaming" || lastMessage?.role !== "assistant") return false;
@@ -514,7 +558,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     );
 
     return !hasPendingTool;
-  }, [status, messages]);
+  }, [status, messages, recovering, resuming]);
 
   const hasMsgs = messages.length > 0;
 
