@@ -2,6 +2,7 @@ import type { UIMessageStreamWriter } from "ai";
 
 import {
   appendChatTurnFrames,
+  finalizeChatTurnIfOwnerGone,
   readChatTurnFrames,
   touchChatTurnWriter,
   updateChatTurn,
@@ -128,6 +129,10 @@ class TurnStreamRelay {
   private readonly openToolCalls = new Map<string, string[]>();
   private readonly toolNameByCallId = new Map<string, string>();
   private readonly relayedTools: { toolCallId: string; toolName: string }[] = [];
+  /** 도구 종료 직후 도착하는 `tool.result`를 붙일 카드 찾기용 (턴 단위로만 쓴다). */
+  private readonly completedTools: { toolCallId: string; toolName: string }[] = [];
+  private readonly toolCallIdByHermesId = new Map<string, string>();
+  private readonly erroredToolCallIds = new Set<string>();
   private textId: string | null = null;
   private reasoningId: string | null = null;
   private streamedText = "";
@@ -248,10 +253,24 @@ class TurnStreamRelay {
       }
     } catch (error) {
       if (!softStopped) {
-        await this.close(
-          "failed",
-          error instanceof Error ? error.message : String(error)
-        );
+        /**
+         * 런 이벤트 스트림이 만료(404 `run_not_found`)됐거나 끊겨도 런 상태는 남아 있다
+         * (`GET /v1/runs/{id}`). 404를 그대로 실패로 마감하면 **완주한 턴이 failed로 기록**되므로,
+         * 먼저 런 상태로 마감하고 진짜 running일 때만 실패로 닫는다.
+         */
+        const status = await getHermesRunStatus(this.config, this.runId).catch(() => null);
+        if (status && status.status !== "running") {
+          await this.finish(status.status, {
+            output: status.output,
+            error: status.error,
+            turn_exit_reason: status.turn_exit_reason,
+          });
+        } else {
+          await this.close(
+            "failed",
+            error instanceof Error ? error.message : String(error)
+          );
+        }
       }
     } finally {
       clearTimeout(deadlineTimer);
@@ -293,6 +312,9 @@ class TurnStreamRelay {
         break;
       case "tool.failed":
         this.onToolFinished(event, true);
+        break;
+      case "tool.result":
+        this.onToolResult(event);
         break;
       case "run.completed":
         await this.finish("completed", event);
@@ -409,6 +431,47 @@ class TurnStreamRelay {
         dynamic: true,
       } as UIMessageChunk);
     }
+
+    // 바로 뒤따르는 `tool.result`가 이 카드에 붙도록 매핑을 남긴다.
+    if (failed) this.erroredToolCallIds.add(toolCallId);
+    this.completedTools.push({ toolCallId, toolName });
+    const hermesToolCallId = asString(event.tool_call_id);
+    if (hermesToolCallId) this.toolCallIdByHermesId.set(hermesToolCallId, toolCallId);
+  }
+
+  /**
+   * `tool.result` — 도구 종료 직후 서버가 보내는 결과 전문(상한 초과 시 `truncated`).
+   * 턴이 끝나기 전에 카드를 채우고, 이후 트랜스크립트 백필은 더 긴 값으로 덮어쓰기만 한다.
+   * 실패한 카드는 이미 에러 상태를 보여주므로 건드리지 않는다.
+   */
+  private onToolResult(event: HermesRunEvent): void {
+    const toolName = asString(event.tool) || "tool";
+    const hermesToolCallId = asString(event.tool_call_id);
+
+    let toolCallId = hermesToolCallId
+      ? this.toolCallIdByHermesId.get(hermesToolCallId)
+      : undefined;
+    if (!toolCallId) {
+      // tool_call_id가 없는 서버(패치 이전)에서는 이름 FIFO로 맞춘다.
+      const index = this.completedTools.findIndex((entry) => entry.toolName === toolName);
+      const entry = index >= 0 ? this.completedTools.splice(index, 1)[0] : undefined;
+      toolCallId = entry?.toolCallId;
+    }
+    if (!toolCallId || this.erroredToolCallIds.has(toolCallId)) return;
+    if (hermesToolCallId) this.toolCallIdByHermesId.delete(hermesToolCallId);
+
+    this.ensureStarted();
+    const content = asString(event.content);
+    const marker =
+      event.truncated === true
+        ? "\n\n… (여기까지만 보여줄게…! 턴이 끝나면 전체 결과로 다시 채운대…!)"
+        : "";
+    this.emit({
+      type: "tool-output-available",
+      toolCallId,
+      output: content + marker,
+      dynamic: true,
+    } as UIMessageChunk);
   }
 
   private closeText(): void {
@@ -442,9 +505,13 @@ class TurnStreamRelay {
       );
     }
 
-    // 2) 트랜스크립트 백필 — 도구 인자/전체 결과 + thinking 폴백
-    const transcript = await readHermesSessionMessages(this.config, this.hermesSessionId);
-    this.backfillFromTranscript(transcript);
+    // 2) 트랜스크립트 백필 — 도구 인자/전체 결과 + thinking 폴백.
+    //    재개(replayFromOffset > 0) 릴레이는 클라이언트가 이미 앞부분 프레임을 갖고 있으므로
+    //    백필을 다시 내보내면 카드가 중복된다 — 새 턴(offset 0)일 때만 백필한다.
+    if (this.replayFromOffset === 0) {
+      const transcript = await readHermesSessionMessages(this.config, this.hermesSessionId);
+      this.backfillFromTranscript(transcript);
+    }
 
     // 3) 마감 청크 — 사용자가 정지한 경우(cancelled)는 오류가 아니라 조용히 끝낸다.
     this.closeText();
@@ -467,8 +534,16 @@ class TurnStreamRelay {
     this.closed = true;
 
     // 기록은 writer만 한다. 읽기 전용/인계당한 릴레이는 화면에 "끝"만 알린다.
+    // 단, writer가 사라진 경우(소프트 데드라인 직후 재개)에는 조건부로 마감해
+    // 완주한 턴이 'running'에 갇히지 않게 한다.
     const owned = await this.ownsLease();
     if (!owned) {
+      // 프레임은 writer만 기록하므로 next_offset/hermes_seq는 건드리지 않는다
+      // (읽기 전용 릴레이의 카운터를 쓰면 실제 저장된 프레임보다 앞서 버린다).
+      await finalizeChatTurnIfOwnerGone(this.sessionId, {
+        status: status === "completed" ? "completed" : failed ? "failed" : "cancelled",
+        error: failed ? errorText || "하치 실행이 끊겼어요." : null,
+      });
       this.writeToClient({
         type: "message-metadata",
         messageMetadata: { turnRunId: this.runId, streamDone: true },
@@ -499,6 +574,10 @@ class TurnStreamRelay {
 
     const owned = await this.ownsLease();
     if (!owned) {
+      await finalizeChatTurnIfOwnerGone(this.sessionId, {
+        status: status === "cancelled" ? "cancelled" : "failed",
+        error: error ?? null,
+      });
       this.writeToClient({
         type: "message-metadata",
         messageMetadata: { turnRunId: this.runId, streamDone: true },

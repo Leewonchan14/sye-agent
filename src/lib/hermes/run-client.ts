@@ -30,10 +30,20 @@ export interface HermesRunEventPayload {
   /** `message.interim`·`reasoning.available`의 텍스트 */
   text?: string;
   already_streamed?: boolean;
-  /** tool.started / tool.completed / tool.failed */
+  /** tool.started / tool.completed / tool.failed / tool.result */
   tool?: string;
   preview?: string;
   duration?: number;
+  /** tool.result — 도구 결과 전문(서버 상한 적용). 카드를 턴 종료 전에 채우는 용도 */
+  content?: string;
+  /** tool.completed / tool.result — 서버가 넘긴 tool_call_id (이름 대신 이 값으로 카드 매칭) */
+  tool_call_id?: string;
+  /** tool.result — 상한 초과로 잘렸는지 */
+  truncated?: boolean;
+  /** tool.completed / tool.result — 원문 결과 길이 */
+  result_chars?: number;
+  /** tool.completed — preview가 잘린 요약인지 (true면 tool.result가 뒤따른다) */
+  result_truncated?: boolean;
   /** tool.completed는 boolean, run.failed는 문자열 */
   error?: boolean | string;
   /** run.completed / run.failed / run.cancelled */
