@@ -505,9 +505,13 @@ class TurnStreamRelay {
       );
     }
 
-    // 2) 트랜스크립트 백필 — 도구 인자/전체 결과 + thinking 폴백
-    const transcript = await readHermesSessionMessages(this.config, this.hermesSessionId);
-    this.backfillFromTranscript(transcript);
+    // 2) 트랜스크립트 백필 — 도구 인자/전체 결과 + thinking 폴백.
+    //    재개(replayFromOffset > 0) 릴레이는 클라이언트가 이미 앞부분 프레임을 갖고 있으므로
+    //    백필을 다시 내보내면 카드가 중복된다 — 새 턴(offset 0)일 때만 백필한다.
+    if (this.replayFromOffset === 0) {
+      const transcript = await readHermesSessionMessages(this.config, this.hermesSessionId);
+      this.backfillFromTranscript(transcript);
+    }
 
     // 3) 마감 청크 — 사용자가 정지한 경우(cancelled)는 오류가 아니라 조용히 끝낸다.
     this.closeText();
