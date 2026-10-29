@@ -2,6 +2,7 @@ import type { UIMessageStreamWriter } from "ai";
 
 import {
   appendChatTurnFrames,
+  finalizeChatTurnIfOwnerGone,
   readChatTurnFrames,
   touchChatTurnWriter,
   updateChatTurn,
@@ -252,10 +253,24 @@ class TurnStreamRelay {
       }
     } catch (error) {
       if (!softStopped) {
-        await this.close(
-          "failed",
-          error instanceof Error ? error.message : String(error)
-        );
+        /**
+         * 런 이벤트 스트림이 만료(404 `run_not_found`)됐거나 끊겨도 런 상태는 남아 있다
+         * (`GET /v1/runs/{id}`). 404를 그대로 실패로 마감하면 **완주한 턴이 failed로 기록**되므로,
+         * 먼저 런 상태로 마감하고 진짜 running일 때만 실패로 닫는다.
+         */
+        const status = await getHermesRunStatus(this.config, this.runId).catch(() => null);
+        if (status && status.status !== "running") {
+          await this.finish(status.status, {
+            output: status.output,
+            error: status.error,
+            turn_exit_reason: status.turn_exit_reason,
+          });
+        } else {
+          await this.close(
+            "failed",
+            error instanceof Error ? error.message : String(error)
+          );
+        }
       }
     } finally {
       clearTimeout(deadlineTimer);
@@ -515,8 +530,16 @@ class TurnStreamRelay {
     this.closed = true;
 
     // 기록은 writer만 한다. 읽기 전용/인계당한 릴레이는 화면에 "끝"만 알린다.
+    // 단, writer가 사라진 경우(소프트 데드라인 직후 재개)에는 조건부로 마감해
+    // 완주한 턴이 'running'에 갇히지 않게 한다.
     const owned = await this.ownsLease();
     if (!owned) {
+      // 프레임은 writer만 기록하므로 next_offset/hermes_seq는 건드리지 않는다
+      // (읽기 전용 릴레이의 카운터를 쓰면 실제 저장된 프레임보다 앞서 버린다).
+      await finalizeChatTurnIfOwnerGone(this.sessionId, {
+        status: status === "completed" ? "completed" : failed ? "failed" : "cancelled",
+        error: failed ? errorText || "하치 실행이 끊겼어요." : null,
+      });
       this.writeToClient({
         type: "message-metadata",
         messageMetadata: { turnRunId: this.runId, streamDone: true },
@@ -547,6 +570,10 @@ class TurnStreamRelay {
 
     const owned = await this.ownsLease();
     if (!owned) {
+      await finalizeChatTurnIfOwnerGone(this.sessionId, {
+        status: status === "cancelled" ? "cancelled" : "failed",
+        error: error ?? null,
+      });
       this.writeToClient({
         type: "message-metadata",
         messageMetadata: { turnRunId: this.runId, streamDone: true },

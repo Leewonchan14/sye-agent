@@ -156,6 +156,43 @@ export const updateChatTurn = async (
     .where(eq(chatTurns.sessionId, sessionId));
 };
 
+/**
+ * 리스 없이 턴을 마감한다 — **writer가 사라진 경우에만**(`updated_at`이 `staleMs`보다 오래됨) 성공.
+ *
+ * 소프트 데드라인(240s) 직후 브라우저가 재개하면 writer 리스가 아직 살아 있다고 판정돼
+ * 읽기 전용 릴레이가 되고, 그 릴레이는 기록도 상태 마감도 하지 않는다. 그 결과 런은 완주했는데
+ * 턴이 영원히 `running`으로 남는다. 이 함수가 그 구멍을 조건부로 막는다(경쟁 writer는 덮어쓰지 않음).
+ */
+export const finalizeChatTurnIfOwnerGone = async (
+  sessionId: string,
+  patch: ChatTurnPatch,
+  staleMs = 15_000
+): Promise<boolean> => {
+  if (Object.keys(patch).length === 0) return false;
+  const { nextOffset, hermesSeq, ...rest } = patch;
+  const staleBefore = new Date(Date.now() - staleMs);
+  const result = await getDb()
+    .update(chatTurns)
+    .set({
+      ...rest,
+      updatedAt: new Date(),
+      ...(nextOffset !== undefined
+        ? { nextOffset: sql`GREATEST(${chatTurns.nextOffset}, ${nextOffset})` }
+        : {}),
+      ...(hermesSeq !== undefined
+        ? { hermesSeq: sql`GREATEST(${chatTurns.hermesSeq}, ${hermesSeq})` }
+        : {}),
+    })
+    .where(
+      and(
+        eq(chatTurns.sessionId, sessionId),
+        sql`${chatTurns.status} = 'running'`,
+        lt(chatTurns.updatedAt, staleBefore)
+      )
+    );
+  return (result.rowCount ?? 0) > 0;
+};
+
 export const readChatTurnFrames = async (
   sessionId: string,
   fromOffset: number
