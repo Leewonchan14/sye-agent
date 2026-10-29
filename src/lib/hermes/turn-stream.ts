@@ -128,6 +128,10 @@ class TurnStreamRelay {
   private readonly openToolCalls = new Map<string, string[]>();
   private readonly toolNameByCallId = new Map<string, string>();
   private readonly relayedTools: { toolCallId: string; toolName: string }[] = [];
+  /** 도구 종료 직후 도착하는 `tool.result`를 붙일 카드 찾기용 (턴 단위로만 쓴다). */
+  private readonly completedTools: { toolCallId: string; toolName: string }[] = [];
+  private readonly toolCallIdByHermesId = new Map<string, string>();
+  private readonly erroredToolCallIds = new Set<string>();
   private textId: string | null = null;
   private reasoningId: string | null = null;
   private streamedText = "";
@@ -294,6 +298,9 @@ class TurnStreamRelay {
       case "tool.failed":
         this.onToolFinished(event, true);
         break;
+      case "tool.result":
+        this.onToolResult(event);
+        break;
       case "run.completed":
         await this.finish("completed", event);
         break;
@@ -409,6 +416,47 @@ class TurnStreamRelay {
         dynamic: true,
       } as UIMessageChunk);
     }
+
+    // 바로 뒤따르는 `tool.result`가 이 카드에 붙도록 매핑을 남긴다.
+    if (failed) this.erroredToolCallIds.add(toolCallId);
+    this.completedTools.push({ toolCallId, toolName });
+    const hermesToolCallId = asString(event.tool_call_id);
+    if (hermesToolCallId) this.toolCallIdByHermesId.set(hermesToolCallId, toolCallId);
+  }
+
+  /**
+   * `tool.result` — 도구 종료 직후 서버가 보내는 결과 전문(상한 초과 시 `truncated`).
+   * 턴이 끝나기 전에 카드를 채우고, 이후 트랜스크립트 백필은 더 긴 값으로 덮어쓰기만 한다.
+   * 실패한 카드는 이미 에러 상태를 보여주므로 건드리지 않는다.
+   */
+  private onToolResult(event: HermesRunEvent): void {
+    const toolName = asString(event.tool) || "tool";
+    const hermesToolCallId = asString(event.tool_call_id);
+
+    let toolCallId = hermesToolCallId
+      ? this.toolCallIdByHermesId.get(hermesToolCallId)
+      : undefined;
+    if (!toolCallId) {
+      // tool_call_id가 없는 서버(패치 이전)에서는 이름 FIFO로 맞춘다.
+      const index = this.completedTools.findIndex((entry) => entry.toolName === toolName);
+      const entry = index >= 0 ? this.completedTools.splice(index, 1)[0] : undefined;
+      toolCallId = entry?.toolCallId;
+    }
+    if (!toolCallId || this.erroredToolCallIds.has(toolCallId)) return;
+    if (hermesToolCallId) this.toolCallIdByHermesId.delete(hermesToolCallId);
+
+    this.ensureStarted();
+    const content = asString(event.content);
+    const marker =
+      event.truncated === true
+        ? "\n\n… (여기까지만 보여줄게…! 턴이 끝나면 전체 결과로 다시 채운대…!)"
+        : "";
+    this.emit({
+      type: "tool-output-available",
+      toolCallId,
+      output: content + marker,
+      dynamic: true,
+    } as UIMessageChunk);
   }
 
   private closeText(): void {

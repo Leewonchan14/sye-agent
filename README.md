@@ -219,11 +219,35 @@ systemctl --user restart hermes-gateway.service
 - thinking은 Hermes assistant 메시지(step)마다 **별도 블록**으로 진행 순서 자리에 렌더링된다 — 도구를 부르기 전 생각, 다음 단계 생각이 각각 따로 접히고 펼쳐진다
 - 끄고 싶으면 `~/.hermes/config.yaml`의 `gateway.platforms.api_server.reasoning_events: false`
 
+### 도구 카드 실시간 채우기 (게이트웨이 패치 — 권장)
+
+기본 게이트웨이는 `tool.completed`에 **잘린 요약(≤500자)** 만 싣고, 전체 결과는 `run.completed`의
+트랜스크립트에만 있어서 카드가 턴이 끝날 때까지 비어 보인다. 아래 패치를 적용하면 도구가 끝나는 즉시
+`tool.result` 이벤트(`content`/`truncated`/`result_chars`, `tool_call_id` 포함)가 도착해 카드가 바로 채워진다.
+
+| 파일                                   | 추가한 것                                                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `gateway/platforms/_tool_stream_payload.py` | 결과 redaction·상한(preview 6,000자 / 전문 50,000자) 공용 헬퍼 (신규)                            |
+| `gateway/platforms/api_server.py`      | 세션 스트림 `tool.completed`에 `result_chars`/`result_truncated` + `tool.result` 프레임            |
+| `gateway/platforms/api_server_runs.py` | `/v1/runs` 스트림에 같은 필드 + `tool.result` 프레임                                               |
+| `agent/tool_executor.py`               | `tool.completed` 콜백에 `tool_call_id` 전달(동시 실행되는 같은 이름 도구도 카드가 섞이지 않음)      |
+
+```bash
+# 재적용 (hermes update로 패치가 사라졌을 때) — 순서 중요
+cd ~/.hermes/hermes-agent && git apply ~/.hermes/patches/api_server_reasoning_delta.patch \
+  && git apply ~/.hermes/patches/runs_reasoning_delta.patch \
+  && git apply ~/.hermes/patches/tool_result_stream.patch
+systemctl --user restart hermes-gateway.service
+```
+
+- 앱은 `tool.result`가 오면 카드를 즉시 채우고, 이후 트랜스크립트 백필은 **더 긴 값으로 덮어쓰기만** 한다
+- 패치가 없는 서버에서도 동작한다(≤500자 미리보기 → 턴 종료 백필). `truncated: true`면 앱이 "일부만 표시" 문구를 덧붙인다
+
 ### 알려진 한계 (후속 작업)
 
 - 이전 응답 **재생성(regenerate)** 은 새 턴으로 취급된다 (Hermes 트랜스크립트는 되돌리지 않음)
-- 도구 카드의 인자·전체 결과는 **턴이 끝날 때** 채워진다 — `tool.completed`에는 잘린(≤500자) 요약만 있어서
-  종료 시 세션 트랜스크립트에서 백필한다 (thinking은 게이트웨이 패치 시 실시간)
+- 도구 카드의 **인자**는 여전히 턴 종료 시 트랜스크립트로 백필된다 — `tool.started`의 `preview`에는 인자 전문이 없어서
+  (`tool.result` 패치로 결과 본문은 실시간이 됨)
 - `chat_turn_frames`는 턴 하나의 UI 청크 로그를 담는다 — 같은 세션에서 새 턴이 시작되면 지우고,
   하루 지난 행은 요청 경로에서 best-effort로 청소한다
 - 도구는 Hermes 쪽(스킬·브라우저·터미널)에서 실행된다 (앱 전용 도구였던 네이버·Exa·샌드박스 등은 제거됨)
