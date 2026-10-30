@@ -1,5 +1,6 @@
 "use client";
 
+import { SyeUiFence } from "@/components/ai-elements/sye-ui-fence";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -37,7 +38,9 @@ export const Message = ({ className, from, ...props }: MessageProps) => (
   <div
     className={cn(
       "group flex w-full flex-col gap-2",
-      from === "user" ? "is-user ml-auto md:max-w-[95%] justify-end" : "is-assistant md:max-w-[95%]",
+      from === "user"
+        ? "is-user ml-auto justify-end md:max-w-[95%]"
+        : "is-assistant md:max-w-[95%]",
       className
     )}
     {...props}
@@ -349,7 +352,13 @@ const streamdownLinkSafety = {
   }) => <LinkSafetyModalWrapper {...props} />,
 };
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+const streamdownPlugins = {
+  cjk,
+  code,
+  math,
+  mermaid,
+  renderers: [{ language: ["ui", "sye-ui"], component: SyeUiFence }],
+};
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
