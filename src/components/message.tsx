@@ -1,7 +1,6 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { isDynamicToolUIPart, isToolUIPart } from "ai";
 import { memo, useMemo } from "react";
 
 import {
@@ -9,18 +8,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@/components/ai-elements/reasoning";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "@/components/ai-elements/tool";
+import { TurnActivity } from "@/components/ai-elements/tool-group";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { extractMessageText, isEchoedThinking } from "@/lib/utils";
 
@@ -47,10 +35,47 @@ export const MessageItem = memo(
       [message, answerText]
     );
 
-    if (!message.parts || message.parts.length === 0) return null;
+    /**
+     * 한 턴의 **생각 + 도구 호출 전부**를 하나로 묶는다.
+     * 마지막 텍스트 파트를 "답변"으로 보고, 그 앞의 모든 작업(생각·나레이션·도구)은
+     * <TurnActivity> 안으로 접는다. 턴이 도는 중에는 펼쳐서 진행을 보여준다.
+     */
+    const renderedParts = useMemo(() => {
+      const parts = message.parts ?? [];
 
-    // thinking은 step(assistant 메시지)마다 별도 블록으로, 진행 순서 자리에 렌더링한다.
-    const lastPart = message.parts.at(-1);
+      let answerIndex = -1;
+      parts.forEach((part, idx) => {
+        if (part.type === "text" && part.text?.trim()) answerIndex = idx;
+      });
+      const workEnd = answerIndex === -1 ? parts.length : answerIndex;
+
+      const work = parts
+        .map((part, idx) => ({ part, idx }))
+        .slice(0, workEnd)
+        .filter(({ part, idx }) => !(part.type === "reasoning" && echoedThinking[idx]))
+        .map(({ part }) => part);
+
+      return [
+        work.length > 0 ? (
+          <TurnActivity
+            key={`${message.id}-activity`}
+            parts={work}
+            isStreaming={isLastMessage && isStreaming}
+          />
+        ) : null,
+        ...parts
+          .slice(workEnd)
+          .map((part, idx) =>
+            part.type === "text" ? (
+              <MessageResponse key={`${message.id}-answer-${idx}`}>
+                {part.text}
+              </MessageResponse>
+            ) : null
+          ),
+      ];
+    }, [message, echoedThinking, isLastMessage, isStreaming]);
+
+    if (!message.parts || message.parts.length === 0) return null;
 
     // User messages: simple bubble
     if (isUser) {
@@ -83,49 +108,7 @@ export const MessageItem = memo(
             {/* Text & reasoning: overflow-visible so table popups/tooltips aren't clipped */}
             <MessageContent className="w-full overflow-visible">
               {/* 파트 순서 = 실제 진행 순서: thinking → 나레이션 → 도구 카드 → … → 최종 답변 */}
-              {message.parts.map((part, idx) => {
-                if (part.type === "reasoning") {
-                  if (echoedThinking[idx]) return null;
-                  return (
-                    <Reasoning
-                      key={`${message.id}-${idx}`}
-                      isStreaming={isLastMessage && isStreaming && part === lastPart}
-                    >
-                      <ReasoningTrigger />
-                      <ReasoningContent>{part.text}</ReasoningContent>
-                    </Reasoning>
-                  );
-                }
-                if (part.type === "text" && part.text) {
-                  return (
-                    <MessageResponse key={`${message.id}-${idx}`}>
-                      {part.text}
-                    </MessageResponse>
-                  );
-                }
-                if (isToolUIPart(part)) {
-                  return (
-                    <Tool key={part.toolCallId} defaultOpen={false}>
-                      {isDynamicToolUIPart(part) ? (
-                        <ToolHeader
-                          type="dynamic-tool"
-                          state={part.state}
-                          toolName={part.toolName}
-                        />
-                      ) : (
-                        <ToolHeader type={part.type} state={part.state} />
-                      )}
-                      <ToolContent>
-                        {part.input != null && <ToolInput input={part.input} />}
-                        {(part.output != null || part.errorText != null) && (
-                          <ToolOutput output={part.output} errorText={part.errorText} />
-                        )}
-                      </ToolContent>
-                    </Tool>
-                  );
-                }
-                return null; // step-start 등
-              })}
+              {renderedParts}
             </MessageContent>
           </div>
         </div>
