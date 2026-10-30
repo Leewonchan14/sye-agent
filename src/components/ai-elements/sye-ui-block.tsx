@@ -3,6 +3,7 @@
 import { Component, type ReactNode } from "react";
 
 import type { SyeUiSpec } from "@/lib/ui/spec";
+import { ArtifactBlock } from "./artifact-block";
 import { MotionBlock } from "./motion-block";
 import { Scene3dBlock } from "./scene3d-block";
 import { SvgBlock } from "./svg-block";
@@ -11,6 +12,7 @@ const KIND_LABEL: Record<SyeUiSpec["kind"], string> = {
   svg: "SVG",
   motion: "MOTION",
   scene3d: "3D",
+  artifact: "ARTIFACT",
 };
 
 class BlockErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -42,6 +44,7 @@ export const SyeUiBlock = ({ spec }: { spec: SyeUiSpec }) => (
       {spec.kind === "svg" && <SvgBlock spec={spec} />}
       {spec.kind === "motion" && <MotionBlock spec={spec} />}
       {spec.kind === "scene3d" && <Scene3dBlock spec={spec} />}
+      {spec.kind === "artifact" && <ArtifactBlock spec={spec} />}
     </BlockErrorBoundary>
     {spec.caption && (
       <figcaption className="line-clamp-2 border-t border-border/60 px-3 py-2 text-[12px] leading-snug text-muted-foreground">

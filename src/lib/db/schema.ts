@@ -110,6 +110,30 @@ export const chatTurnFrames = pgTable(
   })
 );
 
+/** 채팅 밖(HTTP 업로드)에서 온 UI 아티팩트 — 메시지에는 id만 싣는다. */
+export const artifacts = pgTable("artifacts", {
+  id: text("id").primaryKey(),
+  /** image | video | svg | html | glb */
+  kind: text("kind").notNull(),
+  mime: text("mime").notNull(),
+  bytes: integer("bytes").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  durationMs: integer("duration_ms"),
+  /** 같은 테이블의 다른 아티팩트 id */
+  posterId: text("poster_id"),
+  /** local | blob */
+  storage: text("storage").notNull().default("local"),
+  /** 저장 키(상대 경로 또는 blob pathname) */
+  key: text("key").notNull(),
+  caption: text("caption"),
+  sessionId: text("session_id"),
+  /** "hachi" | "upload" */
+  source: text("source"),
+  meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const kakaoChat = pgTable(
   "kakao_chat",
   {

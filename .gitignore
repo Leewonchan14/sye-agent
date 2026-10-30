@@ -43,3 +43,6 @@ bun.lock
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# artifact storage (local FS)
+/.data/

@@ -73,7 +73,23 @@ export const Scene3dSpec = z.object({
 
 export type Scene3dSpec = z.infer<typeof Scene3dSpec>;
 
-export const SyeUiSpec = z.discriminatedUnion("kind", [SvgSpec, MotionSpec, Scene3dSpec]);
+export const ArtifactSpec = z.object({
+  v: z.literal(1),
+  kind: z.literal("artifact"),
+  id: z.string().regex(/^art_[A-Za-z0-9_-]{16,32}$/),
+  caption: z.string().max(80).optional(),
+  loop: z.boolean().default(true),
+  autoplay: z.boolean().default(true),
+});
+
+export type ArtifactSpec = z.infer<typeof ArtifactSpec>;
+
+export const SyeUiSpec = z.discriminatedUnion("kind", [
+  SvgSpec,
+  MotionSpec,
+  Scene3dSpec,
+  ArtifactSpec,
+]);
 export type SyeUiSpec = z.infer<typeof SyeUiSpec>;
 
 export type ParseResult =
