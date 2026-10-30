@@ -1,7 +1,7 @@
 ---
 name: hongkong-tourism-monitor
 description: "Use when monitoring 홍콩관광청 (HKTB) news and events."
-version: 1.1.0
+version: 1.2.0
 license: MIT
 author: 하치와레 (hachi profile)
 platforms: [linux]
@@ -38,7 +38,7 @@ metadata:
   - `result[]`에 `date_created`, `title`, `url`(PDF 경로). PDF 본문은 `web_extract`로 읽음(공개).
   - 해당 월 발표가 없으면 totalResult=0. 과거월이 특히 안 나올 수 있음 → 한국 보도로 보완.
   - 수집 시작 시 이 JSON의 `date_created`로 **창 내 신규 발표 유무를 먼저 확정**한다. 창 안에 발표가 없으면 자사 섹션은 한국 보도 커버리지(당월 이벤트명 키워드)만으로 구성된다고 전제하고, '발표 누락'을 의심하며 시간을 쓰지 않는다.
-- 이벤트/소비자 페이지: `discoverhongkong.com/kr/events.html`, `/kr/events/festival-highlights.html`, `/kr/events/wine-dine-festival.html`, `/kr/deals.html`(혜택&특가), 핼러윈 전용 `/eng/events/halloween.html`. JS 렌더라 목록 페이지는 web_extract로 일부만 보임 — 개별 이벤트 페이지/보도자료가 더 신뢰성 높음.
+- 이벤트/소비자 페이지: `discoverhongkong.com/kr/events.html`, `/kr/events/festival-highlights.html`, `/kr/events/wine-dine-festival.html`, `/kr/deals.html`(혜택&특가), 핼러윈 전용 `/eng/events/halloween.html`. JS 렌더라 목록 페이지는 `curl -sL`로 받은 HTML에서 제목·날짜만 정규식으로 긁고(전체 렌더가 필요하면 `browser_exec`), 그래도 비면 `web_extract`를 최후로 쓴다 — 개별 이벤트 페이지/보도자료가 더 신뢰성 높음.
 - 한국어 보도: 네이버 뉴스 스윕(naver-news-monitor 스킬) **+** Google News RSS(`"홍콩관광청" when:30d`) — 서로 누락을 보완하므로 둘 다 돌릴 것. 전자신문 등 일부 기사는 Naver에서 안 잡힌다.
 - **홍콩수요저널 자체 RSS**: `https://hksooyo.com/bbs/rss.php?bo_table=news` — 제목·게재시각·원문 URL(`board.php?bo_table=news&wr_id=…`)이 한 번에 온다. 이 매체는 Naver 인덱스에 없고 Google News 링크는 풀리지 않으므로, 홍콩 현지 관광·교통·행사 기사는 이 피드로 직접 받는 게 가장 빠르다.
 - 키워드 세트(상시): 홍콩관광청 / HKTB / 홍콩 여행 / 홍콩 관광 / 홍콩 노선 / 홍콩 항공권 / 캐세이퍼시픽항공 / 홍콩항공 / 홍콩 호텔 / 홍콩 미식 / 홍콩 축제 / 홍콩전자전 / 홍콩 오션파크 / 홍콩 디즈니랜드 / 옹핑360 / 크리에이트립 / 하나투어·마이리얼트립 등 협업사 이름.
@@ -53,6 +53,7 @@ metadata:
 - 섹션 스윕은 **순차 실행**한다 — 4개를 동시에 돌리면 429로 일부 키워드가 0건이 된다(`naver-search-api` Pitfalls). **업계 섹션(키워드 40개+)은 30시간 창에서 10분 넘게 걸린다** — `terminal`의 `background=true`로 띄우고 `process_manage(action='poll')`로 회수한다. `execute_code`의 terminal로 돌리면 5분에서 잘려 "Background process started"만 남고 결과가 문맥에 들어오지 않는다.
 - `raw_*.json` 원소 키는 `title` / `desc` / `media`(원문 URL) / `naver`(네이버 뉴스 URL) / `pub`(KST 'YYYY-MM-DD HH:MM') / `kw`(매칭 키워드 배열) 여섯 개뿐이다 — `pubDate`·`link`·`press`로 짠 필터는 전부 빈 값이 되어 '수집 0건'처럼 보인다. 필터 스크립트는 이 키로 바로 쓴다.
 - 기자명은 `byline.py <URL>`처럼 URL을 위치인자로 넘긴다(`--help`를 넘기면 `unknown url type` 에러로 떨어진다).
+- **원문 확인은 묶어서 한 번에** — `scripts/pubtime.py URL1 URL2 …`·`byline.py URL1 URL2 …`처럼 여러 URL을 한 호출에 넘기고, 서로 독립인 조회(다른 매체 원문·RSS·목록 페이지)는 **한 assistant 메시지에서 복수 tool call로 동시에** 낸다. 턴 시간의 절반은 왕복 횟수다(실측 1턴: 모델 23왕복 202초 + 도구 30회 151초 = 356초). Naver Open API 섹션 스윕만 429 때문에 순차 유지.
 - 섹션별 복사용 키워드 JSON·제목 필터 정규식·기대 수집량은 `references/sweep-keyword-sets.md`에 있다.
 
 0. 스크립트는 반드시 `.py` 파일로 저장해 `terminal`로 실행한다(인라인 `-c`/heredoc 금지) — 수정·재실행이 쉽고, `execute_code`가 막힌 무인 세션에서도 동일하게 돌아간다. `curl … | python3 - <<'EOF'` 조합도 금지 — heredoc이 stdin을 차지해 앞 명령의 출력이 통째로 사라지고 '0건'처럼 보인다.
@@ -62,7 +63,7 @@ metadata:
 4. 업계 섹션: 제목에 여행·항공·노선·호텔·관광·투어·패키지·객실·유류할증료·환율이 있는 것만 남기고, 국내여행 신호(제주·경기·서울·부산·강원·충남·묵호·속초·호캉스·수학여행·웰니스·지자체명)로 제외한다(DB #10).
 5. NTO는 `관광청` 한 번으로 20~30건이 잡힌다 — 개별 관광청명은 26시간 창에서 대부분 0건이므로, `관광청` 결과에서 이름을 뽑아 필요할 때만 재검색(DB #11과 동일).
 6. Google News RSS(`"홍콩관광청" when:2d`, `hl=ko&gl=KR&ceid=KR:ko`) + 홍콩수요저널 자체 RSS로 교차 확인 — Naver에 안 잡히는 여행전문매체를 보완. 두 경로 모두 `scripts/rss_window.py`로 창 필터·KST 변환까지 한 번에 처리한다(`--gnews "홍콩" --hours 1d` 또는 `--feed <URL> --since "YYYY-MM-DD 09:00"`).
-7. 기사 사실관계는 `web_extract`, 기자명은 `scripts/byline.py`(meta author + '○○ 기자' 빈도). 추출기가 403·타임아웃·404를 주면 `curl -sL -A "Mozilla/5.0"` + 정규식으로 본문을 직접 뽑고(아래 Pitfalls), 그래도 비면 `browser_exec`로 원문 확인(DB #12).
+7. 기사 확인은 **스크립트가 먼저** — 발행시각은 `naver-search-api/scripts/pubtime.py`, 기자명은 `scripts/byline.py`(meta author + '○○ 기자' 빈도)에 URL을 **여러 개 한 번에** 넘긴다. 본문이 필요하면 `curl -sL -m 30 -A "Mozilla/5.0"` + 정규식(아래 Pitfalls). `web_extract`는 위 경로가 모두 빈 경우에만 — 무료 추출기 체인이라 한 건에 10~32초 걸린다(실측 5회 86초). 그래도 비면 `browser_exec`로 원문 확인(DB #12).
 
 ## Patterns (한국 시장)
 
@@ -122,10 +123,10 @@ metadata:
 - **HKTB가 행위자인 논란 기사도 자사 뉴스다** — 예: 피크 조명 계획 재검토 보도. 자사 섹션에 넣고 '보도 앵글·논조'에 부정 프레임과 일정 리스크를 적는다. 홍콩 이슈 섹션으로 밀어내면 자사 커버리지 건수가 실제보다 적게 보고된다.
 - **광역 키워드 스윕은 창 전체를 덮지 않는다** — '홍콩'처럼 수백 건이 잡히는 키워드는 최신 슬라이스만 돌아와서, 같은 날 이른 시각(11시대) 기사가 24시간 스윕 결과에 없었다. 스윕 건수는 하한으로 취급하고, Google News RSS(`"홍콩" when:1d`)나 `[NNA] 홍콩`·정부 정책명 같은 구체 쿼리로 그 구간을 다시 훑은 뒤 '기사 없음'을 판정한다.
 - **검색 노출일 ≠ 게재일 — 창 판정 전에 원문 발행시각을 확인한다** — 보도자료 커버리지는 첫 보도(예: 10.15) 후 며칠 뒤 재노출되므로, 검색 상위에 보인다는 이유로 창 안 기사로 세면 안 된다. 원문 HTML의 `article:published_time`(또는 '입력 YYYY.MM.DD HH:MM')을 `curl -sL` + 파이썬 정규식으로 뽑아 대조한다(로케일 때문에 grep은 실패하기 쉽다).
-- **`web_extract`가 403·타임아웃·404를 주는 국내 언론사는 `curl`+정규식으로 본문을 직접 뽑는다** — 기사는 살아 있는데 추출기만 막히는 경우이므로 이것만 보고 '기사 없음'으로 넘기지 말 것. `curl -sL -m 30 -A "Mozilla/5.0" <URL>` → `<script>`·`<style>` 블록 제거 → `re.sub(r'<[^>]+>',' ')` → `html.unescape` → 공백 정규화 → 본문 앵커('입력'·첫 소제목) 주변 1,400~2,000자 출력. 디지털조선·TTL뉴스·뉴스케이프·경향은 이 경로로 뚫린다.
+- **본문은 `web_extract`보다 `curl`+정규식이 먼저다** — 국내 언론사 상당수가 추출기에서 403·타임아웃·404를 주고, 성공해도 한 건에 10~32초가 든다. 기사는 살아 있으므로 추출기 실패만 보고 '기사 없음'으로 넘기지 말 것. `curl -sL -m 30 -A "Mozilla/5.0" <URL>` → `<script>`·`<style>` 블록 제거 → `re.sub(r'<[^>]+>',' ')` → `html.unescape` → 공백 정규화 → 본문 앵커('입력'·첫 소제목) 주변 1,400~2,000자 출력. 디지털조선·TTL뉴스·뉴스케이프·경향은 이 경로로 뚫린다.
 - **원문 사이트가 응답하지 않으면 기자명은 같은 사실의 다른 매체로 우회** — `web_extract`·`byline.py`·`curl`·`r.jina.ai`가 모두 실패하면 그 기사를 대표로 세우지 말고, 동일 사실을 다룬 다른 매체 기사(기자 확인 가능한 것)를 대표로 쓰고 무응답 매체를 형제 기사로 병기한다. 기자명을 추정으로 채우지 않는다.
 - **NTO는 제목 '관광청' 필터로만 뽑으면 새는 기사가 있다** — 관광청 지사장 인터뷰·캠페인 기사는 제목에 '관광청'이 없다(예: 클래식 공연 여행 상품 기사 = 오스트리아관광청 지사장 인터뷰). 업계 스윕 결과에서 관광청·지사장·캠페인 신호를 회수해 NTO로 옮긴다.
 - **같은 사고·이벤트가 매년 재노출된다 — 연도부터 확인한다** — 예: '에어부산 김해공항 홍콩행 BX391 화재'는 2025-01-28 사고인데 웹검색 상위에 계속 뜬다(중앙일보 원문 메타도 2025-01-29). 기사 본문의 '지난해/올해' 표현과 원문 `article:published_time`을 대조해 창 밖이면 즉시 버린다. 사고·통계 기사는 특히 이 함정에 잘 걸린다.
-- **HKTB 이벤트 '개막일' 보도는 네이버에 안 잡힌다 — 이벤트명 gnews 쿼리 → 매체 목록 페이지 순으로 확인** — 레저신문(golftimes.co.kr)·트래블데일리 등 여행전문지는 네이버 뉴스 인덱스 밖인 경우가 많다. ①`gnews_window.py --queries "와인 앤 다인,홍콩 와인,홍콩 미식,홍콩관광청 캠페인" --when 3d`로 보도를 낸 매체를 특정하고(구글뉴스는 이 인덱스 밖 매체를 잡는다), ②그 매체의 최신순 목록 페이지(`https://www.golftimes.co.kr/news/articleList.html?view_type=sm&sc_order_by=D`)를 `web_extract`로 열어 제목·기자·시각을 한 번에 확보한다. 네이버에서 같은 이벤트명이 0건이어도 자사 보도가 없는 건 아니다.
+- **HKTB 이벤트 '개막일' 보도는 네이버에 안 잡힌다 — 이벤트명 gnews 쿼리 → 매체 목록 페이지 순으로 확인** — 레저신문(golftimes.co.kr)·트래블데일리 등 여행전문지는 네이버 뉴스 인덱스 밖인 경우가 많다. ①`gnews_window.py --queries "와인 앤 다인,홍콩 와인,홍콩 미식,홍콩관광청 캠페인" --when 3d`로 보도를 낸 매체를 특정하고(구글뉴스는 이 인덱스 밖 매체를 잡는다), ②그 매체의 최신순 목록 페이지(`https://www.golftimes.co.kr/news/articleList.html?view_type=sm&sc_order_by=D`)를 `curl -sL`로 받아 제목·기자·시각을 한 번에 확보한다(JS 렌더면 `browser_exec`). 네이버에서 같은 이벤트명이 0건이어도 자사 보도가 없는 건 아니다.
 - **홍콩수요저널에는 개인 바이라인이 없다** — 모든 기사가 '홍콩수요저널 기자'이고 meta author도 매체명이다. 기자 칸은 `홍콩수요저널 편집국`으로 적는다 — 없는 이름을 만들지도, 브라우저로 더 뒤지지도 않는다(DB #12의 예외로 처리).
 
