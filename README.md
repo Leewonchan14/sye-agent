@@ -1,6 +1,6 @@
-# 트래블 에이전트 - 춘천 여행 도우미
+# 하치와레 메이트
 
-> "이원찬"과 "성예은"의 춘천 여행을 도와주는 AI 에이전트
+> "이원찬"과 "성예은"이 둘만 쓰는 개인 AI 메이트 — 작고 귀여운 하치와레가 대화로 도와줍니다
 
 ## 기술 스택
 
@@ -18,7 +18,7 @@
 
 ```bash
 git clone <repo-url>
-cd trable-agent
+cd sye-agent
 npm install
 
 # .env 파일 생성
@@ -40,7 +40,7 @@ npm run dev
 | `HERMES_SESSION_PREFIX` | -       | Hermes 세션 ID 프리픽스 (기본 `sye-`)                                                                                                                                                    |
 | `HERMES_SESSION_KEY`    | -       | 장기 기억 스코프 헤더 `X-Hermes-Session-Key` (기본 `sye-agent`)                                                                                                                          |
 | `HERMES_SYSTEM_MESSAGE` | -       | `system_message` 끝에 덧붙일 문구 (선택)                                                                                                                                                 |
-| `NEXT_PUBLIC_SITE_URL`  | 배포 시 | OG 태그 이미지 URL에 사용되는 사이트 도메인 (예: `https://trable-agent.vercel.app`). 설정하지 않으면 Vercel 배포 시 `VERCEL_URL`을, 로컬 개발 시 `localhost:3000`을 자동으로 사용합니다. |
+| `NEXT_PUBLIC_SITE_URL`  | 배포 시 | OG 태그 이미지 URL에 사용되는 사이트 도메인 (예: `https://<프로젝트>.vercel.app`). 설정하지 않으면 Vercel 배포 시 `VERCEL_URL`을, 로컬 개발 시 `localhost:3000`을 자동으로 사용합니다.   |
 
 ### .env 파일 예시
 
@@ -52,7 +52,7 @@ HERMES_API_URL=https://hermes.example.com/p/hachi
 HERMES_API_KEY=your_hachi_api_server_key
 
 # 선택: OG 태그 이미지 URL의 도메인을 고정하려면 설정 (기본값: VERCEL_URL 또는 localhost)
-# NEXT_PUBLIC_SITE_URL=https://trable-agent.vercel.app
+# NEXT_PUBLIC_SITE_URL=https://<프로젝트>.vercel.app
 ```
 
 ## Neon DB 설정
