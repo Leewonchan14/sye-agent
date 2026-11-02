@@ -42,7 +42,7 @@ export type LedgerMonthPayload = {
     income: number;
     expense: number;
     balance: number;
-    byMember: { wonchan: number; yeeun: number };
+    byMember: { wonchan: number; yeeun: number; joint: number };
     settlement: {
       from: LedgerMember | null;
       to: LedgerMember | null;
@@ -168,7 +168,7 @@ const normalizeAssetKind = (value: unknown): LedgerAssetKind => {
 };
 
 const normalizeMember = (value: unknown): LedgerMember => {
-  if (value !== "wonchan" && value !== "yeeun") {
+  if (value !== "wonchan" && value !== "yeeun" && value !== "joint") {
     throw new LedgerError("기록자를 확인해 주세요.");
   }
   return value;
@@ -255,7 +255,7 @@ const toAssetKind = (kind: string): LedgerAssetKind =>
   kind === "cash" ? "cash" : kind === "bank" ? "bank" : "card";
 
 const toMember = (member: string): LedgerMember =>
-  member === "yeeun" ? "yeeun" : "wonchan";
+  member === "yeeun" ? "yeeun" : member === "joint" ? "joint" : "wonchan";
 
 /**
  * 분류/자산 테이블이 비어 있을 때만 기본값을 넣는다.
@@ -376,7 +376,7 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
 
   let income = 0;
   let expense = 0;
-  const byMember = { wonchan: 0, yeeun: 0 };
+  const byMember = { wonchan: 0, yeeun: 0, joint: 0 };
   const categoryTotals = new Map<number | null, number>();
   const assetTotals = new Map<number | null, number>();
   const calendarTotals = new Map<string, { expense: number; income: number }>();

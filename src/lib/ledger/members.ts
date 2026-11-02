@@ -1,6 +1,6 @@
 import { kst } from "@/lib/kst";
 
-export type LedgerMember = "wonchan" | "yeeun";
+export type LedgerMember = "wonchan" | "yeeun" | "joint";
 
 interface LedgerMemberInfo {
   id: LedgerMember;
@@ -20,6 +20,12 @@ export const LEDGER_MEMBERS: LedgerMemberInfo[] = [
     id: "yeeun",
     name: "예은",
     tone: "bg-canvas-card text-body-strong ring-hairline",
+    bar: "bg-canvas-strong",
+  },
+  {
+    id: "joint",
+    name: "공동",
+    tone: "bg-canvas-soft text-body-strong ring-hairline",
     bar: "bg-canvas-strong",
   },
 ];
