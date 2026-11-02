@@ -163,7 +163,7 @@ const normalizeEntryKind = (value: unknown): LedgerEntryKind => {
 
 const normalizeAssetKind = (value: unknown): LedgerAssetKind => {
   if (value !== "cash" && value !== "bank" && value !== "card") {
-    throw new LedgerError("자산 종류를 확인해 주세요.");
+    throw new LedgerError("결제수단 종류를 확인해 주세요.");
   }
   return value;
 };
@@ -638,7 +638,7 @@ export const deleteLedgerCategory = async (id: number): Promise<void> => {
 };
 
 export const createLedgerAsset = async (input: LedgerAssetInput) => {
-  const name = normalizeName(input.name, "자산");
+  const name = normalizeName(input.name, "결제수단");
   const kind = normalizeAssetKind(input.kind);
   const db = getDb();
 
@@ -654,10 +654,10 @@ export const createLedgerAsset = async (input: LedgerAssetInput) => {
 };
 
 export const updateLedgerAsset = async (input: LedgerAssetUpdate) => {
-  const id = normalizeId(input.id, "자산");
+  const id = normalizeId(input.id, "결제수단");
   const patch: { name?: string; kind?: LedgerAssetKind } = {};
 
-  if (input.name !== undefined) patch.name = normalizeName(input.name, "자산");
+  if (input.name !== undefined) patch.name = normalizeName(input.name, "결제수단");
   if (input.kind !== undefined) patch.kind = normalizeAssetKind(input.kind);
   if (!Object.keys(patch).length) throw new LedgerError("변경할 내용이 없어요.");
 
@@ -667,12 +667,12 @@ export const updateLedgerAsset = async (input: LedgerAssetUpdate) => {
     .set(patch)
     .where(eq(schema.ledgerAssets.id, id))
     .returning();
-  if (!asset) throw new LedgerError("자산을 찾을 수 없어요.");
+  if (!asset) throw new LedgerError("결제수단을 찾을 수 없어요.");
   return asset;
 };
 
 export const deleteLedgerAsset = async (id: number): Promise<void> => {
-  const assetId = normalizeId(id, "자산");
+  const assetId = normalizeId(id, "결제수단");
   const db = getDb();
   await db.delete(schema.ledgerAssets).where(eq(schema.ledgerAssets.id, assetId));
 };
