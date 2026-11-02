@@ -545,90 +545,143 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
   );
 };
 
-const CategoryBreakdownCard = ({
+const KIND_FILTERS = [
+  { id: "all", label: "전체" },
+  { id: "expense", label: "지출" },
+  { id: "income", label: "입금" },
+] as const;
+
+type EntryKindFilter = (typeof KIND_FILTERS)[number]["id"];
+
+const PeriodEntriesCard = ({
   entries,
   categories,
 }: {
   entries: LedgerStats["entries"];
   categories: LedgerMonthPayload["categories"];
 }) => {
+  const [kind, setKind] = useState<EntryKindFilter>("all");
   const [selected, setSelected] = useState<number | "all">("all");
-  const expenseCategories = categories.filter((category) => category.kind === "expense");
+  const categoryOptions = categories.filter((category) => category.kind === kind);
   const rows = entries
     .filter(
       (entry) =>
-        entry.kind === "expense" && (selected === "all" || entry.categoryId === selected)
+        (kind === "all" || entry.kind === kind) &&
+        (selected === "all" || entry.categoryId === selected)
     )
     .reverse();
-  const total = rows.reduce((sum, entry) => sum + entry.amount, 0);
+  const expenseTotal = rows
+    .filter((entry) => entry.kind === "expense")
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const incomeTotal = rows
+    .filter((entry) => entry.kind === "income")
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const singleTotal = kind === "income" ? incomeTotal : expenseTotal;
+  const emptyLabel = kind === "income" ? "입금" : kind === "expense" ? "지출" : "기간";
 
   return (
     <StatCard>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">분류별 지출 내역</p>
+        <p className="text-[12px] font-medium text-muted">지출·입금 내역</p>
         <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
-          {rows.length}건 · {formatWon(total)}
+          {kind === "all"
+            ? `${rows.length}건 · 지출 ${formatWon(expenseTotal)} · 입금 ${formatWon(incomeTotal)}`
+            : `${rows.length}건 · ${formatWon(singleTotal)}`}
         </span>
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          aria-pressed={selected === "all"}
-          onClick={() => setSelected("all")}
-          className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
-            selected === "all"
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-hairline bg-surface text-muted hover:text-ink"
-          }`}
-        >
-          <CategoryIcon icon="wallet" color="neutral" size={16} />
-          <span className="truncate">전체</span>
-        </button>
-        {expenseCategories.map((category) => {
-          const active = selected === category.id;
+        {KIND_FILTERS.map((option) => {
+          const active = kind === option.id;
           return (
             <button
-              key={category.id}
+              key={option.id}
               type="button"
               aria-pressed={active}
-              onClick={() => setSelected(category.id)}
-              className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+              onClick={() => {
+                setKind(option.id);
+                setSelected("all");
+              }}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 active
                   ? "border-primary/30 bg-primary/10 text-primary"
                   : "border-hairline bg-surface text-muted hover:text-ink"
               }`}
             >
-              <CategoryIcon icon={category.icon} color={category.color} size={16} />
-              <span className="min-w-0 truncate">{category.name}</span>
+              {option.label}
             </button>
           );
         })}
       </div>
 
+      {kind !== "all" ? (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            aria-pressed={selected === "all"}
+            onClick={() => setSelected("all")}
+            className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+              selected === "all"
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-hairline bg-surface text-muted hover:text-ink"
+            }`}
+          >
+            <CategoryIcon icon="wallet" color="neutral" size={16} />
+            <span className="truncate">전체</span>
+          </button>
+          {categoryOptions.map((category) => {
+            const active = selected === category.id;
+            return (
+              <button
+                key={category.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setSelected(category.id)}
+                className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+                  active
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-hairline bg-surface text-muted hover:text-ink"
+                }`}
+              >
+                <CategoryIcon icon={category.icon} color={category.color} size={16} />
+                <span className="min-w-0 truncate">{category.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {rows.length ? (
         <ul className="mt-2 divide-y divide-hairline-soft">
-          {rows.map((entry) => (
-            <li key={entry.id} className="flex items-center gap-2 py-2">
-              <CategoryIcon
-                icon={entry.categoryIcon}
-                color={entry.categoryColor}
-                size={20}
-              />
-              <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
-                {entry.entryDate.slice(5).replace("-", ".")}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[12px] text-body">
-                {entry.memo.trim() || "지출"}
-              </span>
-              <span className="shrink-0 text-[12px] font-medium text-ink tabular-nums">
-                {formatWon(entry.amount)}
-              </span>
-            </li>
-          ))}
+          {rows.map((entry) => {
+            const isIncome = entry.kind === "income";
+            return (
+              <li key={entry.id} className="flex items-center gap-2 py-2">
+                <CategoryIcon
+                  icon={entry.categoryIcon}
+                  color={entry.categoryColor}
+                  size={20}
+                />
+                <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
+                  {entry.entryDate.slice(5).replace("-", ".")}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-body">
+                  {entry.memo.trim() || (isIncome ? "입금" : "지출")}
+                </span>
+                <span
+                  className={`shrink-0 text-[12px] font-medium tabular-nums ${
+                    isIncome ? "text-[color:var(--color-success)]" : "text-primary"
+                  }`}
+                >
+                  {isIncome ? "+" : "-"}
+                  {formatWon(entry.amount)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : (
-        <p className="mt-3 text-[12px] text-muted">이 분류에는 지출이 없어요</p>
+        <p className="mt-3 text-[12px] text-muted">이 {emptyLabel} 내역이 없어요</p>
       )}
     </StatCard>
   );
@@ -977,10 +1030,7 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
               <DepositsCard stats={stats} />
               <TogetherCard ledger={ledger} />
               <CategoryCard stats={stats} />
-              <CategoryBreakdownCard
-                entries={stats.entries}
-                categories={ledger.categories}
-              />
+              <PeriodEntriesCard entries={stats.entries} categories={ledger.categories} />
               <MonthlyCard monthly={stats.monthly} />
               <TopMerchantsCard merchants={stats.topMerchants} />
             </>
