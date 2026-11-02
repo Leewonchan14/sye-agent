@@ -320,51 +320,53 @@ const EntryForm = ({
         </div>
       </div>
 
-      {entry && confirmDelete && (
-        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-          <span className="flex-1">정말 지울까요?</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirmDelete(false)}
-          >
-            취소
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => removeEntry.mutate()}
-            disabled={removeEntry.isPending}
-          >
-            지우기
-          </Button>
-        </div>
-      )}
-
       <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-between gap-2 border-t border-hairline bg-popover px-4 py-3">
-        <div>
-          {entry && !confirmDelete && (
+        {entry && confirmDelete ? (
+          <div className="flex w-full items-center gap-2 text-[12px] text-destructive">
+            <span className="flex-1">정말 지울까요?</span>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setConfirmDelete(true)}
+              onClick={() => setConfirmDelete(false)}
             >
-              삭제
+              취소
             </Button>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            취소
-          </Button>
-          <Button type="submit" disabled={saveEntry.isPending}>
-            저장
-          </Button>
-        </div>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => removeEntry.mutate()}
+              disabled={removeEntry.isPending}
+            >
+              지우기
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div>
+              {entry && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  삭제
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                취소
+              </Button>
+              <Button type="submit" disabled={saveEntry.isPending}>
+                저장
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </form>
   );
