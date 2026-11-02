@@ -5,6 +5,11 @@ import { Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import {
+  AssetIcon,
+  CATEGORY_COLOR_HEX,
+  CategoryIcon,
+} from "@/components/ledger/category-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,16 +38,6 @@ const RANGES = [
 ] as const;
 
 type RangeId = (typeof RANGES)[number]["id"];
-
-const CATEGORY_COLORS = [
-  "#d96c75",
-  "#e0a458",
-  "#5aa87a",
-  "#5b8def",
-  "#9b7ede",
-  "#8b95a1",
-  "#4da3a3",
-] as const;
 
 const readError = async (res: Response) => {
   const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -374,13 +369,14 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
   const total = stats.summary.expense;
   const top = stats.byCategory.slice(0, 7);
   const rest = stats.byCategory.slice(7);
-  const slices = top.map((category, index) => ({
+  const slices = top.map((category) => ({
     key: category.categoryId == null ? "none" : String(category.categoryId),
     name: category.name,
-    emoji: category.emoji,
+    icon: category.icon,
+    colorKey: category.color,
     amount: category.amount,
     pct: category.pct,
-    color: CATEGORY_COLORS[index] ?? CATEGORY_COLORS[5],
+    color: CATEGORY_COLOR_HEX(category.color),
   }));
 
   if (rest.length) {
@@ -388,10 +384,11 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
     slices.push({
       key: "etc",
       name: "기타",
-      emoji: "🧾",
+      icon: "tag",
+      colorKey: "neutral",
       amount,
       pct: total === 0 ? 0 : Math.round((amount / total) * 100),
-      color: CATEGORY_COLORS[5],
+      color: CATEGORY_COLOR_HEX("neutral"),
     });
   }
 
@@ -474,7 +471,7 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
               <li key={slice.key}>
                 <div className="flex items-center justify-between gap-2 text-[12px]">
                   <span className="flex min-w-0 items-center gap-1.5 text-ink">
-                    <span aria-hidden>{slice.emoji}</span>
+                    <CategoryIcon icon={slice.icon} color={slice.colorKey} size={18} />
                     <span className="truncate">{slice.name}</span>
                   </span>
                   <span className="shrink-0 text-[11px] text-body tabular-nums">
@@ -664,7 +661,10 @@ const AssetsCard = ({ assets }: { assets: LedgerStats["byAsset"] }) => (
             key={asset.assetId ?? "none"}
             className="flex items-center justify-between gap-2 py-2 text-[13px]"
           >
-            <span className="truncate text-body">{asset.name}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <AssetIcon kind={asset.kind ?? "card"} size={24} />
+              <span className="truncate text-body">{asset.name}</span>
+            </span>
             <span className="shrink-0 font-medium text-ink tabular-nums">
               {formatWon(asset.amount)}
             </span>

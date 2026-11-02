@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AssetIcon, CategoryIcon } from "@/components/ledger/category-icon";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { Button } from "@/components/ui/button";
 import {
@@ -229,7 +230,7 @@ const EntryForm = ({
                       : "border-hairline bg-surface text-body hover:bg-canvas-soft"
                   }`}
                 >
-                  <span aria-hidden>{category.emoji}</span>
+                  <CategoryIcon icon={category.icon} color={category.color} size={20} />
                   {category.name}
                 </button>
               );
@@ -254,12 +255,13 @@ const EntryForm = ({
                   type="button"
                   aria-pressed={selected}
                   onClick={() => setAssetId(selected ? null : asset.id)}
-                  className={`rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] transition-colors ${
                     selected
                       ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
                       : "border-hairline bg-surface text-body hover:bg-canvas-soft"
                   }`}
                 >
+                  <AssetIcon kind={asset.kind} size={20} />
                   {asset.name}
                 </button>
               );

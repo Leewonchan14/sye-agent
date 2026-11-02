@@ -140,6 +140,8 @@ export const ledgerCategories = pgTable(
     name: text("name").notNull(),
     kind: text("kind").notNull().default("expense"), // expense | income
     emoji: text("emoji").notNull().default("🧾"),
+    icon: text("icon").notNull().default("tag"),
+    color: text("color").notNull().default("neutral"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },

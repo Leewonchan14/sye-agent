@@ -5,6 +5,8 @@ import { Check, Pencil, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AssetIcon, CategoryIcon } from "@/components/ledger/category-icon";
+import { CategoryColorSwatches, IconPickerDialog } from "@/components/ledger/icon-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +33,12 @@ import type {
   LedgerEntryKind,
   LedgerMonthPayload,
 } from "@/lib/db/ledger";
+import {
+  defaultCategoryColor,
+  suggestCategoryIcon,
+  type LedgerCategoryColorKey,
+  type LedgerCategoryIconKey,
+} from "@/lib/ledger/icons";
 import { formatWon } from "@/lib/ledger/members";
 
 const ASSET_KIND_LABEL: Record<LedgerAssetKind, string> = {
@@ -57,6 +65,22 @@ const numberDisplay = (digits: string) =>
   digits ? Number(digits).toLocaleString("ko-KR") : "";
 
 const cleanDigits = (value: string) => value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+
+type CategoryDraft = {
+  name: string;
+  icon: LedgerCategoryIconKey;
+  color: LedgerCategoryColorKey;
+  iconTouched: boolean;
+  colorTouched: boolean;
+};
+
+const emptyCategoryDraft = (): CategoryDraft => ({
+  name: "",
+  icon: "tag",
+  color: "neutral",
+  iconTouched: false,
+  colorTouched: false,
+});
 
 const readError = async (res: Response) => {
   const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -142,10 +166,10 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   });
 
   const [categoryDraft, setCategoryDraft] = useState<
-    Record<LedgerEntryKind, { name: string; emoji: string }>
+    Record<LedgerEntryKind, CategoryDraft>
   >({
-    expense: { name: "", emoji: "" },
-    income: { name: "", emoji: "" },
+    expense: emptyCategoryDraft(),
+    income: emptyCategoryDraft(),
   });
 
   const createCategory = useMutation({
@@ -161,7 +185,7 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
       toast.success("분류를 추가했어요.");
       setCategoryDraft((prev) => ({
         ...prev,
-        [input.kind]: { name: "", emoji: "" },
+        [input.kind]: emptyCategoryDraft(),
       }));
       invalidate();
     },
@@ -185,10 +209,24 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   });
 
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
-  const [categoryEdit, setCategoryEdit] = useState({ name: "", emoji: "" });
+  const [categoryEdit, setCategoryEdit] = useState<{
+    name: string;
+    icon: LedgerCategoryIconKey;
+    color: LedgerCategoryColorKey;
+  }>({ name: "", icon: "tag", color: "neutral" });
+  const [iconPicker, setIconPicker] = useState<{
+    target: "create" | "edit";
+    kind: LedgerEntryKind;
+    value: LedgerCategoryIconKey;
+  } | null>(null);
 
   const updateCategory = useMutation({
-    mutationFn: async (input: { id: number; name: string; emoji: string }) => {
+    mutationFn: async (input: {
+      id: number;
+      name: string;
+      icon: LedgerCategoryIconKey;
+      color: LedgerCategoryColorKey;
+    }) => {
       const res = await fetch("/api/ledger/categories", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "x-auth-token": token },
@@ -206,7 +244,11 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
 
   const startEditCategory = (category: LedgerMonthPayload["categories"][number]) => {
     setEditingCategoryId(category.id);
-    setCategoryEdit({ name: category.name, emoji: category.emoji });
+    setCategoryEdit({
+      name: category.name,
+      icon: category.icon,
+      color: category.color,
+    });
   };
 
   const saveCategory = () => {
@@ -214,8 +256,30 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     updateCategory.mutate({
       id: editingCategoryId,
       name: categoryEdit.name,
-      emoji: categoryEdit.emoji.trim() || "🧾",
+      icon: categoryEdit.icon,
+      color: categoryEdit.color,
     });
+  };
+
+  const selectCategoryIcon = (icon: LedgerCategoryIconKey) => {
+    if (!iconPicker) return;
+    if (iconPicker.target === "create") {
+      setCategoryDraft((prev) => {
+        const current = prev[iconPicker.kind];
+        return {
+          ...prev,
+          [iconPicker.kind]: {
+            ...current,
+            icon,
+            color: current.colorTouched ? current.color : defaultCategoryColor(icon),
+            iconTouched: true,
+          },
+        };
+      });
+    } else {
+      setCategoryEdit((prev) => ({ ...prev, icon }));
+    }
+    setIconPicker(null);
   };
 
   const [assetDraft, setAssetDraft] = useState<{ name: string; kind: LedgerAssetKind }>({
@@ -299,7 +363,21 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     createCategory.mutate({
       name: draft.name,
       kind,
-      emoji: draft.emoji.trim() || undefined,
+      icon: draft.icon,
+      color: draft.color,
+    });
+  };
+
+  const updateCategoryDraftName = (kind: LedgerEntryKind, name: string) => {
+    setCategoryDraft((prev) => {
+      const current = prev[kind];
+      const next = { ...current, name };
+      if (!current.iconTouched) {
+        const icon = suggestCategoryIcon(name);
+        next.icon = icon;
+        if (!current.colorTouched) next.color = defaultCategoryColor(icon);
+      }
+      return { ...prev, [kind]: next };
     });
   };
 
@@ -389,9 +467,11 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                   return (
                     <div key={category.id} className="py-2">
                       <div className="flex items-center gap-2">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas-soft text-sm">
-                          {category.emoji}
-                        </span>
+                        <CategoryIcon
+                          icon={category.icon}
+                          color={category.color}
+                          size={28}
+                        />
                         <span className="min-w-0 flex-1 truncate text-[13px] text-body">
                           {category.name}
                         </span>
@@ -504,58 +584,77 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                   {categories.map((category) => (
                     <li key={category.id} className="py-1.5">
                       {editingCategoryId === category.id ? (
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            value={categoryEdit.emoji}
-                            onChange={(event) =>
-                              setCategoryEdit((prev) => ({
-                                ...prev,
-                                emoji: event.target.value,
-                              }))
-                            }
-                            aria-label="분류 이모지"
-                            maxLength={2}
-                            className="w-11 text-center"
-                          />
-                          <Input
-                            value={categoryEdit.name}
-                            onChange={(event) =>
-                              setCategoryEdit((prev) => ({
-                                ...prev,
-                                name: event.target.value,
-                              }))
-                            }
-                            aria-label={`${category.name} 이름`}
-                            autoFocus
-                            className="min-w-0 flex-1"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="분류 수정 저장"
-                            disabled={
-                              !categoryEdit.name.trim() || updateCategory.isPending
-                            }
-                            onClick={saveCategory}
-                          >
-                            <Check />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="분류 수정 취소"
-                            onClick={() => setEditingCategoryId(null)}
-                          >
-                            <X />
-                          </Button>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              aria-label={`${category.name} 아이콘`}
+                              onClick={() =>
+                                setIconPicker({
+                                  target: "edit",
+                                  kind: section.kind,
+                                  value: categoryEdit.icon,
+                                })
+                              }
+                              className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                              <CategoryIcon
+                                icon={categoryEdit.icon}
+                                color={categoryEdit.color}
+                                size={30}
+                              />
+                            </button>
+                            <Input
+                              value={categoryEdit.name}
+                              onChange={(event) =>
+                                setCategoryEdit((prev) => ({
+                                  ...prev,
+                                  name: event.target.value,
+                                }))
+                              }
+                              aria-label={`${category.name} 이름`}
+                              autoFocus
+                              className="min-w-0 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="분류 수정 저장"
+                              disabled={
+                                !categoryEdit.name.trim() || updateCategory.isPending
+                              }
+                              onClick={saveCategory}
+                            >
+                              <Check />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="분류 수정 취소"
+                              onClick={() => setEditingCategoryId(null)}
+                            >
+                              <X />
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2 pl-10">
+                            <span className="text-[10px] text-muted">색</span>
+                            <CategoryColorSwatches
+                              value={categoryEdit.color}
+                              onChange={(color) =>
+                                setCategoryEdit((prev) => ({ ...prev, color }))
+                              }
+                            />
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas-soft text-sm">
-                            {category.emoji}
-                          </span>
+                          <CategoryIcon
+                            icon={category.icon}
+                            color={category.color}
+                            size={28}
+                          />
                           <span className="min-w-0 flex-1 truncate text-[13px] text-body">
                             {category.name}
                           </span>
@@ -595,46 +694,61 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Input
-                    value={draft.name}
-                    onChange={(event) =>
-                      setCategoryDraft((prev) => ({
-                        ...prev,
-                        [section.kind]: {
-                          ...prev[section.kind],
-                          name: event.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="이름"
-                    aria-label={`${section.label} 분류 이름`}
-                    className="min-w-0 flex-1"
-                  />
-                  <Input
-                    value={draft.emoji}
-                    onChange={(event) =>
-                      setCategoryDraft((prev) => ({
-                        ...prev,
-                        [section.kind]: {
-                          ...prev[section.kind],
-                          emoji: event.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="🍚"
-                    aria-label="이모지"
-                    maxLength={2}
-                    className="w-14 text-center"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => addCategory(section.kind)}
-                    disabled={!draft.name.trim() || createCategory.isPending}
-                  >
-                    추가
-                  </Button>
+                <div className="mt-2 rounded-xl border border-hairline p-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label={`${section.label} 분류 아이콘`}
+                      onClick={() =>
+                        setIconPicker({
+                          target: "create",
+                          kind: section.kind,
+                          value: draft.icon,
+                        })
+                      }
+                      className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                      <CategoryIcon icon={draft.icon} color={draft.color} size={30} />
+                    </button>
+                    <Input
+                      value={draft.name}
+                      onChange={(event) =>
+                        updateCategoryDraftName(section.kind, event.target.value)
+                      }
+                      placeholder="이름"
+                      aria-label={`${section.label} 분류 이름`}
+                      className="min-w-0 flex-1"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => addCategory(section.kind)}
+                      disabled={!draft.name.trim() || createCategory.isPending}
+                    >
+                      추가
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-[10px] text-muted">색</span>
+                    <CategoryColorSwatches
+                      value={draft.color}
+                      onChange={(color) =>
+                        setCategoryDraft((prev) => ({
+                          ...prev,
+                          [section.kind]: {
+                            ...prev[section.kind],
+                            color,
+                            colorTouched: true,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                  {draft.name.trim() && !draft.iconTouched ? (
+                    <p className="mt-1.5 text-[10px] text-muted-soft">
+                      이름에 맞는 아이콘을 자동으로 골랐어요
+                    </p>
+                  ) : null}
                 </div>
               </section>
             );
@@ -700,6 +814,7 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
+                    <AssetIcon kind={asset.kind} size={28} />
                     <span className="min-w-0 flex-1 truncate text-[13px] text-body">
                       {asset.name}
                     </span>
@@ -775,6 +890,15 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
           </div>
         </div>
       )}
+
+      <IconPickerDialog
+        open={iconPicker != null}
+        onOpenChange={(open) => {
+          if (!open) setIconPicker(null);
+        }}
+        value={iconPicker?.value ?? "tag"}
+        onSelect={selectCategoryIcon}
+      />
     </div>
   );
 };

@@ -2,6 +2,17 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs } from "@/lib/kst";
+import {
+  DEFAULT_CATEGORY_COLOR,
+  DEFAULT_CATEGORY_ICON,
+  DEFAULT_CATEGORY_STYLES,
+  defaultCategoryColor,
+  isCategoryColorKey,
+  isCategoryIconKey,
+  suggestCategoryIcon,
+  type LedgerCategoryColorKey,
+  type LedgerCategoryIconKey,
+} from "@/lib/ledger/icons";
 import type { LedgerMember } from "@/lib/ledger/members";
 
 export type LedgerEntryKind = "expense" | "income";
@@ -16,6 +27,8 @@ export type LedgerMonthPayload = {
     name: string;
     kind: LedgerEntryKind;
     emoji: string;
+    icon: LedgerCategoryIconKey;
+    color: LedgerCategoryColorKey;
     sortOrder: number;
   }[];
   assets: { id: number; name: string; kind: LedgerAssetKind; sortOrder: number }[];
@@ -27,6 +40,8 @@ export type LedgerMonthPayload = {
     categoryId: number | null;
     categoryName: string | null;
     categoryEmoji: string | null;
+    categoryIcon: LedgerCategoryIconKey | null;
+    categoryColor: LedgerCategoryColorKey | null;
     assetId: number | null;
     assetName: string | null;
     memo: string;
@@ -55,6 +70,8 @@ export type LedgerMonthPayload = {
     categoryId: number | null;
     name: string;
     emoji: string;
+    icon: LedgerCategoryIconKey;
+    color: LedgerCategoryColorKey;
     amount: number;
     pct: number;
   }[];
@@ -84,12 +101,16 @@ export interface LedgerCategoryInput {
   name: string;
   kind: LedgerEntryKind;
   emoji?: string;
+  icon?: LedgerCategoryIconKey;
+  color?: LedgerCategoryColorKey;
 }
 
 export interface LedgerCategoryUpdate {
   id: number;
   name?: string;
   emoji?: string;
+  icon?: LedgerCategoryIconKey;
+  color?: LedgerCategoryColorKey;
 }
 
 export interface LedgerAssetInput {
@@ -188,6 +209,16 @@ const normalizeEmoji = (value: unknown): string => {
   return value.trim() || "🧾";
 };
 
+const normalizeCategoryIcon = (value: unknown): LedgerCategoryIconKey => {
+  if (!isCategoryIconKey(value)) throw new LedgerError("분류 아이콘을 확인해 주세요.");
+  return value;
+};
+
+const normalizeCategoryColor = (value: unknown): LedgerCategoryColorKey => {
+  if (!isCategoryColorKey(value)) throw new LedgerError("분류 색상을 확인해 주세요.");
+  return value;
+};
+
 const normalizeMemo = (value: unknown): string => {
   if (value == null) return "";
   if (typeof value !== "string") throw new LedgerError("내용을 확인해 주세요.");
@@ -273,18 +304,37 @@ export const ensureLedgerDefaults = async (): Promise<void> => {
     await db
       .insert(schema.ledgerCategories)
       .values([
-        ...DEFAULT_EXPENSE_CATEGORIES.map(([name, emoji], index) => ({
-          name,
-          emoji,
-          kind: "expense",
-          sortOrder: index,
-        })),
-        ...DEFAULT_INCOME_CATEGORIES.map(([name, emoji], index) => ({
-          name,
-          emoji,
-          kind: "income",
-          sortOrder: index,
-        })),
+        ...DEFAULT_EXPENSE_CATEGORIES.map(([name, emoji], index) => {
+          const style = DEFAULT_CATEGORY_STYLES[name] ?? {
+            icon: suggestCategoryIcon(name),
+            color: defaultCategoryColor(suggestCategoryIcon(name)),
+          };
+          return {
+            name,
+            emoji,
+            kind: "expense" as const,
+            icon: style.icon,
+            color: style.color,
+            sortOrder: index,
+          };
+        }),
+        ...DEFAULT_INCOME_CATEGORIES.map(([name, emoji], index) => {
+          const style =
+            name === "기타"
+              ? { icon: "plus" as const, color: "neutral" as const }
+              : (DEFAULT_CATEGORY_STYLES[name] ?? {
+                  icon: suggestCategoryIcon(name),
+                  color: defaultCategoryColor(suggestCategoryIcon(name)),
+                });
+          return {
+            name,
+            emoji,
+            kind: "income" as const,
+            icon: style.icon,
+            color: style.color,
+            sortOrder: index,
+          };
+        }),
       ])
       .onConflictDoNothing();
   }
@@ -344,6 +394,8 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     name: category.name,
     kind: toEntryKind(category.kind),
     emoji: category.emoji,
+    icon: category.icon as LedgerCategoryIconKey,
+    color: category.color as LedgerCategoryColorKey,
     sortOrder: category.sortOrder,
   }));
   const assets = assetRows.map((asset) => ({
@@ -367,6 +419,8 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
       categoryId: entry.categoryId,
       categoryName: category?.name ?? null,
       categoryEmoji: category?.emoji ?? null,
+      categoryIcon: category?.icon ?? null,
+      categoryColor: category?.color ?? null,
       assetId: entry.assetId,
       assetName: asset?.name ?? null,
       memo: entry.memo,
@@ -424,6 +478,8 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
         categoryId,
         name: category?.name ?? "분류 없음",
         emoji: category?.emoji ?? "🧾",
+        icon: category?.icon ?? DEFAULT_CATEGORY_ICON,
+        color: category?.color ?? DEFAULT_CATEGORY_COLOR,
         amount,
         pct: expense === 0 ? 0 : Math.round((amount / expense) * 100),
       };
@@ -595,6 +651,14 @@ export const createLedgerCategory = async (input: LedgerCategoryInput) => {
   const name = normalizeName(input.name, "분류");
   const kind = normalizeEntryKind(input.kind);
   const emoji = normalizeEmoji(input.emoji);
+  const icon =
+    input.icon === undefined
+      ? suggestCategoryIcon(name)
+      : normalizeCategoryIcon(input.icon);
+  const color =
+    input.color === undefined
+      ? defaultCategoryColor(icon)
+      : normalizeCategoryColor(input.color);
   const db = getDb();
 
   const [maxRow] = await db
@@ -606,17 +670,31 @@ export const createLedgerCategory = async (input: LedgerCategoryInput) => {
 
   const [category] = await db
     .insert(schema.ledgerCategories)
-    .values({ name, kind, emoji, sortOrder: Number(maxRow?.value ?? -1) + 1 })
+    .values({
+      name,
+      kind,
+      emoji,
+      icon,
+      color,
+      sortOrder: Number(maxRow?.value ?? -1) + 1,
+    })
     .returning();
   return category;
 };
 
 export const updateLedgerCategory = async (input: LedgerCategoryUpdate) => {
   const id = normalizeId(input.id, "분류");
-  const patch: { name?: string; emoji?: string } = {};
+  const patch: {
+    name?: string;
+    emoji?: string;
+    icon?: LedgerCategoryIconKey;
+    color?: LedgerCategoryColorKey;
+  } = {};
 
   if (input.name !== undefined) patch.name = normalizeName(input.name, "분류");
   if (input.emoji !== undefined) patch.emoji = normalizeEmoji(input.emoji);
+  if (input.icon !== undefined) patch.icon = normalizeCategoryIcon(input.icon);
+  if (input.color !== undefined) patch.color = normalizeCategoryColor(input.color);
   if (!Object.keys(patch).length) throw new LedgerError("변경할 내용이 없어요.");
 
   const db = getDb();

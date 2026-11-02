@@ -3,6 +3,7 @@ import { and, asc, gte, lte } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db/db";
 import { LedgerError } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
+import type { LedgerCategoryColorKey, LedgerCategoryIconKey } from "@/lib/ledger/icons";
 import type { LedgerMember } from "@/lib/ledger/members";
 
 export type LedgerStats = {
@@ -25,10 +26,17 @@ export type LedgerStats = {
     categoryId: number | null;
     name: string;
     emoji: string;
+    icon: LedgerCategoryIconKey;
+    color: LedgerCategoryColorKey;
     amount: number;
     pct: number;
   }[];
-  byAsset: { assetId: number | null; name: string; amount: number }[];
+  byAsset: {
+    assetId: number | null;
+    name: string;
+    kind: "cash" | "bank" | "card" | null;
+    amount: number;
+  }[];
   monthly: { month: string; income: number; expense: number }[];
   daily: { date: string; income: number; expense: number; balance: number }[];
   topMerchants: { name: string; amount: number; count: number }[];
@@ -104,10 +112,16 @@ export const getLedgerStats = async (
         id: schema.ledgerCategories.id,
         name: schema.ledgerCategories.name,
         emoji: schema.ledgerCategories.emoji,
+        icon: schema.ledgerCategories.icon,
+        color: schema.ledgerCategories.color,
       })
       .from(schema.ledgerCategories),
     db
-      .select({ id: schema.ledgerAssets.id, name: schema.ledgerAssets.name })
+      .select({
+        id: schema.ledgerAssets.id,
+        name: schema.ledgerAssets.name,
+        kind: schema.ledgerAssets.kind,
+      })
       .from(schema.ledgerAssets),
   ]);
 
@@ -179,6 +193,8 @@ export const getLedgerStats = async (
         categoryId,
         name: category?.name ?? "분류 없음",
         emoji: category?.emoji ?? "🧾",
+        icon: (category?.icon ?? "tag") as LedgerCategoryIconKey,
+        color: (category?.color ?? "neutral") as LedgerCategoryColorKey,
         amount,
         pct: expense === 0 ? 0 : Math.round((amount / expense) * 100),
       };
@@ -188,7 +204,12 @@ export const getLedgerStats = async (
   const byAsset = [...assetTotals.entries()]
     .map(([assetId, amount]) => {
       const asset = assetId == null ? null : assetById.get(assetId);
-      return { assetId, name: asset?.name ?? "결제수단 없음", amount };
+      return {
+        assetId,
+        name: asset?.name ?? "결제수단 없음",
+        kind: (asset?.kind ?? null) as "cash" | "bank" | "card" | null,
+        amount,
+      };
     })
     .sort((a, b) => b.amount - a.amount);
 
