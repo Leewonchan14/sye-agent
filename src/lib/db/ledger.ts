@@ -124,6 +124,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   ["문화", "🎬"],
   ["의료", "💊"],
   ["주거", "🏠"],
+  ["숙박", "🏨"],
   ["기타", "🧾"],
 ] as const;
 
