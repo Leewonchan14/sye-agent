@@ -753,7 +753,7 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                 }
               }}
             >
-              <SelectTrigger className="w-[104px]" aria-label="자산 종류">
+              <SelectTrigger className="w-[104px]" aria-label="결제수단 종류">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

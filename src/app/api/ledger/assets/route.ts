@@ -25,8 +25,8 @@ export const POST = async (req: Request) => {
     return Response.json({ asset });
   } catch (error) {
     return ledgerErrorResponse(error, {
-      fallback: "자산을 추가하지 못했어요.",
-      duplicate: "같은 이름의 자산이 이미 있어요.",
+      fallback: "결제수단을 추가하지 못했어요.",
+      duplicate: "같은 이름의 결제수단이 이미 있어요.",
     });
   }
 };
@@ -45,8 +45,8 @@ export const PATCH = async (req: Request) => {
     return Response.json({ asset });
   } catch (error) {
     return ledgerErrorResponse(error, {
-      fallback: "자산을 수정하지 못했어요.",
-      duplicate: "같은 이름의 자산이 이미 있어요.",
+      fallback: "결제수단을 수정하지 못했어요.",
+      duplicate: "같은 이름의 결제수단이 이미 있어요.",
     });
   }
 };
@@ -64,6 +64,6 @@ export const DELETE = async (req: Request) => {
     await deleteLedgerAsset(body.id as number);
     return Response.json({ ok: true });
   } catch (error) {
-    return ledgerErrorResponse(error, { fallback: "자산을 삭제하지 못했어요." });
+    return ledgerErrorResponse(error, { fallback: "결제수단을 삭제하지 못했어요." });
   }
 };
