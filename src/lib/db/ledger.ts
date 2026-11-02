@@ -654,7 +654,7 @@ export const createLedgerAsset = async (input: LedgerAssetInput) => {
 };
 
 export const updateLedgerAsset = async (input: LedgerAssetUpdate) => {
-  const id = normalizeId(input.id, "결제수단");
+  const id = normalizeId(input.id, "결제수단 정보");
   const patch: { name?: string; kind?: LedgerAssetKind } = {};
 
   if (input.name !== undefined) patch.name = normalizeName(input.name, "결제수단");
@@ -672,7 +672,7 @@ export const updateLedgerAsset = async (input: LedgerAssetUpdate) => {
 };
 
 export const deleteLedgerAsset = async (id: number): Promise<void> => {
-  const assetId = normalizeId(id, "결제수단");
+  const assetId = normalizeId(id, "결제수단 정보");
   const db = getDb();
   await db.delete(schema.ledgerAssets).where(eq(schema.ledgerAssets.id, assetId));
 };
