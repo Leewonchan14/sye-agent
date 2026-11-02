@@ -266,7 +266,9 @@ export const LedgerPage = () => {
           <LedgerTabs tab={tab} onChange={setTab} />
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div
+          className={`mt-4 grid gap-3 sm:grid-cols-3 ${tab === "stats" ? "hidden" : ""}`}
+        >
           {!ledger ? (
             Array.from({ length: 3 }, (_, index) => (
               <div
