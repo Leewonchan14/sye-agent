@@ -40,6 +40,19 @@ export type LedgerStats = {
     assetName: string | null;
     member: LedgerMember;
   }[];
+  allEntries: {
+    id: number;
+    entryDate: string;
+    kind: "income" | "expense";
+    amount: number;
+    memo: string;
+    categoryId: number | null;
+    categoryName: string | null;
+    categoryIcon: LedgerCategoryIconKey | null;
+    categoryColor: LedgerCategoryColorKey | null;
+    assetName: string | null;
+    member: LedgerMember;
+  }[];
   // 각 멤버의 count는 입금 건수
   byMember: {
     wonchan: { income: number; expense: number; count: number };
@@ -143,6 +156,7 @@ export const getLedgerStats = async (
   let allTimeIncomeCount = 0;
   let allTimeExpenseCount = 0;
   const entries: LedgerStats["entries"] = [];
+  const allEntries: LedgerStats["allEntries"] = [];
   const byMember: LedgerStats["byMember"] = {
     wonchan: { income: 0, expense: 0, count: 0 },
     yeeun: { income: 0, expense: 0, count: 0 },
@@ -161,26 +175,11 @@ export const getLedgerStats = async (
 
   for (const entry of entryRows) {
     const kind: "income" | "expense" = entry.kind === "income" ? "income" : "expense";
-
-    if (kind === "income") {
-      allTimeIncome += entry.amount;
-      allTimeIncomeCount += 1;
-    } else {
-      allTimeExpense += entry.amount;
-      allTimeExpenseCount += 1;
-    }
-
-    if (entry.entryDate < from || entry.entryDate > to) continue;
-
     const member: LedgerMember =
       entry.member === "yeeun" ? "yeeun" : entry.member === "joint" ? "joint" : "wonchan";
     const category = entry.categoryId == null ? null : categoryById.get(entry.categoryId);
     const asset = entry.assetId == null ? null : assetById.get(entry.assetId);
-    const month = entry.entryDate.slice(0, 7);
-    const monthTotals = monthlyTotals.get(month) ?? { income: 0, expense: 0 };
-    const dayTotals = dailyTotals.get(entry.entryDate);
-
-    entries.push({
+    const view = {
       id: entry.id,
       entryDate: entry.entryDate,
       kind,
@@ -192,7 +191,25 @@ export const getLedgerStats = async (
       categoryColor: (category?.color ?? null) as LedgerCategoryColorKey | null,
       assetName: asset?.name ?? null,
       member,
-    });
+    };
+
+    allEntries.push(view);
+
+    if (kind === "income") {
+      allTimeIncome += entry.amount;
+      allTimeIncomeCount += 1;
+    } else {
+      allTimeExpense += entry.amount;
+      allTimeExpenseCount += 1;
+    }
+
+    if (entry.entryDate < from || entry.entryDate > to) continue;
+
+    entries.push(view);
+
+    const month = entry.entryDate.slice(0, 7);
+    const monthTotals = monthlyTotals.get(month) ?? { income: 0, expense: 0 };
+    const dayTotals = dailyTotals.get(entry.entryDate);
 
     if (kind === "income") {
       income += entry.amount;
@@ -280,6 +297,7 @@ export const getLedgerStats = async (
     },
     allTime,
     entries,
+    allEntries,
     byMember,
     byCategory,
     monthly,

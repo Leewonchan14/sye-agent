@@ -553,23 +553,82 @@ const KIND_FILTERS = [
 
 type EntryKindFilter = (typeof KIND_FILTERS)[number]["id"];
 
+const PERIOD_FILTERS = [
+  { id: "all", label: "전체" },
+  { id: "thisMonth", label: "이번 달" },
+  { id: "lastMonth", label: "지난달" },
+  { id: "3m", label: "최근 3개월" },
+  { id: "custom", label: "직접 설정" },
+] as const;
+
+type EntryPeriodFilter = (typeof PERIOD_FILTERS)[number]["id"];
+
 const PeriodEntriesCard = ({
   entries,
   categories,
 }: {
-  entries: LedgerStats["entries"];
+  entries: LedgerStats["allEntries"];
   categories: LedgerMonthPayload["categories"];
 }) => {
+  const [period, setPeriod] = useState<EntryPeriodFilter>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [kind, setKind] = useState<EntryKindFilter>("all");
   const [selected, setSelected] = useState<number | "all">("all");
+  const today = todayKst();
+
+  const periodRange = (() => {
+    if (period === "thisMonth") {
+      return { from: `${today.slice(0, 7)}-01`, to: today };
+    }
+    if (period === "lastMonth") {
+      const lastMonth = kst(today).subtract(1, "month");
+      return {
+        from: lastMonth.startOf("month").format("YYYY-MM-DD"),
+        to: lastMonth.endOf("month").format("YYYY-MM-DD"),
+      };
+    }
+    if (period === "3m") {
+      return {
+        from: kst(today).subtract(2, "month").startOf("month").format("YYYY-MM-DD"),
+        to: today,
+      };
+    }
+    if (period === "custom") {
+      return { from: customFrom, to: customTo };
+    }
+    return {};
+  })();
+
+  const periodError =
+    period === "custom" && (!customFrom || !customTo)
+      ? "시작일과 종료일을 모두 선택해 주세요."
+      : period === "custom" && customFrom > customTo
+        ? "시작일은 종료일보다 늦을 수 없어요."
+        : null;
+
   const categoryOptions = categories.filter((category) => category.kind === kind);
   const rows = entries
-    .filter(
-      (entry) =>
+    .filter((entry) => {
+      if (periodError) return false;
+      if (periodRange.from && entry.entryDate < periodRange.from) return false;
+      if (periodRange.to && entry.entryDate > periodRange.to) return false;
+      return (
         (kind === "all" || entry.kind === kind) &&
         (selected === "all" || entry.categoryId === selected)
-    )
+      );
+    })
     .reverse();
+
+  const selectPeriod = (next: EntryPeriodFilter) => {
+    setPeriod(next);
+    setSelected("all");
+    if (next === "custom" && (!customFrom || !customTo)) {
+      setCustomFrom(kst(today).subtract(30, "day").format("YYYY-MM-DD"));
+      setCustomTo(today);
+    }
+  };
+
   const expenseTotal = rows
     .filter((entry) => entry.kind === "expense")
     .reduce((sum, entry) => sum + entry.amount, 0);
@@ -589,6 +648,60 @@ const PeriodEntriesCard = ({
             : `${rows.length}건 · ${formatWon(singleTotal)}`}
         </span>
       </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] text-muted-soft">기간</span>
+        {PERIOD_FILTERS.map((option) => {
+          const active = period === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => selectPeriod(option.id)}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                active
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-hairline bg-surface text-muted hover:text-ink"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {period === "custom" ? (
+        <div className="mt-1.5">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:items-end">
+            <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
+              <span className="text-[10px] text-muted">시작</span>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(event) => setCustomFrom(event.target.value)}
+                aria-invalid={Boolean(periodError)}
+                className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
+              <span className="text-[10px] text-muted">종료</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(event) => setCustomTo(event.target.value)}
+                aria-invalid={Boolean(periodError)}
+                className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              />
+            </label>
+          </div>
+          {periodError ? (
+            <p className="mt-1 text-[11px] text-[color:var(--color-error)]">
+              {periodError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         {KIND_FILTERS.map((option) => {
@@ -1030,7 +1143,10 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
               <DepositsCard stats={stats} />
               <TogetherCard ledger={ledger} />
               <CategoryCard stats={stats} />
-              <PeriodEntriesCard entries={stats.entries} categories={ledger.categories} />
+              <PeriodEntriesCard
+                entries={stats.allEntries}
+                categories={ledger.categories}
+              />
               <MonthlyCard monthly={stats.monthly} />
               <TopMerchantsCard merchants={stats.topMerchants} />
             </>
