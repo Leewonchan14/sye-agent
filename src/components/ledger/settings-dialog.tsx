@@ -325,7 +325,9 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                         <div className="relative w-28">
                           <Input
                             aria-label={`${category.name} 예산`}
-                            value={numberDisplay(categoryAmounts[String(category.id)] ?? "")}
+                            value={numberDisplay(
+                              categoryAmounts[String(category.id)] ?? ""
+                            )}
                             onChange={(event) =>
                               setCategoryAmounts((prev) => ({
                                 ...prev,
@@ -343,7 +345,7 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                           </span>
                         </div>
                       </div>
-                      <div className="mt-1 pl-9 pr-1">
+                      <div className="mt-1 pr-1 pl-9">
                         <div className="flex items-center justify-between gap-2 text-[10.5px] tabular-nums">
                           <span className="text-muted">지출 {formatWon(spent)}</span>
                           {planned > 0 ? (
