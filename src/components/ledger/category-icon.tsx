@@ -1,0 +1,142 @@
+import {
+  Banknote,
+  BedDouble,
+  Bone,
+  BookOpen,
+  Bus,
+  Camera,
+  Cat,
+  Clapperboard,
+  Coffee,
+  CreditCard,
+  Dog,
+  Dumbbell,
+  Gamepad2,
+  Gift,
+  Heart,
+  House,
+  Landmark,
+  Music,
+  PawPrint,
+  Pill,
+  Plane,
+  Plus,
+  ReceiptText,
+  ShoppingBag,
+  ShoppingBasket,
+  Smartphone,
+  Sparkles,
+  Stethoscope,
+  Tag,
+  Users,
+  Utensils,
+  Wallet,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+
+import type { LedgerAssetKind } from "@/lib/db/ledger";
+import {
+  categoryColorOption,
+  categoryIconOption,
+  type LedgerCategoryColorKey,
+  type LedgerCategoryIconKey,
+} from "@/lib/ledger/icons";
+import { cn } from "@/lib/utils";
+
+const ICONS: Record<LedgerCategoryIconKey, LucideIcon> = {
+  utensils: Utensils,
+  coffee: Coffee,
+  bus: Bus,
+  basket: ShoppingBasket,
+  bag: ShoppingBag,
+  clapperboard: Clapperboard,
+  pill: Pill,
+  house: House,
+  bed: BedDouble,
+  receipt: ReceiptText,
+  wallet: Wallet,
+  gift: Gift,
+  landmark: Landmark,
+  plus: Plus,
+  users: Users,
+  pawprint: PawPrint,
+  dog: Dog,
+  cat: Cat,
+  bone: Bone,
+  heart: Heart,
+  stethoscope: Stethoscope,
+  plane: Plane,
+  dumbbell: Dumbbell,
+  book: BookOpen,
+  music: Music,
+  camera: Camera,
+  gamepad: Gamepad2,
+  smartphone: Smartphone,
+  wrench: Wrench,
+  sparkles: Sparkles,
+  tag: Tag,
+};
+
+interface CategoryIconProps {
+  icon: string | null | undefined;
+  color: string | null | undefined;
+  size?: number;
+  className?: string;
+}
+
+export const CategoryIcon = ({
+  icon,
+  color,
+  size = 30,
+  className,
+}: CategoryIconProps) => {
+  const option = categoryIconOption(icon);
+  const Icon = ICONS[option.key];
+  const tone = categoryColorOption(color);
+
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("inline-grid shrink-0 place-items-center rounded-[10px]", className)}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: tone.bg,
+        color: tone.fg,
+      }}
+    >
+      <Icon size={Math.round(size * 0.55)} strokeWidth={1.75} />
+    </span>
+  );
+};
+
+const ASSET_ICONS: Record<LedgerAssetKind, LucideIcon> = {
+  cash: Banknote,
+  card: CreditCard,
+  bank: Landmark,
+};
+
+interface AssetIconProps {
+  kind: LedgerAssetKind;
+  size?: number;
+  className?: string;
+}
+
+export const AssetIcon = ({ kind, size = 30, className }: AssetIconProps) => {
+  const Icon = ASSET_ICONS[kind] ?? CreditCard;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("inline-grid shrink-0 place-items-center rounded-[10px]", className)}
+      style={{ width: size, height: size, backgroundColor: "#F3E9E8", color: "#6B5A58" }}
+    >
+      <Icon size={Math.round(size * 0.55)} strokeWidth={1.75} />
+    </span>
+  );
+};
+
+export const CATEGORY_COLOR_HEX = (color: string | null | undefined) =>
+  categoryColorOption(color).fg;
+
+export type { LedgerCategoryColorKey, LedgerCategoryIconKey };

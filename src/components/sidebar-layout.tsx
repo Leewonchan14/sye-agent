@@ -18,6 +18,8 @@ interface Props {
   children: React.ReactNode;
   /** Highlight this session in the sidebar. Empty string for search page. */
   activeSessionId?: string;
+  /** Highlight a non-chat nav item in the sidebar. */
+  activeNav?: "ledger";
   /** Custom loading state */
   loading?: React.ReactNode;
 }
@@ -28,7 +30,12 @@ interface Props {
  * 2. Desktop sidebar (SessionSidebar)
  * 3. Mobile top bar + sidebar overlay
  */
-export const SidebarLayout = ({ children, activeSessionId = "", loading }: Props) => {
+export const SidebarLayout = ({
+  children,
+  activeSessionId = "",
+  activeNav,
+  loading,
+}: Props) => {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
     defaultValue: false,
@@ -96,6 +103,7 @@ export const SidebarLayout = ({ children, activeSessionId = "", loading }: Props
       <div className="hidden md:block">
         <SessionSidebar
           activeSessionId={activeSessionId}
+          activeNav={activeNav}
           onSelect={onSelect}
           onNew={onNew}
           isOpen={sidebarOpen}
@@ -143,6 +151,7 @@ export const SidebarLayout = ({ children, activeSessionId = "", loading }: Props
           <div className="relative h-full w-64">
             <SessionSidebar
               activeSessionId={activeSessionId}
+              activeNav={activeNav}
               onSelect={(id) => {
                 onSelect(id);
                 setMobileMenuOpen(false);
