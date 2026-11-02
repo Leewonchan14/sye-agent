@@ -132,3 +132,75 @@ export const kakaoChat = pgTable(
     ),
   })
 );
+
+export const ledgerCategories = pgTable(
+  "ledger_categories",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    kind: text("kind").notNull().default("expense"), // expense | income
+    emoji: text("emoji").notNull().default("🧾"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    kindIdx: index("ledger_categories_kind_idx").on(t.kind, t.sortOrder),
+    nameUniq: uniqueIndex("ledger_categories_kind_name_uniq").on(t.kind, t.name),
+  })
+);
+
+export const ledgerAssets = pgTable(
+  "ledger_assets",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    kind: text("kind").notNull().default("card"), // cash | bank | card
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ nameUniq: uniqueIndex("ledger_assets_name_uniq").on(t.name) })
+);
+
+export const ledgerEntries = pgTable(
+  "ledger_entries",
+  {
+    id: serial("id").primaryKey(),
+    entryDate: text("entry_date").notNull(), // YYYY-MM-DD (KST)
+    kind: text("kind").notNull().default("expense"), // expense | income
+    amount: integer("amount").notNull(),
+    categoryId: integer("category_id").references(() => ledgerCategories.id, {
+      onDelete: "set null",
+    }),
+    assetId: integer("asset_id").references(() => ledgerAssets.id, {
+      onDelete: "set null",
+    }),
+    memo: text("memo").notNull().default(""),
+    tags: text("tags").notNull().default(""),
+    member: text("member").notNull().default("wonchan"), // wonchan | yeeun
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    dateIdx: index("ledger_entries_date_idx").on(t.entryDate),
+    memberIdx: index("ledger_entries_member_idx").on(t.member),
+  })
+);
+
+export const ledgerMonths = pgTable("ledger_months", {
+  month: text("month").primaryKey(), // YYYY-MM
+  totalBudget: integer("total_budget"),
+  note: text("note").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const ledgerBudgets = pgTable(
+  "ledger_budgets",
+  {
+    month: text("month").notNull(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => ledgerCategories.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.month, t.categoryId] }) })
+);

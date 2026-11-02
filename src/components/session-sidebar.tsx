@@ -3,7 +3,16 @@
 import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { FileText, LogOut, MessageCircle, PanelLeft, Plus, Search, Upload } from "lucide-react";
+import {
+  FileText,
+  LogOut,
+  MessageCircle,
+  PanelLeft,
+  Plus,
+  Search,
+  Upload,
+  Wallet,
+} from "lucide-react";
 
 import { useRouter } from "next/navigation";
 
@@ -21,6 +30,7 @@ interface Session {
 
 interface Props {
   activeSessionId: string;
+  activeNav?: "ledger";
   onSelect: (id: string) => void;
   onNew: () => void;
   isOpen: boolean;
@@ -31,6 +41,7 @@ const truncate = (t: string, n: number) => (t.length > n ? t.slice(0, n) + "..."
 
 export const SessionSidebar = ({
   activeSessionId,
+  activeNav,
   onSelect,
   onNew,
   isOpen,
@@ -113,6 +124,14 @@ export const SessionSidebar = ({
           <div className="space-y-1 px-3 pb-3">
             <Button variant="ghost" className="w-full justify-start" onClick={onNew}>
               <Plus className="h-4 w-4" />새 채팅
+            </Button>
+            <Button
+              variant="ghost"
+              className={`w-full justify-start ${activeNav === "ledger" && "bg-canvas-card text-ink"}`}
+              onClick={() => router.push("/ledger")}
+            >
+              <Wallet className="h-4 w-4" />
+              가계부
             </Button>
             <Button
               variant="ghost"
@@ -221,6 +240,17 @@ export const SessionSidebar = ({
             aria-label="Search"
           >
             <Search className="h-5 w-5" />
+          </Button>
+
+          {/* Ledger */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            onClick={() => router.push("/ledger")}
+            aria-label="가계부"
+            className={activeNav === "ledger" ? "bg-canvas-card text-ink" : ""}
+          >
+            <Wallet className="h-5 w-5" />
           </Button>
 
           {/* Spacer */}
