@@ -5,11 +5,7 @@ import { Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import {
-  AssetIcon,
-  CATEGORY_COLOR_HEX,
-  CategoryIcon,
-} from "@/components/ledger/category-icon";
+import { CATEGORY_COLOR_HEX, CategoryIcon } from "@/components/ledger/category-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +31,7 @@ const RANGES = [
   { id: "all", label: "전체", days: 0 },
   { id: "30", label: "최근 30일", days: 30 },
   { id: "7", label: "최근 7일", days: 7 },
+  { id: "custom", label: "직접 설정", days: 0 },
 ] as const;
 
 type RangeId = (typeof RANGES)[number]["id"];
@@ -95,18 +92,19 @@ const ProgressBar = ({ pct, className = "" }: { pct: number; className?: string 
 );
 
 const KpiCards = ({ stats }: { stats: LedgerStats }) => {
-  const { income, expense, net, avgDailyExpense } = stats.summary;
+  const { income, expense, net, avgDailyExpense, incomeCount, expenseCount } =
+    stats.summary;
 
   return (
     <div className="grid grid-cols-2 gap-2 md:col-span-2 md:grid-cols-4">
       <div className="rounded-2xl border border-hairline bg-surface px-4 py-3">
-        <p className="text-[11px] font-medium text-muted">총 수입</p>
+        <p className="text-[11px] font-medium text-muted">총 수입 · {incomeCount}건</p>
         <p className="mt-1 text-[17px] font-semibold text-[color:var(--color-success)] tabular-nums">
           {formatWon(income)}
         </p>
       </div>
       <div className="rounded-2xl border border-hairline bg-surface px-4 py-3">
-        <p className="text-[11px] font-medium text-muted">총 지출</p>
+        <p className="text-[11px] font-medium text-muted">총 지출 · {expenseCount}건</p>
         <p className="mt-1 text-[17px] font-semibold text-primary tabular-nums">
           {formatWon(expense)}
         </p>
@@ -136,6 +134,53 @@ const KpiCards = ({ stats }: { stats: LedgerStats }) => {
   );
 };
 
+const AllTimeCard = ({ allTime }: { allTime: LedgerStats["allTime"] }) => {
+  const { from, to, income, expense, net, incomeCount, expenseCount } = allTime;
+
+  return (
+    <StatCard className="md:col-span-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[12px] font-medium text-muted">이제까지 총 수입·지출</p>
+        {from && to ? (
+          <span className="shrink-0 text-[10px] text-muted-soft tabular-nums">
+            {from.replaceAll("-", ".")} ~ {to.replaceAll("-", ".")}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="min-w-0 rounded-xl bg-canvas-soft/70 p-2.5">
+          <p className="text-[11px] text-muted">수입 · {incomeCount}건</p>
+          <p className="mt-0.5 truncate text-[13px] font-semibold text-[color:var(--color-success)] tabular-nums">
+            {formatWon(income)}
+          </p>
+        </div>
+        <div className="min-w-0 rounded-xl bg-canvas-soft/70 p-2.5">
+          <p className="text-[11px] text-muted">지출 · {expenseCount}건</p>
+          <p className="mt-0.5 truncate text-[13px] font-semibold text-primary tabular-nums">
+            {formatWon(expense)}
+          </p>
+        </div>
+        <div className="col-span-2 min-w-0 rounded-xl bg-canvas-soft/70 p-2.5 sm:col-span-1">
+          <p className="text-[11px] text-muted">수입 - 지출</p>
+          <p
+            className={`mt-0.5 truncate text-[13px] font-semibold tabular-nums ${
+              net > 0
+                ? "text-[color:var(--color-success)]"
+                : net < 0
+                  ? "text-[color:var(--color-error)]"
+                  : "text-ink"
+            }`}
+          >
+            {net > 0 ? "+" : ""}
+            {formatWon(net)}
+          </p>
+        </div>
+      </div>
+    </StatCard>
+  );
+};
+
 const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
   const width = 640;
   const height = 220;
@@ -147,15 +192,16 @@ const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
   const plotHeight = height - top - bottom;
 
   const balances = daily.map((day) => day.balance);
+  const rawMin = Math.min(...balances, 0);
   const rawMax = Math.max(...balances, 0);
-  const niceMax = (() => {
-    if (rawMax <= 0) return 1;
-    const magnitude = 10 ** Math.floor(Math.log10(rawMax));
-    const step = magnitude / 2;
-    return Math.ceil(rawMax / step) * step;
-  })();
-  const yMin = 0;
-  const yMax = niceMax;
+  const span = Math.max(rawMax - rawMin, 1);
+  const roughStep = span / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalized = roughStep / magnitude;
+  const step =
+    (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+  const yMin = Math.floor(rawMin / step) * step;
+  const yMax = Math.max(Math.ceil(rawMax / step) * step, yMin + step);
   const yRange = yMax - yMin;
 
   const xAt = (index: number) =>
@@ -499,6 +545,95 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
   );
 };
 
+const CategoryBreakdownCard = ({
+  entries,
+  categories,
+}: {
+  entries: LedgerStats["entries"];
+  categories: LedgerMonthPayload["categories"];
+}) => {
+  const [selected, setSelected] = useState<number | "all">("all");
+  const expenseCategories = categories.filter((category) => category.kind === "expense");
+  const rows = entries
+    .filter(
+      (entry) =>
+        entry.kind === "expense" && (selected === "all" || entry.categoryId === selected)
+    )
+    .reverse();
+  const total = rows.reduce((sum, entry) => sum + entry.amount, 0);
+
+  return (
+    <StatCard>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[12px] font-medium text-muted">분류별 지출 내역</p>
+        <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
+          {rows.length}건 · {formatWon(total)}
+        </span>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          aria-pressed={selected === "all"}
+          onClick={() => setSelected("all")}
+          className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+            selected === "all"
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-hairline bg-surface text-muted hover:text-ink"
+          }`}
+        >
+          <CategoryIcon icon="wallet" color="neutral" size={16} />
+          <span className="truncate">전체</span>
+        </button>
+        {expenseCategories.map((category) => {
+          const active = selected === category.id;
+          return (
+            <button
+              key={category.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setSelected(category.id)}
+              className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+                active
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-hairline bg-surface text-muted hover:text-ink"
+              }`}
+            >
+              <CategoryIcon icon={category.icon} color={category.color} size={16} />
+              <span className="min-w-0 truncate">{category.name}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {rows.length ? (
+        <ul className="mt-2 divide-y divide-hairline-soft">
+          {rows.map((entry) => (
+            <li key={entry.id} className="flex items-center gap-2 py-2">
+              <CategoryIcon
+                icon={entry.categoryIcon}
+                color={entry.categoryColor}
+                size={20}
+              />
+              <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
+                {entry.entryDate.slice(5).replace("-", ".")}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-body">
+                {entry.memo.trim() || "지출"}
+              </span>
+              <span className="shrink-0 text-[12px] font-medium text-ink tabular-nums">
+                {formatWon(entry.amount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-[12px] text-muted">이 분류에는 지출이 없어요</p>
+      )}
+    </StatCard>
+  );
+};
+
 const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
   const width = 360;
   const height = 180;
@@ -651,50 +786,60 @@ const TopMerchantsCard = ({ merchants }: { merchants: LedgerStats["topMerchants"
   );
 };
 
-const AssetsCard = ({ assets }: { assets: LedgerStats["byAsset"] }) => (
-  <StatCard>
-    <p className="text-[12px] font-medium text-muted">결제수단별 지출</p>
-    {assets.length ? (
-      <ul className="mt-2 divide-y divide-hairline-soft">
-        {assets.map((asset) => (
-          <li
-            key={asset.assetId ?? "none"}
-            className="flex items-center justify-between gap-2 py-2 text-[13px]"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <AssetIcon kind={asset.kind ?? "card"} size={24} />
-              <span className="truncate text-body">{asset.name}</span>
-            </span>
-            <span className="shrink-0 font-medium text-ink tabular-nums">
-              {formatWon(asset.amount)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p className="mt-2 text-[12px] text-muted">기간 내 지출이 없어요</p>
-    )}
-  </StatCard>
-);
-
 export const StatsView = ({ ledger, onOpenSettings }: Props) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const [range, setRange] = useState<RangeId>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [applied, setApplied] = useState<{ from?: string; to?: string }>({});
   const [note, setNote] = useState(ledger.budget.note);
 
-  const selectedRange = RANGES.find((option) => option.id === range) ?? RANGES[0];
-  const today = todayKst();
-  const from = selectedRange.days
-    ? kst(today)
-        .subtract(selectedRange.days - 1, "day")
-        .format("YYYY-MM-DD")
-    : undefined;
-  const to = selectedRange.days ? today : undefined;
+  const presetRange = (id: RangeId) => {
+    const preset = RANGES.find((option) => option.id === id);
+    if (!preset || !preset.days) return { from: undefined, to: undefined };
+    const today = todayKst();
+    return {
+      from: kst(today)
+        .subtract(preset.days - 1, "day")
+        .format("YYYY-MM-DD"),
+      to: today,
+    };
+  };
+
+  const selectRange = (id: RangeId) => {
+    setRange(id);
+    setCustomError(null);
+
+    if (id === "custom") {
+      if (!customFrom || !customTo) {
+        const today = todayKst();
+        setCustomFrom(kst(today).subtract(30, "day").format("YYYY-MM-DD"));
+        setCustomTo(today);
+      }
+      return;
+    }
+
+    setApplied(presetRange(id));
+  };
+
+  const applyCustomRange = () => {
+    if (!customFrom || !customTo) {
+      setCustomError("시작일과 종료일을 모두 선택해 주세요.");
+      return;
+    }
+    if (customFrom > customTo) {
+      setCustomError("시작일은 종료일보다 늦을 수 없어요.");
+      return;
+    }
+    setCustomError(null);
+    setApplied({ from: customFrom, to: customTo });
+  };
 
   const statsQuery = useQuery({
-    queryKey: ["ledger-stats", from ?? "all", to ?? "today"],
-    queryFn: () => fetchStats(token, from, to),
+    queryKey: ["ledger-stats", applied.from ?? "all", applied.to ?? "today"],
+    queryFn: () => fetchStats(token, applied.from, applied.to),
     enabled: Boolean(token),
   });
   const stats = statsQuery.data;
@@ -736,8 +881,8 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
     <div className="grid gap-4 md:grid-cols-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between md:col-span-2">
         <p className="text-[12px] font-medium text-muted">기간별 리포트</p>
-        <div className="flex flex-col items-start gap-1.5 sm:items-end">
-          <div className="flex rounded-full bg-canvas-soft p-1">
+        <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
+          <div className="flex flex-wrap rounded-full bg-canvas-soft p-1">
             {RANGES.map((option) => {
               const active = option.id === range;
               return (
@@ -745,7 +890,7 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
                   key={option.id}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setRange(option.id)}
+                  onClick={() => selectRange(option.id)}
                   className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
                     active ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
                   }`}
@@ -755,6 +900,52 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
               );
             })}
           </div>
+
+          {range === "custom" ? (
+            <div className="w-full">
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:items-end">
+                <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
+                  <span className="text-[10px] text-muted">시작</span>
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(event) => {
+                      setCustomFrom(event.target.value);
+                      setCustomError(null);
+                    }}
+                    aria-invalid={Boolean(customError)}
+                    className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  />
+                </label>
+                <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
+                  <span className="text-[10px] text-muted">종료</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(event) => {
+                      setCustomTo(event.target.value);
+                      setCustomError(null);
+                    }}
+                    aria-invalid={Boolean(customError)}
+                    className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  />
+                </label>
+                <Button
+                  size="sm"
+                  className="col-span-2 h-8 w-full sm:col-span-1 sm:w-auto"
+                  onClick={applyCustomRange}
+                >
+                  조회
+                </Button>
+              </div>
+              {customError ? (
+                <p className="mt-1 text-[11px] text-[color:var(--color-error)]">
+                  {customError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <p className="text-[11px] text-muted-soft tabular-nums">{rangeLabel}</p>
         </div>
       </div>
@@ -778,6 +969,7 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
         </StatCard>
       ) : stats ? (
         <>
+          <AllTimeCard allTime={stats.allTime} />
           {hasActivity ? (
             <>
               <KpiCards stats={stats} />
@@ -785,9 +977,12 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
               <DepositsCard stats={stats} />
               <TogetherCard ledger={ledger} />
               <CategoryCard stats={stats} />
+              <CategoryBreakdownCard
+                entries={stats.entries}
+                categories={ledger.categories}
+              />
               <MonthlyCard monthly={stats.monthly} />
               <TopMerchantsCard merchants={stats.topMerchants} />
-              <AssetsCard assets={stats.byAsset} />
             </>
           ) : (
             <StatCard className="md:col-span-2">

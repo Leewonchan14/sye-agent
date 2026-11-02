@@ -1,4 +1,4 @@
-import { and, asc, gte, lte } from "drizzle-orm";
+import { asc, lte } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { LedgerError } from "@/lib/db/ledger";
@@ -15,7 +15,31 @@ export type LedgerStats = {
     expense: number;
     net: number;
     avgDailyExpense: number;
+    incomeCount: number;
+    expenseCount: number;
   };
+  allTime: {
+    from: string | null;
+    to: string | null;
+    income: number;
+    expense: number;
+    net: number;
+    incomeCount: number;
+    expenseCount: number;
+  };
+  entries: {
+    id: number;
+    entryDate: string;
+    kind: "income" | "expense";
+    amount: number;
+    memo: string;
+    categoryId: number | null;
+    categoryName: string | null;
+    categoryIcon: LedgerCategoryIconKey | null;
+    categoryColor: LedgerCategoryColorKey | null;
+    assetName: string | null;
+    member: LedgerMember;
+  }[];
   // 각 멤버의 count는 입금 건수
   byMember: {
     wonchan: { income: number; expense: number; count: number };
@@ -30,12 +54,6 @@ export type LedgerStats = {
     color: LedgerCategoryColorKey;
     amount: number;
     pct: number;
-  }[];
-  byAsset: {
-    assetId: number | null;
-    name: string;
-    kind: "cash" | "bank" | "card" | null;
-    amount: number;
   }[];
   monthly: { month: string; income: number; expense: number }[];
   daily: { date: string; income: number; expense: number; balance: number }[];
@@ -53,8 +71,8 @@ const normalizeDate = (value: string, label: string): string => {
 };
 
 /**
- * 기간 가계부 통계. 범위 조회 한 번 + 분류/자산 테이블만 읽고
- * 집계는 전부 TypeScript에서 수행한다.
+ * 가계부 통계. 오늘까지 전체 내역을 한 번만 읽고 분류/자산 테이블을 붙여
+ * 기간 집계와 전체 누적을 TypeScript에서 함께 계산한다.
  */
 export const getLedgerStats = async (
   fromInput?: string | null,
@@ -69,28 +87,10 @@ export const getLedgerStats = async (
   if (from) from = normalizeDate(from, "시작 날짜");
   if (to) to = normalizeDate(to, "종료 날짜");
 
-  if (!from) {
-    const [earliest] = await db
-      .select({ entryDate: schema.ledgerEntries.entryDate })
-      .from(schema.ledgerEntries)
-      .orderBy(asc(schema.ledgerEntries.entryDate))
-      .limit(1);
-    from = earliest?.entryDate ?? today;
-  }
-  if (!to) to = today;
-
-  if (from > to) {
-    throw new LedgerError("시작 날짜는 종료 날짜보다 늦을 수 없어요.");
-  }
-
-  const days = kst(to).diff(kst(from), "day") + 1;
-  if (days > MAX_RANGE_DAYS) {
-    throw new LedgerError("조회 기간은 366일 이하로 선택해 주세요.");
-  }
-
   const [entryRows, categoryRows, assetRows] = await Promise.all([
     db
       .select({
+        id: schema.ledgerEntries.id,
         entryDate: schema.ledgerEntries.entryDate,
         kind: schema.ledgerEntries.kind,
         amount: schema.ledgerEntries.amount,
@@ -100,12 +100,7 @@ export const getLedgerStats = async (
         member: schema.ledgerEntries.member,
       })
       .from(schema.ledgerEntries)
-      .where(
-        and(
-          gte(schema.ledgerEntries.entryDate, from),
-          lte(schema.ledgerEntries.entryDate, to)
-        )
-      )
+      .where(lte(schema.ledgerEntries.entryDate, today))
       .orderBy(asc(schema.ledgerEntries.entryDate), asc(schema.ledgerEntries.id)),
     db
       .select({
@@ -120,23 +115,40 @@ export const getLedgerStats = async (
       .select({
         id: schema.ledgerAssets.id,
         name: schema.ledgerAssets.name,
-        kind: schema.ledgerAssets.kind,
       })
       .from(schema.ledgerAssets),
   ]);
+
+  if (!from) from = entryRows[0]?.entryDate ?? today;
+  if (!to) to = today;
+
+  if (from > to) {
+    throw new LedgerError("시작 날짜는 종료 날짜보다 늦을 수 없어요.");
+  }
+
+  const days = kst(to).diff(kst(from), "day") + 1;
+  if (days > MAX_RANGE_DAYS) {
+    throw new LedgerError("조회 기간은 366일 이하로 선택해 주세요.");
+  }
 
   const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
   const assetById = new Map(assetRows.map((asset) => [asset.id, asset]));
 
   let income = 0;
   let expense = 0;
+  let incomeCount = 0;
+  let expenseCount = 0;
+  let allTimeIncome = 0;
+  let allTimeExpense = 0;
+  let allTimeIncomeCount = 0;
+  let allTimeExpenseCount = 0;
+  const entries: LedgerStats["entries"] = [];
   const byMember: LedgerStats["byMember"] = {
     wonchan: { income: 0, expense: 0, count: 0 },
     yeeun: { income: 0, expense: 0, count: 0 },
     joint: { income: 0, expense: 0, count: 0 },
   };
   const categoryTotals = new Map<number | null, number>();
-  const assetTotals = new Map<number | null, number>();
   const monthlyTotals = new Map<string, { income: number; expense: number }>();
   const merchantTotals = new Map<string, { amount: number; count: number }>();
   const dailyTotals = new Map<string, { income: number; expense: number }>();
@@ -148,20 +160,50 @@ export const getLedgerStats = async (
   }
 
   for (const entry of entryRows) {
+    const kind: "income" | "expense" = entry.kind === "income" ? "income" : "expense";
+
+    if (kind === "income") {
+      allTimeIncome += entry.amount;
+      allTimeIncomeCount += 1;
+    } else {
+      allTimeExpense += entry.amount;
+      allTimeExpenseCount += 1;
+    }
+
+    if (entry.entryDate < from || entry.entryDate > to) continue;
+
     const member: LedgerMember =
       entry.member === "yeeun" ? "yeeun" : entry.member === "joint" ? "joint" : "wonchan";
+    const category = entry.categoryId == null ? null : categoryById.get(entry.categoryId);
+    const asset = entry.assetId == null ? null : assetById.get(entry.assetId);
     const month = entry.entryDate.slice(0, 7);
     const monthTotals = monthlyTotals.get(month) ?? { income: 0, expense: 0 };
     const dayTotals = dailyTotals.get(entry.entryDate);
 
-    if (entry.kind === "income") {
+    entries.push({
+      id: entry.id,
+      entryDate: entry.entryDate,
+      kind,
+      amount: entry.amount,
+      memo: entry.memo,
+      categoryId: entry.categoryId,
+      categoryName: category?.name ?? null,
+      categoryIcon: (category?.icon ?? null) as LedgerCategoryIconKey | null,
+      categoryColor: (category?.color ?? null) as LedgerCategoryColorKey | null,
+      assetName: asset?.name ?? null,
+      member,
+    });
+
+    if (kind === "income") {
       income += entry.amount;
+      incomeCount += 1;
       byMember[member].income += entry.amount;
       byMember[member].count += 1;
       monthTotals.income += entry.amount;
       if (dayTotals) dayTotals.income += entry.amount;
     } else {
       expense += entry.amount;
+      expenseCount += 1;
       byMember[member].expense += entry.amount;
       monthTotals.expense += entry.amount;
       if (dayTotals) dayTotals.expense += entry.amount;
@@ -169,13 +211,7 @@ export const getLedgerStats = async (
         entry.categoryId,
         (categoryTotals.get(entry.categoryId) ?? 0) + entry.amount
       );
-      assetTotals.set(
-        entry.assetId,
-        (assetTotals.get(entry.assetId) ?? 0) + entry.amount
-      );
 
-      const category =
-        entry.categoryId == null ? null : categoryById.get(entry.categoryId);
       const merchantName = entry.memo.trim() || category?.name || "지출";
       const merchant = merchantTotals.get(merchantName) ?? { amount: 0, count: 0 };
       merchant.amount += entry.amount;
@@ -185,6 +221,16 @@ export const getLedgerStats = async (
 
     monthlyTotals.set(month, monthTotals);
   }
+
+  const allTime = {
+    from: entryRows[0]?.entryDate ?? null,
+    to: entryRows[entryRows.length - 1]?.entryDate ?? null,
+    income: allTimeIncome,
+    expense: allTimeExpense,
+    net: allTimeIncome - allTimeExpense,
+    incomeCount: allTimeIncomeCount,
+    expenseCount: allTimeExpenseCount,
+  };
 
   const byCategory = [...categoryTotals.entries()]
     .map(([categoryId, amount]) => {
@@ -197,18 +243,6 @@ export const getLedgerStats = async (
         color: (category?.color ?? "neutral") as LedgerCategoryColorKey,
         amount,
         pct: expense === 0 ? 0 : Math.round((amount / expense) * 100),
-      };
-    })
-    .sort((a, b) => b.amount - a.amount);
-
-  const byAsset = [...assetTotals.entries()]
-    .map(([assetId, amount]) => {
-      const asset = assetId == null ? null : assetById.get(assetId);
-      return {
-        assetId,
-        name: asset?.name ?? "결제수단 없음",
-        kind: (asset?.kind ?? null) as "cash" | "bank" | "card" | null,
-        amount,
       };
     })
     .sort((a, b) => b.amount - a.amount);
@@ -241,10 +275,13 @@ export const getLedgerStats = async (
       expense,
       net: income - expense,
       avgDailyExpense: Math.round(expense / days),
+      incomeCount,
+      expenseCount,
     },
+    allTime,
+    entries,
     byMember,
     byCategory,
-    byAsset,
     monthly,
     daily,
     topMerchants,
