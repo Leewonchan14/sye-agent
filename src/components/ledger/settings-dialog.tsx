@@ -103,6 +103,14 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     );
   });
 
+  const allocatedCategoryBudget = ledger.categories
+    .filter((category) => category.kind === "expense")
+    .reduce(
+      (sum, category) => sum + Number(categoryAmounts[String(category.id)] || 0),
+      0
+    );
+  const totalBudgetNumber = totalBudget ? Number(totalBudget) : null;
+
   const saveBudget = useMutation({
     mutationFn: async () => {
       const body = {
@@ -275,41 +283,99 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
           </div>
 
           <div>
-            <p className="text-[12px] font-medium text-muted">분류별 예산</p>
+            <div className="flex flex-wrap items-baseline justify-between gap-1">
+              <p className="text-[12px] font-medium text-muted">분류별 예산</p>
+              <span
+                className={`text-[10.5px] tabular-nums ${
+                  totalBudgetNumber != null && allocatedCategoryBudget > totalBudgetNumber
+                    ? "text-[color:var(--color-error)]"
+                    : "text-muted-soft"
+                }`}
+              >
+                {totalBudgetNumber != null && allocatedCategoryBudget > totalBudgetNumber
+                  ? `${formatWon(allocatedCategoryBudget - totalBudgetNumber)} 초과 배분`
+                  : `분류 합계 ${formatWon(allocatedCategoryBudget)}${
+                      totalBudgetNumber != null
+                        ? ` · 미배분 ${formatWon(Math.max(totalBudgetNumber - allocatedCategoryBudget, 0))}`
+                        : ""
+                    }`}
+              </span>
+            </div>
             <div className="mt-1 divide-y divide-hairline-soft">
               {ledger.categories
                 .filter((category) => category.kind === "expense")
-                .map((category) => (
-                  <div key={category.id} className="flex items-center gap-2 py-1.5">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas-soft text-sm">
-                      {category.emoji}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-body">
-                      {category.name}
-                    </span>
-                    <div className="relative w-28">
-                      <Input
-                        aria-label={`${category.name} 예산`}
-                        value={numberDisplay(categoryAmounts[String(category.id)] ?? "")}
-                        onChange={(event) =>
-                          setCategoryAmounts((prev) => ({
-                            ...prev,
-                            [String(category.id)]: cleanDigits(event.target.value).slice(
-                              0,
-                              10
-                            ),
-                          }))
-                        }
-                        inputMode="numeric"
-                        placeholder="0"
-                        className="pr-6 text-right tabular-nums"
-                      />
-                      <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-muted">
-                        원
-                      </span>
+                .map((category) => {
+                  const spent =
+                    ledger.byCategory.find((row) => row.categoryId === category.id)
+                      ?.amount ?? 0;
+                  const planned = Number(categoryAmounts[String(category.id)] || 0);
+                  const remaining = planned - spent;
+                  const over = planned > 0 && remaining < 0;
+                  const pct = planned > 0 ? Math.min((spent / planned) * 100, 100) : 0;
+
+                  return (
+                    <div key={category.id} className="py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas-soft text-sm">
+                          {category.emoji}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-body">
+                          {category.name}
+                        </span>
+                        <div className="relative w-28">
+                          <Input
+                            aria-label={`${category.name} 예산`}
+                            value={numberDisplay(categoryAmounts[String(category.id)] ?? "")}
+                            onChange={(event) =>
+                              setCategoryAmounts((prev) => ({
+                                ...prev,
+                                [String(category.id)]: cleanDigits(
+                                  event.target.value
+                                ).slice(0, 10),
+                              }))
+                            }
+                            inputMode="numeric"
+                            placeholder="0"
+                            className="pr-6 text-right tabular-nums"
+                          />
+                          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-muted">
+                            원
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1 pl-9 pr-1">
+                        <div className="flex items-center justify-between gap-2 text-[10.5px] tabular-nums">
+                          <span className="text-muted">지출 {formatWon(spent)}</span>
+                          {planned > 0 ? (
+                            <span
+                              className={
+                                over
+                                  ? "text-[color:var(--color-error)]"
+                                  : "text-muted-soft"
+                              }
+                            >
+                              {over
+                                ? `${formatWon(Math.abs(remaining))} 초과`
+                                : `${formatWon(remaining)} 남음`}
+                            </span>
+                          ) : (
+                            <span className="text-muted-soft">예산 미설정</span>
+                          )}
+                        </div>
+                        {planned > 0 && (
+                          <div className="mt-1 h-1 overflow-hidden rounded-full bg-canvas-strong">
+                            <div
+                              className={`h-full rounded-full ${
+                                over ? "bg-[var(--color-error)]" : "bg-primary"
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
             {ledger.budget.totalBudget != null && (
               <p className="mt-1 text-[11px] text-muted-soft">
