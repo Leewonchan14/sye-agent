@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -48,7 +48,7 @@ const ASSET_KIND_OPTIONS: { value: LedgerAssetKind; label: string }[] = [
 const TABS = [
   { id: "budget", label: "예산" },
   { id: "categories", label: "분류" },
-  { id: "assets", label: "자산" },
+  { id: "assets", label: "결제수단" },
 ] as const;
 
 type SettingsTab = (typeof TABS)[number]["id"];
@@ -74,7 +74,9 @@ export const SettingsDialog = ({ open, onOpenChange, ledger }: Props) => (
     <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>예산·설정</DialogTitle>
-        <DialogDescription>예산과 분류, 결제수단을 함께 관리해요.</DialogDescription>
+        <DialogDescription>
+          예산과 분류, 결제수단을 직접 추가·수정할 수 있어요.
+        </DialogDescription>
       </DialogHeader>
       <SettingsBody ledger={ledger} />
     </DialogContent>
@@ -182,6 +184,40 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [categoryEdit, setCategoryEdit] = useState({ name: "", emoji: "" });
+
+  const updateCategory = useMutation({
+    mutationFn: async (input: { id: number; name: string; emoji: string }) => {
+      const res = await fetch("/api/ledger/categories", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-auth-token": token },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+    },
+    onSuccess: () => {
+      toast.success("분류를 수정했어요.");
+      setEditingCategoryId(null);
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const startEditCategory = (category: LedgerMonthPayload["categories"][number]) => {
+    setEditingCategoryId(category.id);
+    setCategoryEdit({ name: category.name, emoji: category.emoji });
+  };
+
+  const saveCategory = () => {
+    if (editingCategoryId == null || !categoryEdit.name.trim()) return;
+    updateCategory.mutate({
+      id: editingCategoryId,
+      name: categoryEdit.name,
+      emoji: categoryEdit.emoji.trim() || "🧾",
+    });
+  };
+
   const [assetDraft, setAssetDraft] = useState<{ name: string; kind: LedgerAssetKind }>({
     name: "",
     kind: "card",
@@ -197,7 +233,7 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
       if (!res.ok) throw new Error(await readError(res));
     },
     onSuccess: () => {
-      toast.success("자산을 추가했어요.");
+      toast.success("결제수단을 추가했어요.");
       setAssetDraft({ name: "", kind: "card" });
       invalidate();
     },
@@ -214,11 +250,48 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
       if (!res.ok) throw new Error(await readError(res));
     },
     onSuccess: () => {
-      toast.success("자산을 삭제했어요.");
+      toast.success("결제수단을 삭제했어요.");
       invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
+  const [assetEdit, setAssetEdit] = useState<{ name: string; kind: LedgerAssetKind }>({
+    name: "",
+    kind: "card",
+  });
+
+  const updateAsset = useMutation({
+    mutationFn: async (input: { id: number; name: string; kind: LedgerAssetKind }) => {
+      const res = await fetch("/api/ledger/assets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-auth-token": token },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+    },
+    onSuccess: () => {
+      toast.success("결제수단을 수정했어요.");
+      setEditingAssetId(null);
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const startEditAsset = (asset: LedgerMonthPayload["assets"][number]) => {
+    setEditingAssetId(asset.id);
+    setAssetEdit({ name: asset.name, kind: asset.kind });
+  };
+
+  const saveAsset = () => {
+    if (editingAssetId == null || !assetEdit.name.trim()) return;
+    updateAsset.mutate({
+      id: editingAssetId,
+      name: assetEdit.name,
+      kind: assetEdit.kind,
+    });
+  };
 
   const addCategory = (kind: LedgerEntryKind) => {
     const draft = categoryDraft[kind];
@@ -429,30 +502,96 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                 </div>
                 <ul className="mt-1 divide-y divide-hairline-soft">
                   {categories.map((category) => (
-                    <li key={category.id} className="flex items-center gap-2 py-1.5">
-                      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas-soft text-sm">
-                        {category.emoji}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-body">
-                        {category.name}
-                      </span>
-                      <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex" />}>
+                    <li key={category.id} className="py-1.5">
+                      {editingCategoryId === category.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            value={categoryEdit.emoji}
+                            onChange={(event) =>
+                              setCategoryEdit((prev) => ({
+                                ...prev,
+                                emoji: event.target.value,
+                              }))
+                            }
+                            aria-label="분류 이모지"
+                            maxLength={2}
+                            className="w-11 text-center"
+                          />
+                          <Input
+                            value={categoryEdit.name}
+                            onChange={(event) =>
+                              setCategoryEdit((prev) => ({
+                                ...prev,
+                                name: event.target.value,
+                              }))
+                            }
+                            aria-label={`${category.name} 이름`}
+                            autoFocus
+                            className="min-w-0 flex-1"
+                          />
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`${category.name} 삭제`}
-                            disabled={isLast || deleteCategory.isPending}
-                            onClick={() => deleteCategory.mutate(category.id)}
+                            aria-label="분류 수정 저장"
+                            disabled={
+                              !categoryEdit.name.trim() || updateCategory.isPending
+                            }
+                            onClick={saveCategory}
                           >
-                            <Trash2 />
+                            <Check />
                           </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {isLast ? "분류는 최소 하나 필요해요" : "분류 삭제"}
-                        </TooltipContent>
-                      </Tooltip>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="분류 수정 취소"
+                            onClick={() => setEditingCategoryId(null)}
+                          >
+                            <X />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas-soft text-sm">
+                            {category.emoji}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[13px] text-body">
+                            {category.name}
+                          </span>
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex" />}>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`${category.name} 수정`}
+                                onClick={() => startEditCategory(category)}
+                              >
+                                <Pencil />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>분류 수정</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex" />}>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`${category.name} 삭제`}
+                                disabled={isLast || deleteCategory.isPending}
+                                onClick={() => deleteCategory.mutate(category.id)}
+                              >
+                                <Trash2 />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {isLast ? "분류는 최소 하나 필요해요" : "분류 삭제"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -507,25 +646,91 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
         <div className="space-y-3">
           <ul className="divide-y divide-hairline-soft">
             {ledger.assets.map((asset) => (
-              <li key={asset.id} className="flex items-center gap-2 py-1.5">
-                <span className="min-w-0 flex-1 truncate text-[13px] text-body">
-                  {asset.name}
-                </span>
-                <Badge variant="secondary">{ASSET_KIND_LABEL[asset.kind]}</Badge>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`${asset.name} 삭제`}
-                  disabled={deleteAsset.isPending}
-                  onClick={() => deleteAsset.mutate(asset.id)}
-                >
-                  <Trash2 />
-                </Button>
+              <li key={asset.id} className="py-1.5">
+                {editingAssetId === asset.id ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Input
+                      value={assetEdit.name}
+                      onChange={(event) =>
+                        setAssetEdit((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      aria-label={`${asset.name} 이름`}
+                      autoFocus
+                      className="min-w-[120px] flex-1"
+                    />
+                    <Select
+                      items={ASSET_KIND_OPTIONS}
+                      value={assetEdit.kind}
+                      onValueChange={(value) => {
+                        if (value === "cash" || value === "bank" || value === "card") {
+                          setAssetEdit((prev) => ({ ...prev, kind: value }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-[96px]" aria-label="결제수단 종류">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASSET_KIND_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="결제수단 수정 저장"
+                      disabled={!assetEdit.name.trim() || updateAsset.isPending}
+                      onClick={saveAsset}
+                    >
+                      <Check />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="결제수단 수정 취소"
+                      onClick={() => setEditingAssetId(null)}
+                    >
+                      <X />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-body">
+                      {asset.name}
+                    </span>
+                    <Badge variant="secondary">{ASSET_KIND_LABEL[asset.kind]}</Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`${asset.name} 수정`}
+                      onClick={() => startEditAsset(asset)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`${asset.name} 삭제`}
+                      disabled={deleteAsset.isPending}
+                      onClick={() => deleteAsset.mutate(asset.id)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                )}
               </li>
             ))}
             {!ledger.assets.length && (
-              <li className="py-4 text-center text-[12px] text-muted">자산이 없어요</li>
+              <li className="py-4 text-center text-[12px] text-muted">
+                등록된 결제수단이 없어요
+              </li>
             )}
           </ul>
 
@@ -535,8 +740,8 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
               onChange={(event) =>
                 setAssetDraft((prev) => ({ ...prev, name: event.target.value }))
               }
-              placeholder="자산 이름"
-              aria-label="자산 이름"
+              placeholder="결제수단 이름"
+              aria-label="결제수단 이름"
               className="min-w-0 flex-1"
             />
             <Select
