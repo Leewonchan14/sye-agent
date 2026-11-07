@@ -1,5 +1,10 @@
 import { kst } from "@/lib/kst";
-import { DEFAULT_PERIOD, formatPeriod, parsePeriod } from "@/lib/monitor/period";
+import {
+  DEFAULT_PERIOD,
+  formatPeriod,
+  parsePeriod,
+  parsePeriodLoose,
+} from "@/lib/monitor/period";
 import type { MonitorRule, MonitorRuleKind } from "@/lib/monitor/types";
 
 export const RULE_KIND_OPTIONS: {
@@ -53,11 +58,26 @@ export const ruleValueError = (rule: Pick<MonitorRule, "kind" | "value">) => {
 
 /**
  * 예전에 문장(text)으로 저장된 "모니터링 기간" 규칙을 시간대(period)로 읽는다.
+ * - 값이 시간대로 읽히면 그대로 옮긴다.
+ * - 기본 "모니터링 기간"(id: window)은 값이 비었거나 못 읽어도 기본 시간대로 연다.
+ *   (문장으로 두면 달력 선택기가 안 나오고, 잘못된 값이면 규칙 저장 전체가 막힌다.)
  * DB를 고치지 않고 읽을 때 바꿔 주므로, 다음에 저장할 때 자연스럽게 옮겨진다.
  */
-export const normalizeRule = (rule: MonitorRule): MonitorRule =>
-  rule.kind === "text" && parsePeriod(rule.value)
-    ? { ...rule, kind: "period", value: formatPeriod(parsePeriod(rule.value)!) }
-    : rule;
+export const normalizeRule = (rule: MonitorRule): MonitorRule => {
+  if (rule.kind === "period") {
+    if (parsePeriod(rule.value)) return rule;
+    const loose = parsePeriodLoose(rule.value);
+    return { ...rule, value: formatPeriod(loose ?? DEFAULT_PERIOD) };
+  }
+  if (rule.kind !== "text") return rule;
+  const strict = parsePeriod(rule.value);
+  if (strict) return { ...rule, kind: "period", value: formatPeriod(strict) };
+  // 자유 문장은 시각이 두 번 나와도 기간이 아닐 수 있어서, 느슨한 해석은 기본 기간 규칙에만 쓴다.
+  if (rule.id === "window") {
+    const loose = parsePeriodLoose(rule.value);
+    return { ...rule, kind: "period", value: formatPeriod(loose ?? DEFAULT_PERIOD) };
+  }
+  return rule;
+};
 
 export const newRuleId = () => `rule-${Date.now().toString(36)}`;

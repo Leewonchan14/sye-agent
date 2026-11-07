@@ -37,7 +37,17 @@ export const GET = async (
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(40).optional(),
-  categories: z.array(monitorCategorySchema).max(12).optional(),
+  categories: z
+    .array(monitorCategorySchema)
+    .min(1, "카테고리는 하나 이상 있어야 해요.")
+    .max(12)
+    .refine((cs) => new Set(cs.map((c) => c.key)).size === cs.length, {
+      message: "카테고리 key가 겹쳐요.",
+    })
+    .refine((cs) => new Set(cs.map((c) => c.name.trim())).size === cs.length, {
+      message: "같은 이름의 카테고리가 있어요.",
+    })
+    .optional(),
   rules: z
     .array(
       monitorRuleSchema.superRefine((rule, ctx) => {

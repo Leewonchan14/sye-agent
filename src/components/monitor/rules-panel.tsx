@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { CategoryEditor } from "@/components/monitor/category-editor";
 import { RuleDialog } from "@/components/monitor/rule-dialog";
 import { RuleValueEditor } from "@/components/monitor/rule-value-editors";
 import { Button } from "@/components/ui/button";
@@ -148,8 +149,24 @@ export const RulesPanel = ({ client, mutations }: Props) => {
     );
   const setValue = (id: string, value: MonitorRule["value"]) =>
     saveRules(rules.map((r) => (r.id === id ? { ...r, value } : r)));
-  const saveCategories = (categories: MonitorCategory[]) =>
-    mutations.updateClient.mutate({ id: client.id, categories });
+  const saveCategories = (
+    categories: MonitorCategory[],
+    message?: string,
+    undo?: MonitorCategory[]
+  ) =>
+    mutations.updateClient.mutate(
+      { id: client.id, categories },
+      {
+        onSuccess: () => {
+          if (!message) return;
+          if (undo)
+            toast.success(message, {
+              action: { label: "되돌리기", onClick: () => saveCategories(undo) },
+            });
+          else toast.success(message);
+        },
+      }
+    );
 
   const openDialog = (rule: MonitorRule | null) =>
     setDialog((d) => ({ open: true, rule, key: d.key + 1 }));
@@ -229,45 +246,7 @@ export const RulesPanel = ({ client, mutations }: Props) => {
         />
       </section>
 
-      <section className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-lg font-medium text-ink">카테고리 목표</h2>
-          <p className="mt-0.5 text-[13px] text-muted">
-            목표보다 적으면 &ldquo;더 찾기&rdquo; 버튼이 나와요. 비워 두면 전수 집계
-            섹션이에요.
-          </p>
-        </div>
-        <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
-          {client.categories.map((c, i) => (
-            <div
-              key={c.key}
-              className="flex items-center justify-between gap-3 border-t border-hairline/60 px-4 py-2.5 first:border-t-0"
-            >
-              <span className="text-sm text-ink">{c.name}</span>
-              <span className="flex items-center gap-2 text-[13px] text-muted">
-                최소
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  defaultValue={c.goal ?? ""}
-                  placeholder="전수"
-                  aria-label={`${c.name} 최소 건수`}
-                  className="h-8 w-20"
-                  onBlur={(e) => {
-                    const goal = e.target.value === "" ? null : Number(e.target.value);
-                    if (goal === c.goal) return;
-                    saveCategories(
-                      client.categories.map((x, j) => (j === i ? { ...x, goal } : x))
-                    );
-                  }}
-                />
-                건
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <CategoryEditor categories={client.categories} onSave={saveCategories} />
 
       <section className="flex flex-col gap-3">
         <div>

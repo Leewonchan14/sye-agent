@@ -88,3 +88,39 @@ export const describeDuration = (minutes: number) => {
   const m = minutes % 60;
   return [h && `${h}시간`, m && `${m}분`].filter(Boolean).join(" ");
 };
+
+/**
+ * 사람이 자유롭게 적은 기간 문장에서 시간대를 최대한 읽어 낸다.
+ * 예: "전일 오전 9시 ~ 당일 오전 9시", "전날 09:00부터 오늘 09:00까지", "09:00~09:00"
+ * 날짜 말이 없으면 시작은 전일, 끝은 당일로 본다.
+ */
+export const parsePeriodLoose = (value: unknown): MonitorPeriod | null => {
+  const strict = parsePeriod(value);
+  if (strict || typeof value !== "string") return strict;
+  const DAY = "(당일|오늘|전일|전날|어제|그제|\\d일\\s*전)?";
+  const TIME = "(오전|오후)?\\s*(\\d{1,2})(?::(\\d{2})|\\s*시(?:\\s*(\\d{1,2})\\s*분)?)";
+  const parts = [...value.matchAll(new RegExp(`${DAY}\\s*${TIME}`, "g"))];
+  if (parts.length < 2) return null;
+  const toDay = (label: string | undefined, fallback: number) => {
+    if (!label) return fallback;
+    if (/당일|오늘/.test(label)) return 0;
+    if (/전일|전날|어제/.test(label)) return -1;
+    if (label === "그제") return -2;
+    return -Number(label.match(/\d/)![0]);
+  };
+  const toTime = (m: RegExpMatchArray) => {
+    let h = Number(m[3]);
+    if (m[2] === "오후" && h < 12) h += 12;
+    if (m[2] === "오전" && h === 12) h = 0;
+    const min = Number(m[4] ?? m[5] ?? 0);
+    return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  };
+  const [a, b] = parts;
+  const period = {
+    startDay: toDay(a[1], -1),
+    startTime: toTime(a),
+    endDay: toDay(b[1], 0),
+    endTime: toTime(b),
+  };
+  return isValidPeriod(period) ? period : null;
+};
