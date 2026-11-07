@@ -1,262 +1,232 @@
 "use client";
 
-import { MessageSquareQuote, Plus, Trash2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Copy,
+  MessageSquareQuote,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { RuleDialog } from "@/components/monitor/rule-dialog";
+import { RuleValueEditor } from "@/components/monitor/rule-value-editors";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { useMonitorMutations } from "@/lib/monitor/queries";
+import { newRuleId, ruleKindLabel } from "@/lib/monitor/rules";
 import type {
   MonitorCategory,
   MonitorClientView,
   MonitorRule,
 } from "@/lib/monitor/types";
-import { cn } from "@/lib/utils";
 
 interface Props {
   client: MonitorClientView;
   mutations: ReturnType<typeof useMonitorMutations>;
 }
 
-const KIND_OPTIONS: { value: MonitorRule["kind"]; label: string }[] = [
-  { value: "toggle", label: "켜고 끄기" },
-  { value: "tags", label: "목록" },
-  { value: "number", label: "숫자" },
-  { value: "text", label: "문장" },
-];
-
-const defaultValue = (kind: MonitorRule["kind"]): MonitorRule["value"] =>
-  kind === "toggle" ? true : kind === "tags" ? [] : kind === "number" ? 0 : "";
-
-const Switch = ({
-  checked,
-  onChange,
-  label,
+const RuleRow = ({
+  rule,
+  index,
+  count,
+  onValue,
+  onEdit,
+  onMove,
+  onDuplicate,
+  onDelete,
 }: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
+  rule: MonitorRule;
+  index: number;
+  count: number;
+  onValue: (value: MonitorRule["value"]) => void;
+  onEdit: () => void;
+  onMove: (delta: number) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    aria-label={label}
-    onClick={() => onChange(!checked)}
-    className={cn(
-      "relative h-[22px] w-[38px] shrink-0 rounded-full bg-canvas-strong transition-colors",
-      checked && "bg-primary"
-    )}
+  <div
+    data-rule-id={rule.id}
+    className="grid items-center gap-3 rounded-xl border border-hairline bg-surface py-3.5 pr-2 pl-4 sm:grid-cols-[minmax(180px,1fr)_auto_auto]"
   >
-    <span
-      className={cn(
-        "absolute top-[3px] left-[3px] size-4 rounded-full bg-surface transition-[left]",
-        checked && "left-[19px]"
-      )}
-    />
-  </button>
-);
-
-const TagsEditor = ({
-  value,
-  onChange,
-  label,
-}: {
-  value: string[];
-  onChange: (v: string[]) => void;
-  label: string;
-}) => {
-  const [draft, setDraft] = useState("");
-  const add = () => {
-    const v = draft.trim();
-    if (v && !value.includes(v)) onChange([...value, v]);
-    setDraft("");
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-      {value.map((tag) => (
-        <span
-          key={tag}
-          className="inline-flex h-7 items-center gap-1 rounded-full bg-canvas-card pr-1 pl-2.5 text-[13px]"
-        >
-          {tag}
-          <button
-            type="button"
-            aria-label={`${tag} 삭제`}
-            onClick={() => onChange(value.filter((t) => t !== tag))}
-            className="grid size-5 place-items-center rounded-full text-muted hover:bg-canvas-strong hover:text-ink"
-          >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-      <Input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            add();
-          }
-        }}
-        onBlur={add}
-        placeholder="추가 후 Enter"
-        aria-label={`${label}에 추가`}
-        className="h-7 w-28 text-[13px]"
+    <div className="flex min-w-0 items-start justify-between gap-2 pr-8 sm:pr-0">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h3 className="text-[15px] font-medium text-ink">{rule.title}</h3>
+          <span className="rounded-full bg-canvas-card px-2 py-0.5 text-[11px] text-muted">
+            {ruleKindLabel(rule.kind)}
+          </span>
+        </div>
+        {rule.quote && (
+          <p className="mt-1 flex items-baseline gap-1.5 text-[13px] text-muted">
+            <MessageSquareQuote className="size-3 shrink-0 translate-y-0.5 text-primary" />
+            <span className="min-w-0 break-words">&ldquo;{rule.quote}&rdquo;</span>
+          </p>
+        )}
+      </div>
+    </div>
+    <div className="flex min-w-0 sm:max-w-[440px] sm:justify-end">
+      <RuleValueEditor
+        key={`${rule.kind}:${JSON.stringify(rule.value)}`}
+        rule={rule}
+        onChange={onValue}
       />
     </div>
-  );
-};
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`${rule.title} 규칙 관리`}
+            className="absolute top-2.5 right-2 text-muted sm:static"
+          />
+        }
+      >
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil /> 수정
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDuplicate}>
+          <Copy /> 복제
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={index === 0} onClick={() => onMove(-1)}>
+          <ArrowUp /> 위로
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={index === count - 1} onClick={() => onMove(1)}>
+          <ArrowDown /> 아래로
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+          <Trash2 /> 삭제
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </div>
+);
 
 export const RulesPanel = ({ client, mutations }: Props) => {
-  const [newTitle, setNewTitle] = useState("");
-  const [newKind, setNewKind] = useState<MonitorRule["kind"]>("toggle");
+  const [dialog, setDialog] = useState<{
+    open: boolean;
+    rule: MonitorRule | null;
+    key: number;
+  }>({ open: false, rule: null, key: 0 });
   const [template, setTemplate] = useState({
     reportTitle: client.reportTitle,
     greeting: client.greeting,
     closing: client.closing,
   });
 
-  const saveRules = (rules: MonitorRule[], message?: string) =>
+  const rules = client.rules;
+  const saveRules = (next: MonitorRule[], message?: string, undo?: MonitorRule[]) =>
     mutations.updateClient.mutate(
-      { id: client.id, rules },
-      { onSuccess: () => message && toast.success(message) }
+      { id: client.id, rules: next },
+      {
+        onSuccess: () => {
+          if (!message) return;
+          if (undo)
+            toast.success(message, {
+              action: { label: "되돌리기", onClick: () => saveRules(undo) },
+            });
+          else toast.success(message);
+        },
+      }
     );
-  const setRule = (id: string, value: MonitorRule["value"]) =>
-    saveRules(client.rules.map((r) => (r.id === id ? { ...r, value } : r)));
+  const setValue = (id: string, value: MonitorRule["value"]) =>
+    saveRules(rules.map((r) => (r.id === id ? { ...r, value } : r)));
   const saveCategories = (categories: MonitorCategory[]) =>
     mutations.updateClient.mutate({ id: client.id, categories });
 
-  const addRule = () => {
-    const title = newTitle.trim();
-    if (!title) return;
-    const id = `rule-${Date.now().toString(36)}`;
+  const openDialog = (rule: MonitorRule | null) =>
+    setDialog((d) => ({ open: true, rule, key: d.key + 1 }));
+  const onSave = (rule: MonitorRule) => {
+    const exists = rules.some((r) => r.id === rule.id);
     saveRules(
-      [
-        ...client.rules,
-        { id, title, quote: "", kind: newKind, value: defaultValue(newKind) },
-      ],
-      "규칙을 추가했어요."
+      exists ? rules.map((r) => (r.id === rule.id ? rule : r)) : [...rules, rule],
+      exists ? "규칙을 고쳤어요." : "규칙을 추가했어요."
     );
-    setNewTitle("");
   };
+  const move = (index: number, delta: number) => {
+    const next = [...rules];
+    const [rule] = next.splice(index, 1);
+    next.splice(index + delta, 0, rule);
+    saveRules(next);
+  };
+  const duplicate = (index: number) => {
+    const source = rules[index];
+    const copy = {
+      ...source,
+      id: newRuleId(),
+      title: `${source.title} (복사본)`.slice(0, 80),
+    };
+    saveRules(
+      [...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)],
+      "규칙을 복제했어요."
+    );
+  };
+  const remove = (rule: MonitorRule) =>
+    saveRules(
+      rules.filter((r) => r.id !== rule.id),
+      `'${rule.title}' 규칙을 지웠어요.`,
+      rules
+    );
 
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-lg font-medium text-ink">수집 규칙</h2>
-          <p className="mt-0.5 text-[13px] text-muted">
-            채팅에서 &ldquo;앞으로는~&rdquo;이라고 했던 지시를 여기서 관리해요. 하치와레는
-            수집 전에 이 목록을 읽어요.
-          </p>
-        </div>
-        {client.rules.map((rule) => (
-          <div
-            key={rule.id}
-            className="grid items-center gap-3 rounded-xl border border-hairline bg-surface px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto]"
-          >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-[15px] font-medium text-ink">{rule.title}</h3>
-                <button
-                  type="button"
-                  aria-label={`${rule.title} 규칙 삭제`}
-                  onClick={() =>
-                    saveRules(
-                      client.rules.filter((r) => r.id !== rule.id),
-                      "규칙을 지웠어요."
-                    )
-                  }
-                  className="text-muted-soft hover:text-error"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-              {rule.quote && (
-                <p className="mt-1 flex items-baseline gap-1.5 text-[13px] text-muted">
-                  <MessageSquareQuote className="size-3 shrink-0 translate-y-0.5 text-primary" />
-                  <span>&ldquo;{rule.quote}&rdquo;</span>
-                </p>
-              )}
-            </div>
-            <div className="flex sm:justify-end">
-              {rule.kind === "toggle" && (
-                <Switch
-                  checked={rule.value === true}
-                  label={rule.title}
-                  onChange={(v) => setRule(rule.id, v)}
-                />
-              )}
-              {rule.kind === "number" && (
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  defaultValue={Number(rule.value) || 0}
-                  aria-label={rule.title}
-                  className="h-8 w-20"
-                  onBlur={(e) => setRule(rule.id, Number(e.target.value) || 0)}
-                />
-              )}
-              {rule.kind === "text" && (
-                <Input
-                  defaultValue={String(rule.value ?? "")}
-                  aria-label={rule.title}
-                  className="h-8 w-full sm:w-56"
-                  onBlur={(e) => setRule(rule.id, e.target.value)}
-                />
-              )}
-              {rule.kind === "tags" && (
-                <TagsEditor
-                  value={Array.isArray(rule.value) ? rule.value : []}
-                  label={rule.title}
-                  onChange={(v) => setRule(rule.id, v)}
-                />
-              )}
-            </div>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-lg font-medium text-ink">수집 규칙</h2>
+            <p className="mt-0.5 text-[13px] text-muted">
+              채팅에서 &ldquo;앞으로는~&rdquo;이라고 했던 지시를 여기서 관리해요.
+              하치와레는 수집 전에 이 목록을 위에서부터 읽어요.
+            </p>
           </div>
-        ))}
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-hairline px-4 py-3">
-          <Input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) addRule();
-            }}
-            placeholder="새 규칙 (예: 보도자료 전재 기사는 대표 3건만)"
-            aria-label="새 규칙 이름"
-            className="h-8 min-w-0 flex-1"
-          />
-          <Select
-            items={KIND_OPTIONS}
-            value={newKind}
-            onValueChange={(v) => setNewKind(v as MonitorRule["kind"])}
-          >
-            <SelectTrigger className="w-[112px]" aria-label="규칙 종류">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {KIND_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" onClick={addRule} disabled={!newTitle.trim()}>
-            <Plus /> 추가
+          <Button variant="outline" onClick={() => openDialog(null)}>
+            <Plus /> 규칙 추가
           </Button>
         </div>
+        {rules.length === 0 && (
+          <div className="rounded-xl border border-dashed border-hairline px-4 py-6 text-center text-[13px] text-muted">
+            아직 규칙이 없어요. 모니터링 기간, 제외 매체처럼 매번 지켜야 할 것을 추가해
+            보세요.
+          </div>
+        )}
+        {rules.map((rule, i) => (
+          <div key={rule.id} className="relative">
+            <RuleRow
+              rule={rule}
+              index={i}
+              count={rules.length}
+              onValue={(value) => setValue(rule.id, value)}
+              onEdit={() => openDialog(rule)}
+              onMove={(delta) => move(i, delta)}
+              onDuplicate={() => duplicate(i)}
+              onDelete={() => remove(rule)}
+            />
+          </div>
+        ))}
+        <RuleDialog
+          key={dialog.key}
+          open={dialog.open}
+          rule={dialog.rule}
+          onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
+          onSave={onSave}
+        />
       </section>
 
       <section className="flex flex-col gap-3">

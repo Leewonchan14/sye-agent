@@ -7,6 +7,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import type {
   MonitorCategory,
   MonitorClientPayload,
+  MonitorClientView,
   MonitorIssuePayload,
   MonitorOverview,
   MonitorRule,
@@ -170,7 +171,28 @@ export const useMonitorMutations = (clientId?: number) => {
       const { id, ...body } = v;
       return api(`/api/monitor/clients/${id}`, { method: "PATCH", body });
     },
-    onError,
+    // 규칙 순서 바꾸기·연속 수정이 이전 값 위에 덮이지 않도록 낙관적으로 갱신한다.
+    onMutate: async (v) => {
+      if (!clientId) return;
+      await qc.cancelQueries({ queryKey: monitorKeys.clientAll(clientId) });
+      const snapshots = qc.getQueriesData<MonitorClientPayload>({
+        queryKey: monitorKeys.clientAll(clientId),
+      });
+      const patch: Partial<MonitorClientView> = { ...v };
+      delete patch.id;
+      snapshots.forEach(([key, data]) => {
+        if (!data) return;
+        qc.setQueryData<MonitorClientPayload>(key, {
+          ...data,
+          client: { ...data.client, ...patch },
+        });
+      });
+      return { snapshots };
+    },
+    onError: (error, _v, ctx) => {
+      ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+      onError(error);
+    },
     onSettled: refreshClient,
   });
 

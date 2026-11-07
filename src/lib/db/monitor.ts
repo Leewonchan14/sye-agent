@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db/db";
 import { kst } from "@/lib/kst";
 import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
+import { normalizeRule } from "@/lib/monitor/rules";
 import type {
   AgentRunInput,
   AgentSnapshotInput,
@@ -136,7 +137,7 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   slug: row.slug,
   name: row.name,
   categories: row.categories as MonitorCategory[],
-  rules: row.rules as MonitorRule[],
+  rules: (row.rules as MonitorRule[]).map(normalizeRule),
   reportTitle: row.reportTitle,
   greeting: row.greeting,
   closing: row.closing,

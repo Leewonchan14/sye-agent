@@ -19,10 +19,20 @@ export const monitorRuleSchema = z.object({
   title: z.string().min(1).max(80),
   /** 이 규칙이 나온 채팅 원문 */
   quote: z.string().max(400).default(""),
-  kind: z.enum(["toggle", "number", "tags", "text"]),
-  value: z.union([z.boolean(), z.number(), z.array(z.string()), z.string()]),
+  /**
+   * toggle 켜고 끄기 · number 숫자 · tags 목록 · text 문장
+   * period 수집 시간대("전일 09:00 ~ 당일 09:00") · date 날짜("2026-11-07")
+   */
+  kind: z.enum(["toggle", "number", "tags", "text", "period", "date"]),
+  value: z.union([
+    z.boolean(),
+    z.number(),
+    z.array(z.string().max(80)).max(60),
+    z.string().max(400),
+  ]),
 });
 export type MonitorRule = z.infer<typeof monitorRuleSchema>;
+export type MonitorRuleKind = MonitorRule["kind"];
 
 export interface MonitorRunStats {
   sources?: { name: string; count: number }[];
