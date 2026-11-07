@@ -1,0 +1,134 @@
+"use client";
+
+import { Check, Copy } from "lucide-react";
+import { useMemo, useRef } from "react";
+import { toast } from "sonner";
+import useLocalStorageState from "use-local-storage-state";
+
+import { Button } from "@/components/ui/button";
+import { kst } from "@/lib/kst";
+import type { useMonitorMutations } from "@/lib/monitor/queries";
+import { buildMonitorReport, type ReportFormat } from "@/lib/monitor/report";
+import type {
+  MonitorClientView,
+  MonitorItemView,
+  MonitorRunView,
+} from "@/lib/monitor/types";
+import { cn } from "@/lib/utils";
+
+interface Props {
+  client: MonitorClientView;
+  run: MonitorRunView;
+  items: MonitorItemView[];
+  mutations: ReturnType<typeof useMonitorMutations>;
+}
+
+const FORMATS: { id: ReportFormat; label: string }[] = [
+  { id: "email", label: "메일 본문" },
+  { id: "plain", label: "리포트만" },
+];
+
+export const ReportPanel = ({ client, run, items, mutations }: Props) => {
+  const [format, setFormat] = useLocalStorageState<ReportFormat>("monitor.reportFormat", {
+    defaultValue: "email",
+  });
+  const preRef = useRef<HTMLPreElement>(null);
+  const text = useMemo(
+    () => buildMonitorReport({ client, run, items, format }),
+    [client, run, items, format]
+  );
+
+  const leads = items.filter(
+    (i) => i.category && i.included && (i.isLead || !i.dupGroup)
+  );
+  const missing = leads.filter((i) => !i.reporter || !i.publishedAt).length;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("리포트를 복사했어요. 다음 수집부터 이 기사들은 자동으로 빠져요.");
+    } catch {
+      const range = document.createRange();
+      if (preRef.current) range.selectNodeContents(preRef.current);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      toast("텍스트를 선택해 뒀어요. 복사 단축키를 눌러 주세요.");
+    }
+    mutations.markReported.mutate({ runId: run.id, reportText: text });
+  };
+
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="min-w-0 rounded-xl border border-hairline bg-surface px-5 py-6 sm:px-8">
+        <pre
+          ref={preRef}
+          className="font-sans text-[14px] leading-7 [overflow-wrap:anywhere] break-keep whitespace-pre-wrap text-ink"
+        >
+          {text}
+        </pre>
+      </div>
+
+      <aside className="flex flex-col gap-4 rounded-xl border border-hairline bg-canvas-soft p-4 lg:sticky lg:top-4">
+        <h3 className="text-sm font-medium text-ink">보내기 전에</h3>
+        <div
+          className="inline-flex rounded-full bg-canvas-card p-1"
+          role="radiogroup"
+          aria-label="리포트 형식"
+        >
+          {FORMATS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="radio"
+              aria-checked={format === f.id}
+              onClick={() => setFormat(f.id)}
+              className={cn(
+                "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-body",
+                format === f.id && "bg-surface text-ink ring-1 ring-hairline"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[13px]">
+          <dt className="text-muted">포함 기사</dt>
+          <dd className="text-right font-mono tabular-nums">{leads.length}건</dd>
+          {client.categories
+            .filter((c) => c.goal !== null)
+            .map((c) => (
+              <div key={c.key} className="contents">
+                <dt className="truncate text-muted">{c.name}</dt>
+                <dd className="text-right font-mono tabular-nums">
+                  {leads.filter((i) => i.category === c.key).length} / {c.goal}
+                </dd>
+              </div>
+            ))}
+          <dt className="text-muted">기자·시각 누락</dt>
+          <dd
+            className={cn(
+              "text-right font-mono text-success tabular-nums",
+              missing > 0 && "text-warning"
+            )}
+          >
+            {missing}건
+          </dd>
+        </dl>
+        <Button onClick={copy} disabled={!leads.length}>
+          <Copy /> 리포트 복사
+        </Button>
+        {run.reportedAt ? (
+          <p className="flex items-center gap-1.5 text-[12px] text-success">
+            <Check className="size-3.5" />
+            {kst(run.reportedAt).format("M월 D일 HH:mm")}에 보고 완료
+          </p>
+        ) : (
+          <p className="text-[12px] text-muted">
+            복사하면 보고한 것으로 기록되고, 다음 수집 때 같은 기사가 빠져요.
+          </p>
+        )}
+      </aside>
+    </div>
+  );
+};

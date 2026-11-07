@@ -106,6 +106,20 @@
       "when": 1793603019066,
       "tag": "0015_ledger_category_icons",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794038609414,
+      "tag": "0016_nervous_santa_claus",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794039162183,
+      "tag": "0017_mushy_microbe",
+      "breakpoints": true
     }
   ]
 }

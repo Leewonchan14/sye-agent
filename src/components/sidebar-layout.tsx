@@ -19,7 +19,7 @@ interface Props {
   /** Highlight this session in the sidebar. Empty string for search page. */
   activeSessionId?: string;
   /** Highlight a non-chat nav item in the sidebar. */
-  activeNav?: "ledger";
+  activeNav?: "ledger" | "monitor";
   /** Custom loading state */
   loading?: React.ReactNode;
 }

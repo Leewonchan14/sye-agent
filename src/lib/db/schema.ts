@@ -206,3 +206,154 @@ export const ledgerBudgets = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.month, t.categoryId] }) })
 );
+
+/* ───────────────────────── 언론 모니터링 대시보드 ───────────────────────── */
+
+/**
+ * 모니터링 고객사(예: 홍콩관광청). 카테고리·규칙·리포트 서식을 고객사마다 들고 있고,
+ * Hermes 모니터링 스킬은 수집 전에 이 행을 읽어 규칙을 적용한다.
+ */
+export const monitorClients = pgTable(
+  "monitor_clients",
+  {
+    id: serial("id").primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    /** [{ key, name, goal, subs? }] — 리포트 섹션 순서 그대로 */
+    categories: jsonb("categories").notNull().default([]),
+    /** [{ id, title, quote, kind, value }] — 채팅의 "앞으로는~" 지시를 구조화한 규칙 */
+    rules: jsonb("rules").notNull().default([]),
+    /** 리포트 제목 서식. `{date}` 자리에 YYYY.MM.DD가 들어간다. */
+    reportTitle: text("report_title").notNull().default(""),
+    greeting: text("greeting").notNull().default(""),
+    closing: text("closing").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ slugUniq: uniqueIndex("monitor_clients_slug_uniq").on(t.slug) })
+);
+
+/** 한 번의 수집(보통 하루치). 리포트를 복사하면 reportedAt이 찍혀 다음 수집의 중복 기준이 된다. */
+export const monitorRuns = pgTable(
+  "monitor_runs",
+  {
+    id: serial("id").primaryKey(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => monitorClients.id, { onDelete: "cascade" }),
+    since: timestamp("since", { withTimezone: true }).notNull(),
+    until: timestamp("until", { withTimezone: true }).notNull(),
+    /** { sources: [{ name, count }], blocked: string[], durationSec, note } */
+    stats: jsonb("stats").notNull().default({}),
+    reportText: text("report_text"),
+    reportedAt: timestamp("reported_at", { withTimezone: true }),
+    /** "더 찾기"로 돌고 있는 Hermes 런 — 결과가 들어오면 비운다. */
+    pendingHermesRunId: text("pending_hermes_run_id"),
+    pendingRequest: text("pending_request"),
+    pendingSince: timestamp("pending_since", { withTimezone: true }),
+    /** "더 찾기" 콜백용 일회성 토큰의 SHA-256 — Hermes 쪽에 고정 키를 두지 않아도 결과를 받을 수 있다. */
+    callbackTokenHash: text("callback_token_hash"),
+    callbackTokenExpiresAt: timestamp("callback_token_expires_at", {
+      withTimezone: true,
+    }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ clientIdx: index("monitor_runs_client_idx").on(t.clientId, t.until) })
+);
+
+/** 기사 원본 — URL 하나당 한 행. 여러 런에 걸쳐 재사용된다. */
+export const monitorArticles = pgTable(
+  "monitor_articles",
+  {
+    id: serial("id").primaryKey(),
+    url: text("url").notNull(),
+    naverUrl: text("naver_url"),
+    media: text("media").notNull(),
+    title: text("title").notNull(),
+    reporter: text("reporter"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    summary: text("summary"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ urlUniq: uniqueIndex("monitor_articles_url_uniq").on(t.url) })
+);
+
+/** 런 안에서의 기사 판정(AI)과 선별(사람). category가 null이면 제외된 후보다. */
+export const monitorItems = pgTable(
+  "monitor_items",
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => monitorRuns.id, { onDelete: "cascade" }),
+    articleId: integer("article_id")
+      .notNull()
+      .references(() => monitorArticles.id, { onDelete: "cascade" }),
+    category: text("category"),
+    subcategory: text("subcategory"),
+    score: integer("score").notNull().default(0),
+    reason: text("reason").notNull().default(""),
+    excludedReason: text("excluded_reason"),
+    excludedRule: text("excluded_rule"),
+    included: boolean("included").notNull().default(true),
+    /** 같은 보도자료 묶음 키. 대표 기사만 isLead=true */
+    dupGroup: text("dup_group"),
+    isLead: boolean("is_lead").notNull().default(true),
+    /** dup | blocked | reported | new */
+    flags: jsonb("flags").$type<string[]>().notNull().default([]),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    runIdx: index("monitor_items_run_idx").on(t.runId),
+    runArticleUniq: uniqueIndex("monitor_items_run_article_uniq").on(
+      t.runId,
+      t.articleId
+    ),
+  })
+);
+
+/** 위기·이슈 트래커(예: 모델 논란). 브랜드 언급을 감시하고 보고 시점마다 스냅샷을 쌓는다. */
+export const monitorIssues = pgTable("monitor_issues", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").references(() => monitorClients.id, {
+    onDelete: "set null",
+  }),
+  title: text("title").notNull(),
+  keywords: jsonb("keywords").$type<string[]>().notNull().default([]),
+  brandTerms: jsonb("brand_terms").$type<string[]>().notNull().default([]),
+  /** [{ at, text, key }] 주요 흐름 */
+  events: jsonb("events").notNull().default([]),
+  isActive: boolean("is_active").notNull().default(true),
+  pendingHermesRunId: text("pending_hermes_run_id"),
+  pendingSince: timestamp("pending_since", { withTimezone: true }),
+  callbackTokenHash: text("callback_token_hash"),
+  callbackTokenExpiresAt: timestamp("callback_token_expires_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const monitorIssueSnapshots = pgTable(
+  "monitor_issue_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => monitorIssues.id, { onDelete: "cascade" }),
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    /** 차트 라벨 (예: "11/6 15시") */
+    label: text("label").notNull(),
+    /** 직전 스냅샷 이후 추가된 기사 수 */
+    added: integer("added").notNull(),
+    mediaCount: integer("media_count"),
+    brandMentions: integer("brand_mentions").notNull().default(0),
+    /** { media, time, title, url } */
+    lastArticle: jsonb("last_article"),
+    reportText: text("report_text"),
+    /** 정기 보고(15시 등)인지, 중간 확인인지 */
+    isReport: boolean("is_report").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ issueIdx: index("monitor_issue_snapshots_issue_idx").on(t.issueId, t.at) })
+);
