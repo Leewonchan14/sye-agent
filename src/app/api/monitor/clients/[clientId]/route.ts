@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { getMonitorClientPayload, updateMonitorClient } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId, readJson } from "@/lib/monitor/api";
 import { reconcileRunPending } from "@/lib/monitor/hermes";
+import { ruleValueError } from "@/lib/monitor/rules";
 import { monitorCategorySchema, monitorRuleSchema } from "@/lib/monitor/types";
 
 export const runtime = "nodejs";
@@ -37,7 +38,18 @@ export const GET = async (
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(40).optional(),
   categories: z.array(monitorCategorySchema).max(12).optional(),
-  rules: z.array(monitorRuleSchema).max(40).optional(),
+  rules: z
+    .array(
+      monitorRuleSchema.superRefine((rule, ctx) => {
+        const error = ruleValueError(rule);
+        if (error) ctx.addIssue({ code: "custom", message: `${rule.title}: ${error}` });
+      })
+    )
+    .max(40)
+    .refine((rules) => new Set(rules.map((r) => r.id)).size === rules.length, {
+      message: "규칙 id가 겹쳐요.",
+    })
+    .optional(),
   reportTitle: z.string().max(200).optional(),
   greeting: z.string().max(1000).optional(),
   closing: z.string().max(500).optional(),

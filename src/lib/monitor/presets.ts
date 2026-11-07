@@ -34,7 +34,7 @@ export const MONITOR_CLIENT_PRESETS: MonitorClientPreset[] = [
         id: "window",
         title: "모니터링 기간",
         quote: "전날 오전 9시 이후 게재 기사부터 당일 오전 9시까지 게재된 기사",
-        kind: "text",
+        kind: "period",
         value: "전일 09:00 ~ 당일 09:00",
       },
       {
@@ -102,7 +102,7 @@ export const MONITOR_CLIENT_PRESETS: MonitorClientPreset[] = [
         id: "window",
         title: "모니터링 기간",
         quote: "전일 오전 10시부터 지금까지 게재된 기사",
-        kind: "text",
+        kind: "period",
         value: "전일 10:00 ~ 당일 10:00",
       },
       {
