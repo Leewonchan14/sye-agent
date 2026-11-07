@@ -299,7 +299,9 @@ const GoalMeter = ({ count, goal }: { count: number; goal: number | null }) => {
 };
 
 export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Props) => {
-  const excluded = items.filter((i) => !i.category);
+  // 카테고리를 지우면 그 안의 기사는 제외 후보로 보여서 다시 분류할 수 있게 한다.
+  const categoryKeys = new Set(client.categories.map((c) => c.key));
+  const excluded = items.filter((i) => !i.category || !categoryKeys.has(i.category));
   const pending = Boolean(run.pendingSince);
 
   return (
@@ -369,6 +371,15 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
             <Pill className="bg-canvas-card text-muted">
               규칙으로 제외 {excluded.filter((x) => x.excludedRule).length}
             </Pill>
+            {excluded.some((x) => x.category && !categoryKeys.has(x.category)) && (
+              <Pill className="bg-canvas-card text-muted">
+                지운 카테고리{" "}
+                {
+                  excluded.filter((x) => x.category && !categoryKeys.has(x.category))
+                    .length
+                }
+              </Pill>
+            )}
           </summary>
           <div className="mt-3 overflow-hidden rounded-xl border border-hairline bg-surface">
             {excluded.map((x) => (
@@ -390,10 +401,14 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
                     {x.excludedRule && (
                       <Pill className="bg-canvas-card">{x.excludedRule}</Pill>
                     )}
-                    <span className="inline-flex items-center gap-1">
-                      <X className="size-3" />
-                      {x.excludedReason}
-                    </span>
+                    {x.category && !categoryKeys.has(x.category) ? (
+                      <Pill className="bg-canvas-card">지운 카테고리</Pill>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <X className="size-3" />
+                        {x.excludedReason}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <Select
