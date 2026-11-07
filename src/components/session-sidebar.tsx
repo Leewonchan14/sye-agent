@@ -7,6 +7,7 @@ import {
   FileText,
   LogOut,
   MessageCircle,
+  Newspaper,
   PanelLeft,
   Plus,
   Search,
@@ -30,7 +31,7 @@ interface Session {
 
 interface Props {
   activeSessionId: string;
-  activeNav?: "ledger";
+  activeNav?: "ledger" | "monitor";
   onSelect: (id: string) => void;
   onNew: () => void;
   isOpen: boolean;
@@ -132,6 +133,14 @@ export const SessionSidebar = ({
             >
               <Wallet className="h-4 w-4" />
               가계부
+            </Button>
+            <Button
+              variant="ghost"
+              className={`w-full justify-start ${activeNav === "monitor" && "bg-canvas-card text-ink"}`}
+              onClick={() => router.push("/monitor")}
+            >
+              <Newspaper className="h-4 w-4" />
+              언론 모니터링
             </Button>
             <Button
               variant="ghost"
@@ -251,6 +260,17 @@ export const SessionSidebar = ({
             className={activeNav === "ledger" ? "bg-canvas-card text-ink" : ""}
           >
             <Wallet className="h-5 w-5" />
+          </Button>
+
+          {/* Monitor */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            onClick={() => router.push("/monitor")}
+            aria-label="언론 모니터링"
+            className={activeNav === "monitor" ? "bg-canvas-card text-ink" : ""}
+          >
+            <Newspaper className="h-5 w-5" />
           </Button>
 
           {/* Spacer */}

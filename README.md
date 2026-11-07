@@ -31,16 +31,17 @@ npm run dev
 
 ## 환경 변수
 
-| 변수                    | 필수    | 설명                                                                                                                                                                                     |
-| ----------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SITE_PASSWORD`         | ✅      | 웹사이트 접속 비밀번호 (예: 0411)                                                                                                                                                        |
-| `DATABASE_URL`          | ✅      | Neon DB 연결 문자열                                                                                                                                                                      |
-| `HERMES_API_URL`        | ✅      | Hermes API 서버 base URL (프로필 프리픽스 포함). 배포: `http(s)://<hermes-host>:8642/p/hachi`, 로컬: SSH 터널 후 `http://127.0.0.1:8642/p/hachi`                                         |
-| `HERMES_API_KEY`        | ✅      | `~/.hermes/profiles/hachi/.env`의 `API_SERVER_KEY` (게이트웨이 default 프로필 키와 다른 값)                                                                                              |
-| `HERMES_SESSION_PREFIX` | -       | Hermes 세션 ID 프리픽스 (기본 `sye-`)                                                                                                                                                    |
-| `HERMES_SESSION_KEY`    | -       | 장기 기억 스코프 헤더 `X-Hermes-Session-Key` (기본 `sye-agent`)                                                                                                                          |
-| `HERMES_SYSTEM_MESSAGE` | -       | `system_message` 끝에 덧붙일 문구 (선택)                                                                                                                                                 |
-| `NEXT_PUBLIC_SITE_URL`  | 배포 시 | OG 태그 이미지 URL에 사용되는 사이트 도메인 (예: `https://<프로젝트>.vercel.app`). 설정하지 않으면 Vercel 배포 시 `VERCEL_URL`을, 로컬 개발 시 `localhost:3000`을 자동으로 사용합니다.   |
+| 변수                    | 필수     | 설명                                                                                                                                                                                   |
+| ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SITE_PASSWORD`         | ✅       | 웹사이트 접속 비밀번호 (예: 0411)                                                                                                                                                      |
+| `DATABASE_URL`          | ✅       | Neon DB 연결 문자열                                                                                                                                                                    |
+| `HERMES_API_URL`        | ✅       | Hermes API 서버 base URL (프로필 프리픽스 포함). 배포: `http(s)://<hermes-host>:8642/p/hachi`, 로컬: SSH 터널 후 `http://127.0.0.1:8642/p/hachi`                                       |
+| `HERMES_API_KEY`        | ✅       | `~/.hermes/profiles/hachi/.env`의 `API_SERVER_KEY` (게이트웨이 default 프로필 키와 다른 값)                                                                                            |
+| `HERMES_SESSION_PREFIX` | -        | Hermes 세션 ID 프리픽스 (기본 `sye-`)                                                                                                                                                  |
+| `HERMES_SESSION_KEY`    | -        | 장기 기억 스코프 헤더 `X-Hermes-Session-Key` (기본 `sye-agent`)                                                                                                                        |
+| `HERMES_SYSTEM_MESSAGE` | -        | `system_message` 끝에 덧붙일 문구 (선택)                                                                                                                                               |
+| `MONITOR_INGEST_KEY`    | 모니터링 | Hermes가 `/api/monitor/agent/*`로 수집 결과를 보낼 때 쓰는 키(`x-monitor-key`). Hermes 쪽에도 같은 값을 넣는다. 형식은 `docs/monitor-agent.md`                                         |
+| `NEXT_PUBLIC_SITE_URL`  | 배포 시  | OG 태그 이미지 URL에 사용되는 사이트 도메인 (예: `https://<프로젝트>.vercel.app`). 설정하지 않으면 Vercel 배포 시 `VERCEL_URL`을, 로컬 개발 시 `localhost:3000`을 자동으로 사용합니다. |
 
 ### .env 파일 예시
 
@@ -225,12 +226,12 @@ systemctl --user restart hermes-gateway.service
 트랜스크립트에만 있어서 카드가 턴이 끝날 때까지 비어 보인다. 아래 패치를 적용하면 도구가 끝나는 즉시
 `tool.result` 이벤트(`content`/`truncated`/`result_chars`, `tool_call_id` 포함)가 도착해 카드가 바로 채워진다.
 
-| 파일                                   | 추가한 것                                                                                          |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `gateway/platforms/_tool_stream_payload.py` | 결과 redaction·상한(preview 6,000자 / 전문 50,000자) 공용 헬퍼 (신규)                            |
-| `gateway/platforms/api_server.py`      | 세션 스트림 `tool.completed`에 `result_chars`/`result_truncated` + `tool.result` 프레임            |
-| `gateway/platforms/api_server_runs.py` | `/v1/runs` 스트림에 같은 필드 + `tool.result` 프레임                                               |
-| `agent/tool_executor.py`               | `tool.completed` 콜백에 `tool_call_id` 전달(동시 실행되는 같은 이름 도구도 카드가 섞이지 않음)      |
+| 파일                                        | 추가한 것                                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `gateway/platforms/_tool_stream_payload.py` | 결과 redaction·상한(preview 6,000자 / 전문 50,000자) 공용 헬퍼 (신규)                          |
+| `gateway/platforms/api_server.py`           | 세션 스트림 `tool.completed`에 `result_chars`/`result_truncated` + `tool.result` 프레임        |
+| `gateway/platforms/api_server_runs.py`      | `/v1/runs` 스트림에 같은 필드 + `tool.result` 프레임                                           |
+| `agent/tool_executor.py`                    | `tool.completed` 콜백에 `tool_call_id` 전달(동시 실행되는 같은 이름 도구도 카드가 섞이지 않음) |
 
 ```bash
 # 재적용 (hermes update로 패치가 사라졌을 때) — 순서 중요

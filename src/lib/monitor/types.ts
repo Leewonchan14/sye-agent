@@ -1,0 +1,224 @@
+import { z } from "zod";
+
+/**
+ * 모니터링 대시보드에서 클라이언트·서버·Hermes가 함께 쓰는 타입과 검증 스키마.
+ * DB 모듈을 import하지 않으므로 클라이언트 컴포넌트에서도 안전하게 쓸 수 있다.
+ */
+
+export const monitorCategorySchema = z.object({
+  key: z.string().min(1).max(40),
+  name: z.string().min(1).max(60),
+  /** 최소 건수. null이면 "전수 집계" 섹션(자사 보도 등) */
+  goal: z.number().int().min(0).max(100).nullable(),
+  subs: z.array(z.string().min(1).max(40)).max(12).optional(),
+});
+export type MonitorCategory = z.infer<typeof monitorCategorySchema>;
+
+export const monitorRuleSchema = z.object({
+  id: z.string().min(1).max(40),
+  title: z.string().min(1).max(80),
+  /** 이 규칙이 나온 채팅 원문 */
+  quote: z.string().max(400).default(""),
+  kind: z.enum(["toggle", "number", "tags", "text"]),
+  value: z.union([z.boolean(), z.number(), z.array(z.string()), z.string()]),
+});
+export type MonitorRule = z.infer<typeof monitorRuleSchema>;
+
+export interface MonitorRunStats {
+  sources?: { name: string; count: number }[];
+  blocked?: string[];
+  durationSec?: number;
+  note?: string;
+}
+
+export interface MonitorClientSummary {
+  id: number;
+  slug: string;
+  name: string;
+  latestRun: {
+    id: number;
+    until: string;
+    includedCount: number;
+    reportedAt: string | null;
+  } | null;
+}
+
+export interface MonitorIssueSummary {
+  id: number;
+  title: string;
+  clientName: string | null;
+  isActive: boolean;
+  totalAdded: number;
+  brandMentions: number;
+}
+
+export interface MonitorOverview {
+  clients: MonitorClientSummary[];
+  issues: MonitorIssueSummary[];
+}
+
+export interface MonitorClientView {
+  id: number;
+  slug: string;
+  name: string;
+  categories: MonitorCategory[];
+  rules: MonitorRule[];
+  reportTitle: string;
+  greeting: string;
+  closing: string;
+}
+
+export interface MonitorItemView {
+  id: number;
+  articleId: number;
+  category: string | null;
+  subcategory: string | null;
+  score: number;
+  reason: string;
+  excludedReason: string | null;
+  excludedRule: string | null;
+  included: boolean;
+  dupGroup: string | null;
+  isLead: boolean;
+  flags: string[];
+  url: string;
+  naverUrl: string | null;
+  media: string;
+  title: string;
+  reporter: string | null;
+  publishedAt: string | null;
+  summary: string | null;
+}
+
+export interface MonitorRunView {
+  id: number;
+  since: string;
+  until: string;
+  stats: MonitorRunStats;
+  reportText: string | null;
+  reportedAt: string | null;
+  pendingRequest: string | null;
+  pendingSince: string | null;
+  lastError: string | null;
+  createdAt: string | null;
+}
+
+export interface MonitorClientPayload {
+  client: MonitorClientView;
+  run: MonitorRunView | null;
+  items: MonitorItemView[];
+  /** 최근 런 목록 (기간 선택용) */
+  runs: { id: number; since: string; until: string; reportedAt: string | null }[];
+}
+
+export interface MonitorIssueEvent {
+  at: string;
+  text: string;
+  key?: boolean;
+}
+
+export interface MonitorIssueSnapshotView {
+  id: number;
+  at: string;
+  label: string;
+  added: number;
+  mediaCount: number | null;
+  brandMentions: number;
+  lastArticle: { media?: string; time?: string; title?: string; url?: string } | null;
+  reportText: string | null;
+  isReport: boolean;
+}
+
+export interface MonitorIssuePayload {
+  issue: {
+    id: number;
+    title: string;
+    clientId: number | null;
+    clientName: string | null;
+    keywords: string[];
+    brandTerms: string[];
+    events: MonitorIssueEvent[];
+    isActive: boolean;
+    pendingSince: string | null;
+    lastError: string | null;
+  };
+  snapshots: MonitorIssueSnapshotView[];
+}
+
+/* ───────────── Hermes → 앱 수집 결과 (POST /api/monitor/agent/runs) ───────────── */
+
+export const agentItemSchema = z.object({
+  url: z.string().url().max(2000),
+  naverUrl: z.string().url().max(2000).nullish(),
+  media: z.string().min(1).max(80),
+  title: z.string().min(1).max(400),
+  reporter: z.string().max(80).nullish(),
+  /** ISO 8601 (오프셋 포함 권장, 예: 2026-11-05T16:23:00+09:00) */
+  publishedAt: z.string().max(40).nullish(),
+  summary: z.string().max(2000).nullish(),
+  /** 카테고리 key. 제외한 후보는 null + excludedReason */
+  category: z.string().max(40).nullish(),
+  subcategory: z.string().max(40).nullish(),
+  score: z.number().int().min(0).max(100).default(50),
+  reason: z.string().max(400).default(""),
+  excludedReason: z.string().max(200).nullish(),
+  excludedRule: z.string().max(80).nullish(),
+  dupGroup: z.string().max(80).nullish(),
+  isLead: z.boolean().default(true),
+  blocked: z.boolean().default(false),
+});
+export type AgentItem = z.infer<typeof agentItemSchema>;
+
+export const agentRunSchema = z
+  .object({
+    /** 새 런을 만들 때 */
+    client: z.string().min(1).max(40).optional(),
+    since: z.string().max(40).optional(),
+    until: z.string().max(40).optional(),
+    /** "더 찾기" 결과를 기존 런에 붙일 때 */
+    runId: z.number().int().positive().optional(),
+    stats: z
+      .object({
+        sources: z.array(z.object({ name: z.string(), count: z.number() })).optional(),
+        blocked: z.array(z.string()).optional(),
+        durationSec: z.number().optional(),
+        note: z.string().max(400).optional(),
+      })
+      .optional(),
+    items: z.array(agentItemSchema).max(500),
+  })
+  .refine((v) => v.runId || (v.client && v.since && v.until), {
+    message: "runId 또는 client·since·until 중 하나는 있어야 해요.",
+  });
+export type AgentRunInput = z.infer<typeof agentRunSchema>;
+
+export const agentSnapshotSchema = z.object({
+  /** 집계 시각. 비우면 서버가 받은 시각. 대시보드 버튼으로 시작한 집계는 항상 서버 시각을 쓴다. */
+  at: z.string().max(40).optional(),
+  label: z.string().min(1).max(40),
+  added: z.number().int().min(0),
+  mediaCount: z.number().int().min(0).nullish(),
+  brandMentions: z.number().int().min(0).default(0),
+  lastArticle: z
+    .object({
+      media: z.string().optional(),
+      time: z.string().optional(),
+      title: z.string().optional(),
+      url: z.string().optional(),
+    })
+    .nullish(),
+  reportText: z.string().max(8000).nullish(),
+  isReport: z.boolean().default(true),
+  /** 새로 알게 된 주요 흐름 — 기존 events 뒤에 붙는다 */
+  events: z
+    .array(
+      z.object({
+        at: z.string().max(40),
+        text: z.string().max(300),
+        key: z.boolean().optional(),
+      })
+    )
+    .max(20)
+    .optional(),
+});
+export type AgentSnapshotInput = z.infer<typeof agentSnapshotSchema>;
