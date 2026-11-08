@@ -77,6 +77,8 @@ export interface MonitorClientView {
   greeting: string;
   closing: string;
   autoCollect: boolean;
+  /** 수집 시작 시각(HH:mm). null이면 모니터링 기간이 끝나는 시각 */
+  collectTime: string | null;
 }
 
 export interface MonitorItemView {
@@ -130,6 +132,8 @@ export interface MonitorClientPayload {
   items: MonitorItemView[];
   /** 최근 런 목록 (최신순) */
   runs: MonitorRunSummary[];
+  /** 오늘 자동 수집을 이미 시작했는지 */
+  collectedToday: boolean;
 }
 
 export interface MonitorIssueEvent {
@@ -160,6 +164,8 @@ export interface MonitorIssuePayload {
     brandTerms: string[];
     events: MonitorIssueEvent[];
     isActive: boolean;
+    collectStart: string;
+    collectGapMinutes: number;
     pendingSince: string | null;
     lastError: string | null;
   };

@@ -229,6 +229,8 @@ export const monitorClients = pgTable(
     closing: text("closing").notNull().default(""),
     /** 매일 정해진 시각에 하치와레가 자동으로 수집할지 */
     autoCollect: boolean("auto_collect").notNull().default(true),
+    /** 수집 시작 시각(HH:mm, KST). 비우면 모니터링 기간이 끝나는 시각 */
+    collectTime: text("collect_time"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -341,6 +343,12 @@ export const monitorIssues = pgTable("monitor_issues", {
   callbackTokenHash: text("callback_token_hash"),
   callbackTokenExpiresAt: timestamp("callback_token_expires_at", { withTimezone: true }),
   lastError: text("last_error"),
+  /** 자동 집계를 시작하는 시각(HH:mm, KST) */
+  collectStart: text("collect_start").notNull().default("09:00"),
+  /** 자동 집계 간격(분). 시작 시각부터 그날 끝까지 이 간격으로 돈다. */
+  collectGapMinutes: integer("collect_gap_minutes").notNull().default(360),
+  /** 마지막으로 시작한 자동 집계 시각 키(YYYY-MM-DD-HH:mm, KST). 같은 시각에 두 번 돌지 않게 막는다. */
+  lastAutoSlot: text("last_auto_slot"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

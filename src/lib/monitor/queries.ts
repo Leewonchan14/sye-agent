@@ -175,6 +175,7 @@ export const useMonitorMutations = (clientId?: number) => {
       greeting?: string;
       closing?: string;
       autoCollect?: boolean;
+      collectTime?: string | null;
     }) => {
       const { id, ...body } = v;
       return api(`/api/monitor/clients/${id}`, { method: "PATCH", body });
@@ -233,6 +234,8 @@ export const useIssueMutations = (issueId: number) => {
       keywords?: string[];
       brandTerms?: string[];
       isActive?: boolean;
+      collectStart?: string;
+      collectGapMinutes?: number;
     }) => api(`/api/monitor/issues/${issueId}`, { method: "PATCH", body }),
     onError,
     onSettled: refresh,
