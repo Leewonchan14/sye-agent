@@ -601,7 +601,12 @@ export const LedgerPage = () => {
               )}
 
               {tab === "stats" && (
-                <StatsView categories={ledger.categories} onEdit={openEdit} />
+                <StatsView
+                  categories={ledger.categories}
+                  month={month}
+                  onMonthChange={setMonth}
+                  onEdit={openEdit}
+                />
               )}
             </>
           ) : null}

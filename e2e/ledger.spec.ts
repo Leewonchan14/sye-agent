@@ -147,19 +147,64 @@ test("통계 탭에서 내역을 추가하면 통계가 바로 갱신된다", as
   await expect(page.getByText("총 지출 · 2건")).toBeVisible({ timeout: 5_000 });
 });
 
-test("통계 탭의 기간 설정은 기간별 리포트 하나뿐이다", async ({ page, request }) => {
+const reportPeriod = (page: Page) => page.getByRole("group", { name: "리포트 기간" });
+
+test("통계 탭의 기간 설정은 기간별 리포트 안에 하나만 있다", async ({
+  page,
+  request,
+}) => {
   await addEntry(request, token, { entryDate: today(), amount: 1_000, memo: "지출" });
   await openLedger(page, token);
   await expect(page.getByRole("button", { name: "이전 달" })).toBeVisible();
 
   await page.getByRole("tab", { name: "통계" }).click();
   await expect(page.getByText("기간별 리포트")).toBeVisible();
-  await expect(page.getByRole("button", { name: "이전 달" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "다음 달" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "이전 달" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "메모 저장" })).toHaveCount(0);
+
+  await reportPeriod(page).getByRole("button", { name: "전체", exact: true }).click();
+  await expect(page.getByRole("button", { name: "이전 달" })).toHaveCount(0);
 
   await page.getByRole("tab", { name: "내역" }).click();
   await expect(page.getByRole("button", { name: "이전 달" })).toBeVisible();
+});
+
+test("리포트는 월별이 기본이고 달을 넘겨 볼 수 있다", async ({ page, request }) => {
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 10_000,
+    memo: "이번달 지출",
+  });
+  await addEntry(request, token, {
+    entryDate: `${lastMonth()}-15`,
+    amount: 3_000,
+    memo: "지난달 지출",
+  });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+
+  await expect(
+    reportPeriod(page).getByRole("button", { name: "월별", exact: true })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("총 지출 · 1건")).toBeVisible();
+  await expect(page.getByRole("button", { name: /이번달 지출/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /지난달 지출/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "다음 달" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "이전 달" }).click();
+  await expect(page.getByRole("button", { name: /지난달 지출/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /이번달 지출/ })).toHaveCount(0);
+  await expect(
+    page.getByText(new RegExp(`^${lastMonth().replace("-", "\\.")}\\.01 ~`))
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: "내역" }).click();
+  await expect(page.getByRole("button", { name: /지난달 지출/ })).toBeVisible();
+
+  await page.getByRole("tab", { name: "통계" }).click();
+  await page.getByRole("button", { name: "이번 달", exact: true }).click();
+  await expect(page.getByRole("button", { name: /이번달 지출/ })).toBeVisible();
 });
 
 test("입금은 분류로 나누지 않는다", async ({ page, request }) => {
@@ -601,6 +646,8 @@ test("통계 내역은 위쪽 기간을 따르고 눌러서 수정할 수 있다
 
   await openLedger(page, token);
   await page.getByRole("tab", { name: "통계" }).click();
+  await expect(page.getByRole("button", { name: /옛 지출/ })).toHaveCount(0);
+  await reportPeriod(page).getByRole("button", { name: "전체", exact: true }).click();
   await expect(page.getByRole("button", { name: /옛 지출/ })).toBeVisible();
   await expect(page.getByText("큰 지출 TOP 8")).toBeVisible();
 
