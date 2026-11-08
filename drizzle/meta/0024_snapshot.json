@@ -1,9 +1,57 @@
 {
-  "id": "8307367f-c0c2-45a9-9d27-7effe1787314",
+  "id": "c478ce5c-e796-4abd-aef6-7031b1f2ea95",
   "prevId": "f3dac33e-5b38-4a6a-bc05-39feeff36685",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.auth_login_attempts": {
+      "name": "auth_login_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ip": {
+          "name": "ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "auth_login_attempts_created_idx": {
+          "name": "auth_login_attempts_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.chat_turn_frames": {
       "name": "chat_turn_frames",
       "schema": "",
@@ -985,13 +1033,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "weekdays_only": {
-          "name": "weekdays_only",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
@@ -1096,12 +1137,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "usage": {
-          "name": "usage",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1254,26 +1289,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "auto_state": {
-          "name": "auto_state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "report_recipient": {
-          "name": "report_recipient",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "report_template": {
-          "name": "report_template",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
         },
         "created_at": {
           "name": "created_at",
@@ -1564,12 +1579,6 @@
         },
         "collect_key": {
           "name": "collect_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_state": {
-          "name": "auto_state",
           "type": "text",
           "primaryKey": false,
           "notNull": false

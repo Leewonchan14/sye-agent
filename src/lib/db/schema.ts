@@ -190,6 +190,19 @@ export const ledgerEntries = pgTable(
   })
 );
 
+/** 로그인 시도 기록. 비밀번호가 틀린 시도만 남고, 성공하면 지운다. */
+export const authLoginAttempts = pgTable(
+  "auth_login_attempts",
+  {
+    id: serial("id").primaryKey(),
+    ip: text("ip").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    createdIdx: index("auth_login_attempts_created_idx").on(t.createdAt),
+  })
+);
+
 /** 모임통장 한 개의 잔액 기준점. id=1 한 줄만 쓴다. */
 export const ledgerAccount = pgTable("ledger_account", {
   id: integer("id").primaryKey().default(1),
