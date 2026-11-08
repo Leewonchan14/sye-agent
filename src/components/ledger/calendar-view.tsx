@@ -1,27 +1,21 @@
 "use client";
 
-import { useState } from "react";
-
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { LedgerEntryList } from "@/components/ledger/entry-list";
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
-import {
-  currentMonthKst,
-  formatCompactWon,
-  formatDayKo,
-  formatWon,
-  todayKst,
-} from "@/lib/ledger/members";
+import { formatCompactWon, formatDayKo, formatWon, todayKst } from "@/lib/ledger/format";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 interface Props {
   ledger: LedgerMonthPayload;
+  activeDay: string;
+  onSelectDay: (date: string) => void;
   onEdit: (entry: LedgerEntryView) => void;
 }
 
-export const CalendarView = ({ ledger, onEdit }: Props) => {
+export const CalendarView = ({ ledger, activeDay, onSelectDay, onEdit }: Props) => {
   const today = todayKst();
   const firstDay = kst(`${ledger.month}-01`);
   const startWeekday = firstDay.day();
@@ -35,12 +29,6 @@ export const CalendarView = ({ ledger, onEdit }: Props) => {
     }),
   ];
   while (cells.length % 7 !== 0) cells.push(null);
-
-  const defaultSelected =
-    ledger.month === currentMonthKst() ? today : `${ledger.month}-01`;
-  const [selected, setSelected] = useState<string | null>(null);
-  const activeDay =
-    selected && selected.startsWith(`${ledger.month}-`) ? selected : defaultSelected;
 
   const totalsByDate = new Map(ledger.calendar.map((day) => [day.date, day]));
   const activeTotals = totalsByDate.get(activeDay) ?? { expense: 0, income: 0 };
@@ -79,7 +67,7 @@ export const CalendarView = ({ ledger, onEdit }: Props) => {
                 type="button"
                 aria-pressed={isSelected}
                 aria-label={`${formatDayKo(date)}${totals ? `, 지출 ${formatWon(totals.expense)}` : ""}`}
-                onClick={() => setSelected(date)}
+                onClick={() => onSelectDay(date)}
                 className={`flex min-h-16 flex-col items-start rounded-lg border p-1 text-left transition-colors md:min-h-20 md:p-1.5 ${
                   isSelected
                     ? "border-hairline bg-canvas-card"

@@ -1,44 +1,5 @@
 import { kst } from "@/lib/kst";
 
-export type LedgerMember = "wonchan" | "yeeun" | "joint";
-
-interface LedgerMemberInfo {
-  id: LedgerMember;
-  name: string;
-  tone: string;
-  bar: string;
-}
-
-export const LEDGER_MEMBERS: LedgerMemberInfo[] = [
-  {
-    id: "wonchan",
-    name: "원찬",
-    tone: "bg-primary/10 text-primary ring-primary/20",
-    bar: "bg-primary",
-  },
-  {
-    id: "yeeun",
-    name: "예은",
-    tone: "bg-canvas-card text-body-strong ring-hairline",
-    bar: "bg-canvas-strong",
-  },
-  {
-    id: "joint",
-    name: "공동",
-    tone: "bg-canvas-soft text-body-strong ring-hairline",
-    bar: "bg-canvas-strong",
-  },
-];
-
-export const memberName = (member: LedgerMember): string =>
-  LEDGER_MEMBERS.find((m) => m.id === member)?.name ?? member;
-
-export const memberTone = (member: LedgerMember): string =>
-  LEDGER_MEMBERS.find((m) => m.id === member)?.tone ?? "";
-
-export const memberBar = (member: LedgerMember): string =>
-  LEDGER_MEMBERS.find((m) => m.id === member)?.bar ?? "bg-primary";
-
 /** 12,000원 */
 export const formatWon = (amount: number): string =>
   `${amount.toLocaleString("ko-KR")}원`;
@@ -59,6 +20,8 @@ export const formatCompactWon = (amount: number): string => {
 export const currentMonthKst = (): string => kst().format("YYYY-MM");
 
 export const todayKst = (): string => kst().format("YYYY-MM-DD");
+
+export const nowTimeKst = (): string => kst().format("HH:mm");
 
 /** 2026-11 → 2026년 11월 */
 export const formatMonthKo = (month: string): string =>

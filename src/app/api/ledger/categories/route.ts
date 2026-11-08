@@ -61,7 +61,7 @@ export const DELETE = async (req: Request) => {
   }
 
   try {
-    await deleteLedgerCategory(body.id as number);
+    await deleteLedgerCategory(body.id as number, body.moveToId);
     return Response.json({ ok: true });
   } catch (error) {
     return ledgerErrorResponse(error, { fallback: "분류를 삭제하지 못했어요." });

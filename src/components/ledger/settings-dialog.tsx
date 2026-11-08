@@ -1,13 +1,12 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, Download, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { AssetIcon, CategoryIcon } from "@/components/ledger/category-icon";
+import { CategoryIcon } from "@/components/ledger/category-icon";
 import { CategoryColorSwatches, IconPickerDialog } from "@/components/ledger/icon-picker";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,38 +27,36 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/auth-store";
 import type {
-  LedgerAssetKind,
   LedgerCategoryInput,
   LedgerEntryKind,
+  LedgerHistoryItem,
   LedgerMonthPayload,
 } from "@/lib/db/ledger";
+import { kst } from "@/lib/kst";
+import { ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
+import { formatMonthKo, formatWon, shiftMonth } from "@/lib/ledger/format";
 import {
   defaultCategoryColor,
   suggestCategoryIcon,
   type LedgerCategoryColorKey,
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
-import { formatWon } from "@/lib/ledger/members";
-
-const ASSET_KIND_LABEL: Record<LedgerAssetKind, string> = {
-  cash: "현금",
-  bank: "계좌",
-  card: "카드",
-};
-
-const ASSET_KIND_OPTIONS: { value: LedgerAssetKind; label: string }[] = [
-  { value: "cash", label: "현금" },
-  { value: "bank", label: "계좌" },
-  { value: "card", label: "카드" },
-];
 
 const TABS = [
   { id: "budget", label: "예산" },
   { id: "categories", label: "분류" },
-  { id: "assets", label: "결제수단" },
+  { id: "account", label: "통장" },
+  { id: "data", label: "기록" },
 ] as const;
 
-type SettingsTab = (typeof TABS)[number]["id"];
+export type LedgerSettingsTab = (typeof TABS)[number]["id"];
+
+const HISTORY_ACTION_LABEL: Record<LedgerHistoryItem["action"], string> = {
+  create: "추가",
+  update: "수정",
+  delete: "삭제",
+  restore: "복구",
+};
 
 const numberDisplay = (digits: string) =>
   digits ? Number(digits).toLocaleString("ko-KR") : "";
@@ -82,37 +79,240 @@ const emptyCategoryDraft = (): CategoryDraft => ({
   colorTouched: false,
 });
 
-const readError = async (res: Response) => {
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
-  return data?.error ?? "요청을 처리하지 못했어요.";
-};
-
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ledger: LedgerMonthPayload;
+  initialTab: LedgerSettingsTab;
 }
 
-export const SettingsDialog = ({ open, onOpenChange, ledger }: Props) => (
+export const SettingsDialog = ({ open, onOpenChange, ledger, initialTab }: Props) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>예산·설정</DialogTitle>
-        <DialogDescription>
-          예산과 분류, 결제수단을 직접 추가·수정할 수 있어요.
-        </DialogDescription>
+        <DialogDescription>예산과 분류, 모임통장 잔액을 관리해요.</DialogDescription>
       </DialogHeader>
-      <SettingsBody ledger={ledger} />
+      <SettingsBody ledger={ledger} initialTab={initialTab} />
     </DialogContent>
   </Dialog>
 );
 
-const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
+const AccountTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<SettingsTab>("budget");
+  const { account } = ledger;
+  const [actual, setActual] = useState("");
+  const [opening, setOpening] = useState(String(account.openingBalance));
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["ledger"] });
+  const save = useMutation({
+    mutationFn: (body: { actualBalance: number } | { openingBalance: number }) =>
+      ledgerRequest(token, "/api/ledger/account", { method: "PUT", body }),
+    onSuccess: () => {
+      toast.success("잔액을 저장했어요.");
+      setActual("");
+      queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const difference = actual ? Number(actual) - account.currentBalance : 0;
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl bg-canvas-soft/70 p-3">
+        <p className="text-[11px] text-muted">가계부 기준 현재 잔액</p>
+        <p className="mt-0.5 text-xl font-semibold text-ink tabular-nums">
+          {formatWon(account.currentBalance)}
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted-soft">
+          {account.checkedAt && account.checkedBalance != null
+            ? `${kst(account.checkedAt).format("M월 D일 HH:mm")}에 ${formatWon(account.checkedBalance)}으로 맞췄어요`
+            : "아직 실제 통장과 맞춘 적이 없어요"}
+        </p>
+      </div>
+
+      <div>
+        <label className="text-[12px] font-medium text-muted" htmlFor="ledger-actual">
+          실제 통장 잔액
+        </label>
+        <div className="mt-1 flex gap-2">
+          <Input
+            id="ledger-actual"
+            value={numberDisplay(actual)}
+            onChange={(event) => setActual(cleanDigits(event.target.value).slice(0, 10))}
+            inputMode="numeric"
+            placeholder="은행 앱의 잔액"
+            className="text-right tabular-nums"
+          />
+          <Button
+            type="button"
+            disabled={!actual || save.isPending}
+            onClick={() => save.mutate({ actualBalance: Number(actual) })}
+          >
+            맞추기
+          </Button>
+        </div>
+        {actual && (
+          <p className="mt-1 text-[11px] text-muted tabular-nums">
+            {difference === 0
+              ? "가계부와 잔액이 같아요"
+              : `가계부보다 ${formatWon(Math.abs(difference))} ${difference > 0 ? "많아요" : "적어요"} · 맞추면 시작 잔액이 조정돼요`}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label className="text-[12px] font-medium text-muted" htmlFor="ledger-opening">
+          시작 잔액
+        </label>
+        <div className="mt-1 flex gap-2">
+          <Input
+            id="ledger-opening"
+            value={numberDisplay(opening)}
+            onChange={(event) => setOpening(cleanDigits(event.target.value).slice(0, 10))}
+            inputMode="numeric"
+            placeholder="0"
+            className="text-right tabular-nums"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              !opening || Number(opening) === account.openingBalance || save.isPending
+            }
+            onClick={() => save.mutate({ openingBalance: Number(opening) })}
+          >
+            저장
+          </Button>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-soft">
+          첫 기록 이전에 통장에 있던 돈이에요.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const DataTab = () => {
+  const token = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
+
+  const history = useQuery({
+    queryKey: ledgerKeys.history,
+    queryFn: async () => {
+      const data = await ledgerRequest<{ history: LedgerHistoryItem[] }>(
+        token,
+        "/api/ledger/history"
+      );
+      return data.history;
+    },
+    enabled: Boolean(token),
+  });
+
+  const restore = useMutation({
+    mutationFn: (id: number) =>
+      ledgerRequest(token, "/api/ledger/entries/restore", {
+        method: "POST",
+        body: { id },
+      }),
+    onSuccess: () => {
+      toast.success("기록을 되돌렸어요.");
+      queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const download = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ledger/export", {
+        headers: { "x-auth-token": token },
+      });
+      if (!res.ok) throw new Error("내보내지 못했어요.");
+      const url = URL.createObjectURL(await res.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `ledger-${kst().format("YYYYMMDD")}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-hairline p-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-ink">전체 내역 내보내기</p>
+          <p className="text-[11px] text-muted">Excel에서 열 수 있는 CSV로 받아요.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={download.isPending}
+          onClick={() => download.mutate()}
+        >
+          <Download /> CSV
+        </Button>
+      </div>
+
+      <div>
+        <p className="text-[12px] font-medium text-muted">최근 변경 이력</p>
+        {history.isPending ? (
+          <p className="py-6 text-center text-[12px] text-muted">불러오는 중…</p>
+        ) : history.isError ? (
+          <p className="py-6 text-center text-[12px] text-muted">
+            이력을 불러오지 못했어요
+          </p>
+        ) : history.data.length ? (
+          <ul className="mt-1 divide-y divide-hairline-soft">
+            {history.data.map((item) => (
+              <li key={item.id} className="flex items-center gap-2 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-ink">
+                    {HISTORY_ACTION_LABEL[item.action]} ·{" "}
+                    {item.memo || (item.kind === "income" ? "입금" : "지출")}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted tabular-nums">
+                    {kst(item.createdAt).format("M월 D일 HH:mm")}
+                    {item.source === "agent" && " · 채팅"} · {formatWon(item.amount)}
+                  </span>
+                </span>
+                {item.canRestore && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={restore.isPending}
+                    onClick={() => restore.mutate(item.entryId)}
+                  >
+                    <RotateCcw /> 되돌리기
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-6 text-center text-[12px] text-muted">아직 이력이 없어요</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SettingsBody = ({
+  ledger,
+  initialTab,
+}: {
+  ledger: LedgerMonthPayload;
+  initialTab: LedgerSettingsTab;
+}) => {
+  const token = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<LedgerSettingsTab>(initialTab);
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
 
   const [totalBudget, setTotalBudget] = useState(
     ledger.budget.totalBudget == null ? "" : String(ledger.budget.totalBudget)
@@ -138,7 +338,7 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   const totalBudgetNumber = totalBudget ? Number(totalBudget) : null;
 
   const saveBudget = useMutation({
-    mutationFn: async () => {
+    mutationFn: () => {
       const body = {
         month: ledger.month,
         totalBudget: totalBudget ? Number(totalBudget) : null,
@@ -151,16 +351,44 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
           }))
           .filter((row) => row.amount > 0),
       };
-      const res = await fetch("/api/ledger/budget", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(await readError(res));
+      return ledgerRequest(token, "/api/ledger/budget", { method: "PUT", body });
     },
     onSuccess: () => {
       toast.success("예산을 저장했어요.");
       invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const copyPreviousBudget = useMutation({
+    mutationFn: async () => {
+      const previous = shiftMonth(ledger.month, -1);
+      const data = await ledgerRequest<{ ledger: LedgerMonthPayload }>(
+        token,
+        `/api/ledger?month=${previous}`
+      );
+      return { previous, budget: data.ledger.budget };
+    },
+    onSuccess: ({ previous, budget }) => {
+      if (budget.totalBudget == null && !budget.byCategory.length) {
+        toast.error(`${formatMonthKo(previous)} 예산이 없어요.`);
+        return;
+      }
+      setTotalBudget(budget.totalBudget == null ? "" : String(budget.totalBudget));
+      setCategoryAmounts(
+        Object.fromEntries(
+          ledger.categories
+            .filter((category) => category.kind === "expense")
+            .map((category) => [
+              String(category.id),
+              String(
+                budget.byCategory.find((row) => row.categoryId === category.id)?.amount ??
+                  ""
+              ),
+            ])
+        )
+      );
+      toast.success(`${formatMonthKo(previous)} 예산을 불러왔어요. 저장하면 적용돼요.`);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -173,14 +401,8 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   });
 
   const createCategory = useMutation({
-    mutationFn: async (input: LedgerCategoryInput) => {
-      const res = await fetch("/api/ledger/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
+    mutationFn: (input: LedgerCategoryInput) =>
+      ledgerRequest(token, "/api/ledger/categories", { method: "POST", body: input }),
     onSuccess: (_data, input) => {
       toast.success("분류를 추가했어요.");
       setCategoryDraft((prev) => ({
@@ -192,17 +414,17 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const [deleting, setDeleting] = useState<{
+    id: number;
+    moveToId: number | null;
+  } | null>(null);
+
   const deleteCategory = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch("/api/ledger/categories", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
+    mutationFn: (input: { id: number; moveToId: number | null }) =>
+      ledgerRequest(token, "/api/ledger/categories", { method: "DELETE", body: input }),
     onSuccess: () => {
       toast.success("분류를 삭제했어요.");
+      setDeleting(null);
       invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -221,19 +443,13 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   } | null>(null);
 
   const updateCategory = useMutation({
-    mutationFn: async (input: {
+    mutationFn: (input: {
       id: number;
       name: string;
       icon: LedgerCategoryIconKey;
       color: LedgerCategoryColorKey;
-    }) => {
-      const res = await fetch("/api/ledger/categories", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
+    }) =>
+      ledgerRequest(token, "/api/ledger/categories", { method: "PATCH", body: input }),
     onSuccess: () => {
       toast.success("분류를 수정했어요.");
       setEditingCategoryId(null);
@@ -280,81 +496,6 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
       setCategoryEdit((prev) => ({ ...prev, icon }));
     }
     setIconPicker(null);
-  };
-
-  const [assetDraft, setAssetDraft] = useState<{ name: string; kind: LedgerAssetKind }>({
-    name: "",
-    kind: "card",
-  });
-
-  const createAsset = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ledger/assets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify(assetDraft),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
-    onSuccess: () => {
-      toast.success("결제수단을 추가했어요.");
-      setAssetDraft({ name: "", kind: "card" });
-      invalidate();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const deleteAsset = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch("/api/ledger/assets", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
-    onSuccess: () => {
-      toast.success("결제수단을 삭제했어요.");
-      invalidate();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
-  const [assetEdit, setAssetEdit] = useState<{ name: string; kind: LedgerAssetKind }>({
-    name: "",
-    kind: "card",
-  });
-
-  const updateAsset = useMutation({
-    mutationFn: async (input: { id: number; name: string; kind: LedgerAssetKind }) => {
-      const res = await fetch("/api/ledger/assets", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
-    onSuccess: () => {
-      toast.success("결제수단을 수정했어요.");
-      setEditingAssetId(null);
-      invalidate();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const startEditAsset = (asset: LedgerMonthPayload["assets"][number]) => {
-    setEditingAssetId(asset.id);
-    setAssetEdit({ name: asset.name, kind: asset.kind });
-  };
-
-  const saveAsset = () => {
-    if (editingAssetId == null || !assetEdit.name.trim()) return;
-    updateAsset.mutate({
-      id: editingAssetId,
-      name: assetEdit.name,
-      kind: assetEdit.kind,
-    });
   };
 
   const addCategory = (kind: LedgerEntryKind) => {
@@ -410,12 +551,23 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
       {tab === "budget" && (
         <div className="space-y-4">
           <div>
-            <label
-              className="text-[12px] font-medium text-muted"
-              htmlFor="ledger-total-budget"
-            >
-              총 예산
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label
+                className="text-[12px] font-medium text-muted"
+                htmlFor="ledger-total-budget"
+              >
+                {formatMonthKo(ledger.month)} 총 예산
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={copyPreviousBudget.isPending}
+                onClick={() => copyPreviousBudget.mutate()}
+              >
+                지난달 예산 불러오기
+              </Button>
+            </div>
             <div className="relative mt-1">
               <Input
                 id="ledger-total-budget"
@@ -544,13 +696,13 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
               className="text-[12px] font-medium text-muted"
               htmlFor="ledger-budget-note"
             >
-              이번 달 메모
+              월 메모
             </label>
             <Textarea
               id="ledger-budget-note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="이번 달 예산 메모"
+              placeholder="이 달의 예산 메모"
               className="mt-1 min-h-16"
             />
           </div>
@@ -680,7 +832,9 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                                 size="icon-sm"
                                 aria-label={`${category.name} 삭제`}
                                 disabled={isLast || deleteCategory.isPending}
-                                onClick={() => deleteCategory.mutate(category.id)}
+                                onClick={() =>
+                                  setDeleting({ id: category.id, moveToId: null })
+                                }
                               >
                                 <Trash2 />
                               </Button>
@@ -689,6 +843,71 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                               {isLast ? "분류는 최소 하나 필요해요" : "분류 삭제"}
                             </TooltipContent>
                           </Tooltip>
+                        </div>
+                      )}
+                      {deleting?.id === category.id && (
+                        <div className="mt-2 space-y-2 rounded-xl border border-hairline p-2.5">
+                          <p className="text-[12px] text-body">
+                            {category.entryCount
+                              ? `내역 ${category.entryCount}건을 옮길 분류를 골라 주세요. 이 분류의 월별 예산은 삭제돼요.`
+                              : "이 분류를 삭제할까요? 월별 예산도 함께 삭제돼요."}
+                          </p>
+                          {category.entryCount > 0 && (
+                            <Select
+                              items={categories
+                                .filter((option) => option.id !== category.id)
+                                .map((option) => ({
+                                  value: String(option.id),
+                                  label: option.name,
+                                }))}
+                              value={
+                                deleting.moveToId == null
+                                  ? null
+                                  : String(deleting.moveToId)
+                              }
+                              onValueChange={(value) =>
+                                setDeleting({
+                                  id: category.id,
+                                  moveToId: value == null ? null : Number(value),
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-full" aria-label="옮길 분류">
+                                <SelectValue placeholder="옮길 분류 선택" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categories
+                                  .filter((option) => option.id !== category.id)
+                                  .map((option) => (
+                                    <SelectItem key={option.id} value={String(option.id)}>
+                                      {option.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <div className="flex justify-end gap-1.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleting(null)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              disabled={
+                                deleteCategory.isPending ||
+                                (category.entryCount > 0 && deleting.moveToId == null)
+                              }
+                              onClick={() => deleteCategory.mutate(deleting)}
+                            >
+                              {category.entryCount ? "옮기고 삭제" : "삭제"}
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </li>
@@ -756,140 +975,9 @@ const SettingsBody = ({ ledger }: { ledger: LedgerMonthPayload }) => {
         </div>
       )}
 
-      {tab === "assets" && (
-        <div className="space-y-3">
-          <ul className="divide-y divide-hairline-soft">
-            {ledger.assets.map((asset) => (
-              <li key={asset.id} className="py-1.5">
-                {editingAssetId === asset.id ? (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Input
-                      value={assetEdit.name}
-                      onChange={(event) =>
-                        setAssetEdit((prev) => ({ ...prev, name: event.target.value }))
-                      }
-                      aria-label={`${asset.name} 이름`}
-                      autoFocus
-                      className="min-w-[120px] flex-1"
-                    />
-                    <Select
-                      items={ASSET_KIND_OPTIONS}
-                      value={assetEdit.kind}
-                      onValueChange={(value) => {
-                        if (value === "cash" || value === "bank" || value === "card") {
-                          setAssetEdit((prev) => ({ ...prev, kind: value }));
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-[96px]" aria-label="결제수단 종류">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ASSET_KIND_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="결제수단 수정 저장"
-                      disabled={!assetEdit.name.trim() || updateAsset.isPending}
-                      onClick={saveAsset}
-                    >
-                      <Check />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="결제수단 수정 취소"
-                      onClick={() => setEditingAssetId(null)}
-                    >
-                      <X />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <AssetIcon kind={asset.kind} size={28} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-body">
-                      {asset.name}
-                    </span>
-                    <Badge variant="secondary">{ASSET_KIND_LABEL[asset.kind]}</Badge>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`${asset.name} 수정`}
-                      onClick={() => startEditAsset(asset)}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`${asset.name} 삭제`}
-                      disabled={deleteAsset.isPending}
-                      onClick={() => deleteAsset.mutate(asset.id)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                )}
-              </li>
-            ))}
-            {!ledger.assets.length && (
-              <li className="py-4 text-center text-[12px] text-muted">
-                등록된 결제수단이 없어요
-              </li>
-            )}
-          </ul>
+      {tab === "account" && <AccountTab ledger={ledger} />}
 
-          <div className="flex items-center gap-1.5">
-            <Input
-              value={assetDraft.name}
-              onChange={(event) =>
-                setAssetDraft((prev) => ({ ...prev, name: event.target.value }))
-              }
-              placeholder="결제수단 이름"
-              aria-label="결제수단 이름"
-              className="min-w-0 flex-1"
-            />
-            <Select
-              items={ASSET_KIND_OPTIONS}
-              value={assetDraft.kind}
-              onValueChange={(value) => {
-                if (value === "cash" || value === "bank" || value === "card") {
-                  setAssetDraft((prev) => ({ ...prev, kind: value }));
-                }
-              }}
-            >
-              <SelectTrigger className="w-[104px]" aria-label="결제수단 종류">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ASSET_KIND_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => createAsset.mutate()}
-              disabled={!assetDraft.name.trim() || createAsset.isPending}
-            >
-              추가
-            </Button>
-          </div>
-        </div>
-      )}
+      {tab === "data" && <DataTab />}
 
       <IconPickerDialog
         open={iconPicker != null}

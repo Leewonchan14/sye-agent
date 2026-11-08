@@ -1,5 +1,4 @@
 import {
-  Banknote,
   BedDouble,
   Bone,
   BookOpen,
@@ -8,7 +7,6 @@ import {
   Cat,
   Clapperboard,
   Coffee,
-  CreditCard,
   Dog,
   Dumbbell,
   Gamepad2,
@@ -35,7 +33,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { LedgerAssetKind } from "@/lib/db/ledger";
 import {
   categoryColorOption,
   categoryIconOption,
@@ -105,31 +102,6 @@ export const CategoryIcon = ({
         backgroundColor: tone.bg,
         color: tone.fg,
       }}
-    >
-      <Icon size={Math.round(size * 0.55)} strokeWidth={1.75} />
-    </span>
-  );
-};
-
-const ASSET_ICONS: Record<LedgerAssetKind, LucideIcon> = {
-  cash: Banknote,
-  card: CreditCard,
-  bank: Landmark,
-};
-
-interface AssetIconProps {
-  kind: LedgerAssetKind;
-  size?: number;
-  className?: string;
-}
-
-export const AssetIcon = ({ kind, size = 30, className }: AssetIconProps) => {
-  const Icon = ASSET_ICONS[kind] ?? CreditCard;
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("inline-grid shrink-0 place-items-center rounded-[10px]", className)}
-      style={{ width: size, height: size, backgroundColor: "#F3E9E8", color: "#6B5A58" }}
     >
       <Icon size={Math.round(size * 0.55)} strokeWidth={1.75} />
     </span>

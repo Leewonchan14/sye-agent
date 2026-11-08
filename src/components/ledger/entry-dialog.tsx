@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { AssetIcon, CategoryIcon } from "@/components/ledger/category-icon";
+import { CategoryIcon } from "@/components/ledger/category-icon";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,18 +17,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerEntryKind, LedgerMonthPayload } from "@/lib/db/ledger";
-import {
-  LEDGER_MEMBERS,
-  memberTone,
-  todayKst,
-  type LedgerMember,
-} from "@/lib/ledger/members";
+import { ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
+import { nowTimeKst, todayKst } from "@/lib/ledger/format";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ledger: LedgerMonthPayload;
-  defaultMember: LedgerMember;
+  defaultDate: string;
   entry: LedgerEntryView | null;
 }
 
@@ -37,16 +33,11 @@ const numberDisplay = (digits: string) =>
 
 const cleanDigits = (value: string) => value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
 
-const readError = async (res: Response) => {
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
-  return data?.error ?? "요청을 처리하지 못했어요.";
-};
-
 export const EntryDialog = ({
   open,
   onOpenChange,
   ledger,
-  defaultMember,
+  defaultDate,
   entry,
 }: Props) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
@@ -54,12 +45,12 @@ export const EntryDialog = ({
       <DialogHeader>
         <DialogTitle>{entry ? "내역 수정" : "내역 추가"}</DialogTitle>
         <DialogDescription>
-          우리 집 가계부에 {entry ? "기록을 고쳐요" : "새 기록을 남겨요"}.
+          모임통장 가계부에 {entry ? "기록을 고쳐요" : "새 기록을 남겨요"}.
         </DialogDescription>
       </DialogHeader>
       <EntryForm
         ledger={ledger}
-        defaultMember={defaultMember}
+        defaultDate={defaultDate}
         entry={entry}
         onOpenChange={onOpenChange}
       />
@@ -67,67 +58,78 @@ export const EntryDialog = ({
   </Dialog>
 );
 
-const EntryForm = ({
-  ledger,
-  defaultMember,
-  entry,
-  onOpenChange,
-}: Omit<Props, "open">) => {
+const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "open">) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
 
   const [kind, setKind] = useState<LedgerEntryKind>(entry?.kind ?? "expense");
   const [amount, setAmount] = useState(entry ? String(entry.amount) : "");
-  const [entryDate, setEntryDate] = useState(entry?.entryDate ?? todayKst());
+  const [entryDate, setEntryDate] = useState(entry?.entryDate ?? defaultDate);
+  const [entryTime, setEntryTime] = useState(
+    entry ? (entry.entryTime ?? "") : defaultDate === todayKst() ? nowTimeKst() : ""
+  );
   const [categoryId, setCategoryId] = useState<number | null>(entry?.categoryId ?? null);
-  const [assetId, setAssetId] = useState<number | null>(entry?.assetId ?? null);
   const [memo, setMemo] = useState(entry?.memo ?? "");
   const [tags, setTags] = useState(entry?.tags ?? "");
-  const [member, setMember] = useState<LedgerMember>(entry?.member ?? defaultMember);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const categories = ledger.categories.filter((category) => category.kind === kind);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
 
   const saveEntry = useMutation({
-    mutationFn: async () => {
+    mutationFn: () => {
       const payload = {
         entryDate,
+        entryTime: entryTime || null,
         kind,
         amount: Number(amount),
         categoryId,
-        assetId: kind === "expense" ? assetId : null,
         memo: memo.trim(),
         tags: tags.trim(),
-        member,
       };
-      const res = await fetch("/api/ledger/entries", {
+      return ledgerRequest(token, "/api/ledger/entries", {
         method: entry ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify(entry ? { id: entry.id, ...payload } : payload),
+        body: entry ? { id: entry.id, ...payload } : payload,
       });
-      if (!res.ok) throw new Error(await readError(res));
     },
     onSuccess: () => {
       toast.success(entry ? "기록을 수정했어요." : "기록을 저장했어요.");
-      queryClient.invalidateQueries({ queryKey: ["ledger"] });
+      invalidate();
       onOpenChange(false);
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const restoreEntry = async (id: number) => {
+    try {
+      await ledgerRequest(token, "/api/ledger/entries/restore", {
+        method: "POST",
+        body: { id },
+      });
+      toast.success("기록을 되돌렸어요.");
+      invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "되돌리지 못했어요.");
+    }
+  };
+
   const removeEntry = useMutation({
     mutationFn: async () => {
-      if (!entry) return;
-      const res = await fetch("/api/ledger/entries", {
+      if (!entry) return null;
+      await ledgerRequest(token, "/api/ledger/entries", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify({ id: entry.id }),
+        body: { id: entry.id },
       });
-      if (!res.ok) throw new Error(await readError(res));
+      return entry.id;
     },
-    onSuccess: () => {
-      toast.success("기록을 지웠어요.");
-      queryClient.invalidateQueries({ queryKey: ["ledger"] });
+    onSuccess: (id) => {
+      toast.success("기록을 지웠어요.", {
+        duration: 8000,
+        ...(id == null
+          ? {}
+          : { action: { label: "되돌리기", onClick: () => void restoreEntry(id) } }),
+      });
+      invalidate();
       onOpenChange(false);
     },
     onError: (error: Error) => toast.error(error.message),
@@ -151,7 +153,6 @@ const EntryForm = ({
     if (next === kind) return;
     setKind(next);
     setCategoryId(null);
-    if (next === "income") setAssetId(null);
   };
 
   return (
@@ -160,7 +161,7 @@ const EntryForm = ({
         {(
           [
             { id: "expense", label: "지출" },
-            { id: "income", label: "수입" },
+            { id: "income", label: "입금" },
           ] as const
         ).map((option) => (
           <button
@@ -199,17 +200,34 @@ const EntryForm = ({
         </div>
       </div>
 
-      <div>
-        <label className="text-[12px] font-medium text-muted" htmlFor="ledger-date">
-          날짜
-        </label>
-        <Input
-          id="ledger-date"
-          type="date"
-          value={entryDate}
-          onChange={(event) => setEntryDate(event.target.value)}
-          className="mt-1"
-        />
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <div className="min-w-0">
+          <label className="text-[12px] font-medium text-muted" htmlFor="ledger-date">
+            날짜
+          </label>
+          <Input
+            id="ledger-date"
+            type="date"
+            value={entryDate}
+            onChange={(event) => setEntryDate(event.target.value)}
+            className="mt-1"
+          />
+        </div>
+        <div>
+          <label
+            className="block text-[12px] font-medium text-muted"
+            htmlFor="ledger-time"
+          >
+            시각
+          </label>
+          <Input
+            id="ledger-time"
+            type="time"
+            value={entryTime}
+            onChange={(event) => setEntryTime(event.target.value)}
+            className="mt-1 w-36"
+          />
+        </div>
       </div>
 
       <div>
@@ -243,33 +261,6 @@ const EntryForm = ({
         )}
       </div>
 
-      {kind === "expense" && (
-        <div>
-          <p className="text-[12px] font-medium text-muted">결제수단</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {ledger.assets.map((asset) => {
-              const selected = asset.id === assetId;
-              return (
-                <button
-                  key={asset.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setAssetId(selected ? null : asset.id)}
-                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] transition-colors ${
-                    selected
-                      ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
-                      : "border-hairline bg-surface text-body hover:bg-canvas-soft"
-                  }`}
-                >
-                  <AssetIcon kind={asset.kind} size={20} />
-                  {asset.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div>
         <label className="text-[12px] font-medium text-muted" htmlFor="ledger-memo">
           내용
@@ -296,30 +287,6 @@ const EntryForm = ({
           maxLength={100}
           className="mt-1"
         />
-      </div>
-
-      <div>
-        <p className="text-[12px] font-medium text-muted">기록자</p>
-        <div className="mt-1 flex gap-1.5">
-          {LEDGER_MEMBERS.map((option) => {
-            const selected = member === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => setMember(option.id)}
-                className={`rounded-full px-3 py-1.5 text-[12px] ring-1 transition-colors ${
-                  selected
-                    ? `${memberTone(option.id)} ring-1`
-                    : "text-muted ring-hairline hover:bg-canvas-soft"
-                }`}
-              >
-                {option.name}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-between gap-2 border-t border-hairline bg-popover px-4 py-3">
