@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 
 import { ArticleSections } from "@/components/monitor/article-sections";
+import { HermesProgress } from "@/components/monitor/hermes-progress";
 import { ReportPanel } from "@/components/monitor/report-panel";
 import { RulesPanel } from "@/components/monitor/rules-panel";
 import { RunHistory } from "@/components/monitor/run-history";
@@ -18,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
 import { useMonitorClient, useMonitorMutations } from "@/lib/monitor/queries";
-import { nextCollectLabel } from "@/lib/monitor/schedule";
+import { DAILY_COLLECT_REQUEST, nextCollectLabel } from "@/lib/monitor/schedule";
 import type { MonitorCategory } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
@@ -168,6 +169,11 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               </span>
             )}
             <span className="text-muted">{windowLabel(run.since, run.until)}</span>
+            {run.createdAt && (
+              <span className="text-muted">
+                {kst(run.createdAt).format("MM.DD HH:mm")} 수집 시작
+              </span>
+            )}
             {run.stats.sources?.map((s) => (
               <span key={s.name}>
                 {s.name}{" "}
@@ -190,6 +196,20 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               </span>
             ) : null}
           </div>
+
+          {run.pendingSince && (
+            <HermesProgress
+              key={run.pendingSince}
+              kind="run"
+              id={run.id}
+              since={run.pendingSince}
+              title={
+                run.pendingRequest === DAILY_COLLECT_REQUEST
+                  ? "하치와레가 오늘 기사를 모으고 있어요"
+                  : "하치와레가 기사를 더 찾고 있어요"
+              }
+            />
+          )}
 
           <div
             className="flex [scrollbar-width:none] gap-1 overflow-x-auto overflow-y-hidden border-b border-hairline"

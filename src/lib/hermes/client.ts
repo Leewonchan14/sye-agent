@@ -183,6 +183,46 @@ export const readHermesSessionMessages = async (
   }
 };
 
+/** 세션의 가장 최근 메시지 몇 개 (오래된 것부터) */
+export const readLatestHermesMessages = async (
+  config: HermesBackendConfig,
+  sessionId: string,
+  limit: number
+): Promise<(HermesTranscriptMessage & { id?: number; timestamp?: number })[]> => {
+  try {
+    const res = await fetch(
+      `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=${limit}&order=latest`,
+      { headers: requestHeaders(config), signal: AbortSignal.timeout(10_000) }
+    );
+    if (!res.ok) return [];
+    const body = (await res.json()) as HermesMessagesResponse;
+    if (!Array.isArray(body.data)) return [];
+    type Row = HermesTranscriptMessage & { id?: number; timestamp?: number };
+    return (body.data as Row[]).sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  } catch {
+    return [];
+  }
+};
+
+/** 세션 요약 — 도구 사용 횟수처럼 전체 대화를 읽지 않고 알 수 있는 값 */
+export const readHermesSessionSummary = async (
+  config: HermesBackendConfig,
+  sessionId: string
+): Promise<{ tool_call_count?: number } | null> => {
+  try {
+    const res = await fetch(
+      `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}`,
+      { headers: requestHeaders(config), signal: AbortSignal.timeout(10_000) }
+    );
+    if (!res.ok) return null;
+    return (
+      ((await res.json()) as { session?: { tool_call_count?: number } }).session ?? null
+    );
+  } catch {
+    return null;
+  }
+};
+
 const parseSSEFrame = <TData>(frame: string): HermesSseFrame<TData> | null => {
   let eventName: string | undefined;
   const dataLines: string[] = [];

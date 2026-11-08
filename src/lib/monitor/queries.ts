@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 
 import { useAuthStore } from "@/lib/auth-store";
+import type { MonitorProgress } from "@/lib/monitor/progress-stages";
 import type {
   MonitorCategory,
   MonitorClientPayload,
@@ -81,6 +82,19 @@ export const useMonitorIssue = (issueId: number) => {
     queryKey: monitorKeys.issue(issueId),
     queryFn: () => api<MonitorIssuePayload>(`/api/monitor/issues/${issueId}`),
     refetchInterval: (query) => (query.state.data?.issue.pendingSince ? 10_000 : false),
+  });
+};
+
+/** 돌고 있는 수집·집계의 진행 상황을 5초마다 읽는다. */
+export const useMonitorProgress = (kind: "run" | "issue", id: number) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...monitorKeys.all, "progress", kind, id],
+    queryFn: () =>
+      api<{ progress: MonitorProgress | null }>(
+        `/api/monitor/progress?kind=${kind}&id=${id}`
+      ),
+    refetchInterval: 5_000,
   });
 };
 
