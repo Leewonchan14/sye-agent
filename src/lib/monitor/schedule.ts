@@ -17,7 +17,7 @@ import type {
 const FALLBACK_COLLECT_TIME = "09:00";
 
 /** 대시보드에 "찾고 있어요 · ○○"로 보이는 문구이자 자동 수집을 구분하는 표시 */
-export const DAILY_COLLECT_REQUEST = "매일 자동 수집";
+export const DAILY_COLLECT_REQUEST = "기사 수집";
 
 type CollectSettings = Pick<MonitorClientView, "rules" | "collectTime" | "weekdaysOnly">;
 

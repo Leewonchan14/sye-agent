@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 
 import { useAuthStore } from "@/lib/auth-store";
+import type { SetupDraftState } from "@/lib/monitor/draft";
 import type { MonitorProgress } from "@/lib/monitor/progress-stages";
 import type {
   MonitorCategory,
@@ -104,6 +105,18 @@ export const useMonitorProgress = (kind: "run" | "issue", id: number) => {
   });
 };
 
+/** 설정 초안을 2초마다 확인한다. 끝나면 멈춘다. */
+export const useSetupDraft = (runId: string | null) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...monitorKeys.all, "draft", runId],
+    queryFn: () => api<SetupDraftState>(`/api/monitor/drafts/${runId}`),
+    enabled: Boolean(runId),
+    refetchInterval: (query) =>
+      !query.state.data || query.state.data.status === "running" ? 2_000 : false,
+  });
+};
+
 export const useMonitorMutations = (clientId?: number) => {
   const api = useApi();
   const qc = useQueryClient();
@@ -183,6 +196,14 @@ export const useMonitorMutations = (clientId?: number) => {
     onSettled: refreshClient,
   });
 
+  const collectNow = useMutation({
+    mutationFn: (id: number) =>
+      api(`/api/monitor/clients/${id}/collect`, { method: "POST" }),
+    onSuccess: () => toast.success("하치와레에게 맡겼어요. 몇 분 뒤 기사가 쌓여요."),
+    onError,
+    onSettled: refreshClient,
+  });
+
   const askMore = useMutation({
     mutationFn: (v: { runId: number; category?: string; request: string }) =>
       api(`/api/monitor/runs/${v.runId}/more`, {
@@ -234,7 +255,15 @@ export const useMonitorMutations = (clientId?: number) => {
     onSettled: refreshClient,
   });
 
-  return { updateItem, banMedia, markReported, unmarkReported, askMore, updateClient };
+  return {
+    updateItem,
+    banMedia,
+    markReported,
+    unmarkReported,
+    collectNow,
+    askMore,
+    updateClient,
+  };
 };
 
 export const useIssueMutations = (issueId: number) => {
@@ -289,8 +318,17 @@ export const useSetupMutations = () => {
   });
 
   const createClient = useMutation({
-    mutationFn: (body: { name: string; slug: string }) =>
-      api<{ client: { id: number } }>("/api/monitor/clients", { method: "POST", body }),
+    mutationFn: (body: {
+      name: string;
+      categories: MonitorCategory[];
+      rules: MonitorRule[];
+      weekdaysOnly: boolean;
+      collectNow: boolean;
+    }) =>
+      api<{ client: { id: number }; collectError: string | null }>(
+        "/api/monitor/clients",
+        { method: "POST", body }
+      ),
     onError,
     onSettled: refresh,
   });
@@ -306,5 +344,11 @@ export const useSetupMutations = () => {
     onSettled: refresh,
   });
 
-  return { createPresets, createClient, createIssue };
+  const startDraft = useMutation({
+    mutationFn: (body: { name: string; request: string }) =>
+      api<{ runId: string }>("/api/monitor/drafts", { method: "POST", body }),
+    onError,
+  });
+
+  return { createPresets, createClient, createIssue, startDraft };
 };
