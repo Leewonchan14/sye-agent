@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuthStore } from "@/lib/auth-store";
@@ -64,6 +69,8 @@ export const useMonitorClient = (clientId: number, runId?: number) => {
       api<MonitorClientPayload>(
         `/api/monitor/clients/${clientId}${runId ? `?runId=${runId}` : ""}`
       ),
+    // 다른 날짜로 넘어갈 때 화면이 비지 않게 이전 내용을 유지한다.
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => (query.state.data?.run?.pendingSince ? 10_000 : false),
   });
 };

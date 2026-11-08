@@ -114,12 +114,22 @@ export interface MonitorRunView {
   createdAt: string | null;
 }
 
+export interface MonitorRunSummary {
+  id: number;
+  since: string;
+  until: string;
+  reportedAt: string | null;
+  /** 리포트에 포함된 대표 기사 수 */
+  includedCount: number;
+  pending: boolean;
+}
+
 export interface MonitorClientPayload {
   client: MonitorClientView;
   run: MonitorRunView | null;
   items: MonitorItemView[];
-  /** 최근 런 목록 (기간 선택용) */
-  runs: { id: number; since: string; until: string; reportedAt: string | null }[];
+  /** 최근 런 목록 (최신순) */
+  runs: MonitorRunSummary[];
 }
 
 export interface MonitorIssueEvent {

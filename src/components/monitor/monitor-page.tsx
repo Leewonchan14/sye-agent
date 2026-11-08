@@ -77,7 +77,7 @@ export const MonitorPage = () => {
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 pt-5 md:px-8 md:pt-8">
         <nav
           aria-label="고객사와 이슈"
-          className="flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto pb-1"
+          className="-mx-1 -mt-1 flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-1 pt-1 pb-1"
         >
           {data?.clients.map((c) => (
             <ChipButton
