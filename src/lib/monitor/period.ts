@@ -83,15 +83,6 @@ export const resolvePeriod = (p: MonitorPeriod, base: Dayjs = kst()) => {
   return { since: at(p.startDay, p.startTime), until: at(p.endDay, p.endTime) };
 };
 
-/**
- * 지금 수집할 수 있는 가장 최근 구간. 끝 시각이 아직 안 지났으면 하루 전 구간을 쓴다.
- * (예: "전일 18:00 ~ 당일 18:00"인데 09:00에 돌면 어제 18:00에 끝난 구간)
- */
-export const resolveCompletedPeriod = (p: MonitorPeriod, now: Dayjs = kst()) => {
-  const today = resolvePeriod(p, now);
-  return today.until.isAfter(now) ? resolvePeriod(p, now.subtract(1, "day")) : today;
-};
-
 export const describeDuration = (minutes: number) => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;

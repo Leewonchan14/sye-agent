@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { kst } from "@/lib/kst";
@@ -233,11 +244,30 @@ export const getMonitorClientPayload = async (
       since: runsT.since,
       until: runsT.until,
       reportedAt: runsT.reportedAt,
+      pendingHermesRunId: runsT.pendingHermesRunId,
     })
     .from(runsT)
     .where(eq(runsT.clientId, clientId))
     .orderBy(desc(runsT.until), desc(runsT.id))
     .limit(30);
+
+  const runCounts = runs.length
+    ? await db
+        .select({ runId: itemsT.runId, n: sql<number>`count(*)::int` })
+        .from(itemsT)
+        .where(
+          and(
+            inArray(
+              itemsT.runId,
+              runs.map((r) => r.id)
+            ),
+            eq(itemsT.included, true),
+            isNotNull(itemsT.category),
+            or(eq(itemsT.isLead, true), isNull(itemsT.dupGroup))
+          )
+        )
+        .groupBy(itemsT.runId)
+    : [];
 
   const targetId = runId ?? runs[0]?.id;
   const run = targetId ? await getRunRow(targetId) : null;
@@ -284,25 +314,30 @@ export const getMonitorClientPayload = async (
       since: r.since.toISOString(),
       until: r.until.toISOString(),
       reportedAt: iso(r.reportedAt),
+      includedCount: runCounts.find((c) => c.runId === r.id)?.n ?? 0,
+      pending: Boolean(r.pendingHermesRunId),
     })),
   };
 };
 
 /* ───────────────────────── 매일 자동 수집 ───────────────────────── */
 
-/** 자동 수집이 켜져 있고 이 날짜 수집을 아직 시작하지 않은 고객사 */
-export const listClientsDueForCollect = async (collectKey: string) => {
+/** 자동 수집이 켜진 고객사와 이 날짜 수집을 이미 시작했는지 */
+export const listAutoCollectClients = async (collectKey: string) => {
   const db = getDb();
   const rows = await db
-    .select({ client: clientsT })
+    .select({ client: clientsT, runId: runsT.id })
     .from(clientsT)
     .leftJoin(
       runsT,
       and(eq(runsT.clientId, clientsT.id), eq(runsT.collectKey, collectKey))
     )
-    .where(and(eq(clientsT.autoCollect, true), isNull(runsT.id)))
+    .where(eq(clientsT.autoCollect, true))
     .orderBy(asc(clientsT.sortOrder), asc(clientsT.id));
-  return rows.map((r) => toClientView(r.client));
+  return rows.map((r) => ({
+    client: toClientView(r.client),
+    collected: r.runId !== null,
+  }));
 };
 
 /** 이 날짜의 수집을 선점한다. 이미 누가 시작했으면 null — 동시에 불려도 한 번만 시작된다. */

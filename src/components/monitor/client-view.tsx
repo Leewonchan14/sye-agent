@@ -13,14 +13,8 @@ import { useState } from "react";
 import { ArticleSections } from "@/components/monitor/article-sections";
 import { ReportPanel } from "@/components/monitor/report-panel";
 import { RulesPanel } from "@/components/monitor/rules-panel";
+import { RunHistory } from "@/components/monitor/run-history";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
 import { useMonitorClient, useMonitorMutations } from "@/lib/monitor/queries";
@@ -55,7 +49,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
   const [tab, setTab] = useState<Tab>("articles");
   const [request, setRequest] = useState("");
   const [askCategory, setAskCategory] = useState<MonitorCategory | null>(null);
-  const { data, isLoading, error } = useMonitorClient(clientId, runId);
+  const { data, isLoading, isPlaceholderData, error } = useMonitorClient(clientId, runId);
   const mutations = useMonitorMutations(clientId);
 
   if (isLoading) {
@@ -105,32 +99,14 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             데일리 모니터링{run && ` · ${kst(run.until).format("YYYY.MM.DD ddd")}`}
           </p>
           <h1 className="mt-1 text-2xl font-medium tracking-tight text-balance text-ink">
-            {client.name} 오늘의 기사
+            {client.name}{" "}
+            {run && !kst(run.until).isSame(kst(), "day")
+              ? `${kst(run.until).format("M월 D일")} 기사`
+              : "오늘의 기사"}
           </h1>
         </div>
         {run && (
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              items={runs.map((r) => ({
-                value: r.id,
-                label: windowLabel(r.since, r.until),
-              }))}
-              value={run.id}
-              onValueChange={(v) => setRunId(v as number)}
-            >
-              <SelectTrigger className="h-9" aria-label="수집 기간">
-                <Clock className="text-primary" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {runs.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {windowLabel(r.since, r.until)}
-                    {r.reportedAt && " · 보고 완료"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Button size="lg" onClick={() => setTab("report")}>
               <Copy /> 리포트 만들기
             </Button>
@@ -144,7 +120,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           <h2 className="text-lg font-medium text-ink">아직 수집 결과가 없어요</h2>
           <p className="max-w-md text-sm text-muted">
             {client.autoCollect
-              ? `${nextCollectLabel()}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
+              ? `${nextCollectLabel(client.rules)}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
               : "매일 자동 수집이 꺼져 있어요. 고객사 규칙에서 켜면 다음 수집 시각부터 모아요."}
           </p>
           <Button variant="outline" onClick={() => setTab("rules")}>
@@ -157,7 +133,20 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           )}
         </div>
       ) : (
-        <>
+        <div
+          className={cn(
+            "flex flex-col gap-5 transition-opacity",
+            isPlaceholderData && "pointer-events-none opacity-60"
+          )}
+        >
+          {tab !== "rules" && (
+            <RunHistory
+              runs={runs}
+              activeId={runId ?? run.id}
+              activeCount={isPlaceholderData ? undefined : leadsIncluded}
+              onSelect={setRunId}
+            />
+          )}
           <div
             role="status"
             className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-hairline bg-canvas-soft px-4 py-3 text-[13px] text-body"
@@ -296,7 +285,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           {tab === "rules" && (
             <RulesPanel key={client.id} client={client} mutations={mutations} />
           )}
-        </>
+        </div>
       )}
     </div>
   );

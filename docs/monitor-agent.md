@@ -153,7 +153,8 @@ POST /api/monitor/agent/issues/{issueId}/snapshots
 
 ## 4. 매일 자동 수집
 
-앱에 있는 고객사는 "매일 자동 수집" 스위치가 켜져 있으면 추가 설정 없이 09:00 KST에 수집된다.
+앱에 있는 고객사는 "매일 자동 수집" 스위치가 켜져 있으면 추가 설정 없이 모니터링 기간이 끝나는 시각에 수집된다.
+(예: "전일 10:00 ~ 당일 10:00"이면 매일 10:00. 끝이 전일 이전이면 09:00.)
 
 ```
 Oracle: Hermes no_agent 예약 작업이 1분마다 scripts/monitor-tick.py 실행
@@ -162,9 +163,9 @@ Oracle: Hermes no_agent 예약 작업이 1분마다 scripts/monitor-tick.py 실�
             └▶ Hermes가 POST /api/monitor/agent/runs { runId, stats, items }
 ```
 
-- 수집 기간은 `모니터링 기간` 규칙을 쓴다. 끝 시각이 아직 안 지났으면 하루 전 구간을 쓴다.
+- 수집 기간은 `모니터링 기간` 규칙을 쓴다.
 - `(client_id, collect_key)` 유니크 인덱스로 하루 한 번만 시작한다. 동시에 불려도 안전하다.
-- 응답의 `nextCheckAt`까지 스크립트는 호출하지 않는다. 09:00 전에는 앱이 DB도 건드리지 않는다.
+- 응답의 `nextCheckAt`(고객사 중 가장 가까운 다음 수집 시각)까지 스크립트는 호출하지 않아서 DB를 깨우지 않는다.
 - Hermes 시작에 실패하면 빈 런을 지우고 5분 뒤 다시 시도한다. 스크립트는 실패·복구 때만 출력하고,
   그 출력이 Discord로 간다.
 

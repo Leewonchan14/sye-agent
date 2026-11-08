@@ -213,7 +213,7 @@ export const RulesPanel = ({ client, mutations }: Props) => {
           <h2 className="text-[15px] font-medium text-ink">매일 자동 수집</h2>
           <p className="mt-0.5 text-[13px] text-muted">
             {client.autoCollect
-              ? `다음 수집: ${nextCollectLabel()} · 아래 모니터링 기간 규칙대로 모아요.`
+              ? `다음 수집: ${nextCollectLabel(rules)} · 모니터링 기간이 끝나면 바로 모아요.`
               : "꺼져 있어요. 켜면 다음 수집 시각부터 하치와레가 모아요."}
           </p>
         </div>
