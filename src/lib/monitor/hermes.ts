@@ -47,11 +47,12 @@ const issueCallbackToken = async (target: { kind: "run" | "issue"; id: number })
 /** Hermes가 문서 없이도 따라 할 수 있도록 프롬프트에 그대로 싣는 item 형식 */
 const ITEM_FORMAT = `items 원소 형식 (JSON):
 {
-  "url": "원문 URL (필수)",
+  "url": "원문 URL (필수, 절대 자르지 말 것)",
   "naverUrl": "네이버 뉴스 링크가 있으면",
   "media": "매체명 (필수)",
   "title": "제목 (필수)",
   "reporter": "기자명, 모르면 null",
+  "reporterStatus": "found(찾음) | fetch_failed(원문을 못 열었음) | not_on_page(원문을 읽었는데 기자 표기가 없음) | unverified(원문을 열지 않음)",
   "publishedAt": "2026-11-05T16:23:00+09:00 형식, 모르면 null",
   "summary": "핵심 내용 2~3문장",
   "category": "카테고리 key, 제외한 후보는 null",
@@ -101,6 +102,7 @@ export const startMoreSearch = async (options: {
     JSON.stringify(options.rules.map(({ title, value }) => ({ title, value }))),
     "",
     "네가 가진 뉴스 검색·모니터링 스킬로 기사를 찾고, 원문에서 기자명과 게재 시각을 확인해.",
+    "기자는 naver-search-api 스킬의 byline.py로 확인하고, 결과의 status를 reporterStatus에 그대로 넣어. 원문을 못 열었으면 기자 표기가 없다고 쓰지 마.",
     ...(options.daily
       ? [
           "이 고객사 전용 모니터링 스킬이 있으면 그 스킬의 수집·검증 절차를 그대로 따라.",

@@ -4,6 +4,7 @@ import type {
   MonitorItemView,
   MonitorRunView,
 } from "@/lib/monitor/types";
+import { getReporterGap } from "@/lib/monitor/types";
 
 const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
 
@@ -53,7 +54,7 @@ export const buildMonitorReport = ({
     `${CIRCLED[index] ?? `${index + 1}.`} ${item.title}`,
     `- 매체: ${item.media}`,
     `- 게재 일시: ${formatItemTime(item.publishedAt)}`,
-    `- 기자: ${item.reporter || "확인 불가"}`,
+    `- 기자: ${item.reporter || getReporterGap(item.flags)?.report || "확인 불가"}`,
     `- 링크: ${preferredLink(item, preferNaver)}`,
     ...(item.summary ? [`- 핵심 내용: ${item.summary}`] : []),
     "",
