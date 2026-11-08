@@ -1,29 +1,21 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { toast } from "sonner";
 
 import { CATEGORY_COLOR_HEX, CategoryIcon } from "@/components/ledger/category-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerEntryView, LedgerMonthPayload } from "@/lib/db/ledger";
 import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
-import {
-  formatCompactWon,
-  formatMonthKo,
-  formatWon,
-  todayKst,
-} from "@/lib/ledger/format";
+import { formatCompactWon, formatWon, todayKst } from "@/lib/ledger/format";
 
 interface Props {
-  ledger: LedgerMonthPayload;
-  onOpenSettings: () => void;
+  categories: LedgerMonthPayload["categories"];
   onEdit: (entry: LedgerEntryView) => void;
 }
 
@@ -75,15 +67,6 @@ const StatCard = ({
   >
     <CardContent className="px-4">{children}</CardContent>
   </Card>
-);
-
-const ProgressBar = ({ pct, className = "" }: { pct: number; className?: string }) => (
-  <div className={`h-1.5 overflow-hidden rounded-full bg-canvas-soft ${className}`}>
-    <div
-      className="h-full rounded-full bg-primary transition-[width]"
-      style={{ width: `${Math.max(0, Math.min(pct, 100))}%` }}
-    />
-  </div>
 );
 
 const KpiCards = ({ stats }: { stats: LedgerStats }) => {
@@ -774,55 +757,7 @@ const presetRange = (id: RangeId): { from?: string; to?: string } => {
   return {};
 };
 
-const MonthNoteCard = ({ ledger }: { ledger: LedgerMonthPayload }) => {
-  const token = useAuthStore((s) => s.token);
-  const queryClient = useQueryClient();
-  const [note, setNote] = useState(ledger.budget.note);
-  const { totalBudget, byCategory } = ledger.budget;
-
-  const saveNote = useMutation({
-    mutationFn: () =>
-      ledgerRequest(token, "/api/ledger/budget", {
-        method: "PUT",
-        body: { month: ledger.month, totalBudget, note, categories: byCategory },
-      }),
-    onSuccess: () => {
-      toast.success("메모를 저장했어요.");
-      queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  return (
-    <StatCard className="md:col-span-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">
-          {formatMonthKo(ledger.month)} 메모
-        </p>
-        <span className="text-[11px] text-muted-soft tabular-nums">
-          입금 {formatWon(ledger.summary.income)}
-        </span>
-      </div>
-      <Textarea
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder="이 달에 기억해 둘 것"
-        className="mt-2 min-h-20"
-      />
-      <div className="mt-2 flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => saveNote.mutate()}
-          disabled={saveNote.isPending || note.trim() === ledger.budget.note}
-        >
-          메모 저장
-        </Button>
-      </div>
-    </StatCard>
-  );
-};
-
-export const StatsView = ({ ledger, onOpenSettings, onEdit }: Props) => {
+export const StatsView = ({ categories, onEdit }: Props) => {
   const token = useAuthStore((s) => s.token);
   const [range, setRange] = useState<RangeId>("all");
   const [customFrom, setCustomFrom] = useState("");
@@ -866,9 +801,6 @@ export const StatsView = ({ ledger, onOpenSettings, onEdit }: Props) => {
     ...LEDGER_LIVE_QUERY,
   });
   const stats = statsQuery.data;
-
-  const { totalBudget } = ledger.budget;
-  const { expense, budgetRemaining, budgetUsedPct } = ledger.summary;
 
   const hasActivity = stats
     ? stats.summary.income !== 0 || stats.summary.expense !== 0
@@ -979,7 +911,7 @@ export const StatsView = ({ ledger, onOpenSettings, onEdit }: Props) => {
               <CategoryCard stats={stats} />
               <PeriodEntriesCard
                 entries={stats.entries}
-                categories={ledger.categories}
+                categories={categories}
                 onEdit={onEdit}
               />
               <MonthlyCard monthly={stats.monthly} />
@@ -999,57 +931,6 @@ export const StatsView = ({ ledger, onOpenSettings, onEdit }: Props) => {
           )}
         </>
       ) : null}
-
-      <StatCard className="md:col-span-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium text-muted">
-            {formatMonthKo(ledger.month)} 예산
-          </p>
-          <span className="text-[11px] text-muted-soft tabular-nums">
-            {totalBudget == null
-              ? ""
-              : `지출 ${formatWon(expense)} / ${formatWon(totalBudget)}`}
-          </span>
-        </div>
-
-        {totalBudget == null ? (
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[13px] text-muted">예산을 정하면 진행률을 보여줄게요</p>
-            <Button variant="outline" size="sm" onClick={onOpenSettings}>
-              예산 정하기
-            </Button>
-          </div>
-        ) : (
-          <>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span
-                className={`text-lg font-semibold tabular-nums ${
-                  budgetRemaining != null && budgetRemaining < 0
-                    ? "text-[color:var(--color-error)]"
-                    : "text-ink"
-                }`}
-              >
-                {formatWon(budgetRemaining ?? 0)}
-                <span className="ml-1 text-[12px] font-normal">
-                  {budgetRemaining != null && budgetRemaining >= 0 ? "남은 돈" : "초과"}
-                </span>
-              </span>
-              <span
-                className={`text-[12px] font-medium tabular-nums ${
-                  budgetRemaining != null && budgetRemaining < 0
-                    ? "text-[color:var(--color-error)]"
-                    : "text-muted"
-                }`}
-              >
-                {budgetUsedPct ?? 0}% 사용
-              </span>
-            </div>
-            <ProgressBar pct={budgetUsedPct ?? 0} className="mt-2" />
-          </>
-        )}
-      </StatCard>
-
-      <MonthNoteCard key={`${ledger.month}:${ledger.budget.note}`} ledger={ledger} />
     </div>
   );
 };
