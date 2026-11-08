@@ -14,3 +14,12 @@ export interface MonitorProgress {
   activity: string;
   lastActivityAt: string | null;
 }
+
+/** 하치와레 작업량 표시 — 캐시를 뺀 토큰과 도구 횟수 */
+export const formatUsage = ({ tokens, tools }: { tokens: number; tools: number }) => {
+  const amount =
+    tokens >= 10_000
+      ? `${(tokens / 10_000).toFixed(1)}만`
+      : tokens.toLocaleString("ko-KR");
+  return `토큰 ${amount} · 도구 ${tools}회`;
+};

@@ -149,6 +149,8 @@ export const startIssueRecount = async (options: {
   brandTerms: string[];
   lastSnapshotAt: string | null;
   isReport: boolean;
+  reportRecipient: string;
+  reportTemplate: string;
 }) => {
   const config = ensureHermes();
   const since = options.lastSnapshotAt
@@ -165,9 +167,16 @@ export const startIssueRecount = async (options: {
     since
       ? `집계 구간: ${since} 이후 ~ 지금 (네이버 뉴스 기준, KST)`
       : "집계 구간: 최초 보도부터 지금까지 (네이버 뉴스 기준, KST)",
-    options.isReport
-      ? "정기 보고용 집계야. 고객사 담당 매니저에게 보낼 보고 초안(reportText)도 써줘. 인사는 '담당 매니저님, 안녕하세요. 웰컴 성예은입니다.'로 시작해."
-      : "중간 확인용 집계야. reportText는 비워도 돼.",
+    ...(options.isReport
+      ? [
+          `정기 보고용 집계야. 고객사 담당자에게 보낼 보고 초안(reportText)도 써줘. 인사는 '${options.reportRecipient || "담당 매니저님"}, 안녕하세요. 웰컴 성예은입니다.'로 시작해.`,
+          ...(options.reportTemplate
+            ? [
+                `보고 초안은 아래 서식을 그대로 따라 쓰고, 빈칸과 숫자만 이번 집계로 채워:\n${options.reportTemplate}`,
+              ]
+            : []),
+        ]
+      : ["중간 확인용 집계야. reportText는 비워도 돼."]),
     "",
     "added = 구간 안에 새로 게재된 관련 기사 수, mediaCount = 매체 수, brandMentions = 감시어가 본문·제목에 나온 기사 수.",
     "lastArticle = 가장 최근 기사. events = 이번 구간에 새로 생긴 중요한 흐름(없으면 빈 배열).",

@@ -245,7 +245,7 @@ export const RulesPanel = ({ client, mutations, collectedToday }: Props) => {
   return (
     <div className="flex flex-col gap-8">
       <AutoCollectEditor
-        key={`${client.autoCollect}-${effectiveCollectTime(client)}`}
+        key={`${client.autoCollect}-${client.weekdaysOnly}-${effectiveCollectTime(client)}`}
         client={client}
         collectedToday={collectedToday}
         saving={mutations.updateClient.isPending}

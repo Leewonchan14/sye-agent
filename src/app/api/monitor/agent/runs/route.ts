@@ -1,10 +1,11 @@
-import { ingestAgentRun } from "@/lib/db/monitor";
+import { getRunRow, ingestAgentRun } from "@/lib/db/monitor";
 import {
   monitorErrorResponse,
   readJson,
   requireAgentAccess,
   requireAgentKey,
 } from "@/lib/monitor/api";
+import { readRunUsage } from "@/lib/monitor/progress";
 import { agentRunSchema } from "@/lib/monitor/types";
 
 export const runtime = "nodejs";
@@ -23,7 +24,13 @@ export const POST = async (req: Request) => {
       : requireAgentKey(req);
     if (authError) return authError;
 
-    return Response.json(await ingestAgentRun(input), { status: 201 });
+    const pendingRunId = input.runId
+      ? (await getRunRow(input.runId))?.pendingHermesRunId
+      : null;
+    const usage = pendingRunId
+      ? await readRunUsage(pendingRunId).catch(() => null)
+      : null;
+    return Response.json(await ingestAgentRun(input, usage), { status: 201 });
   } catch (error) {
     return monitorErrorResponse(error, "수집 결과를 저장하지 못했어요.");
   }

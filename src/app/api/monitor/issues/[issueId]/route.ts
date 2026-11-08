@@ -42,6 +42,8 @@ const patchSchema = z.object({
   keywords: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
   brandTerms: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
   isActive: z.boolean().optional(),
+  reportRecipient: z.string().trim().max(40).optional(),
+  reportTemplate: z.string().trim().max(4000).optional(),
   collectStart: z.string().regex(TIME, "시각 형식이 올바르지 않아요.").optional(),
   collectGapMinutes: z
     .number()
