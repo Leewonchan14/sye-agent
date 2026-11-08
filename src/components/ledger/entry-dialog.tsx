@@ -41,7 +41,7 @@ export const EntryDialog = ({
   entry,
 }: Props) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+    <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>{entry ? "내역 수정" : "내역 추가"}</DialogTitle>
         <DialogDescription>
@@ -156,142 +156,153 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 rounded-full bg-canvas-soft p-1">
-        {(
-          [
-            { id: "expense", label: "지출" },
-            { id: "income", label: "입금" },
-          ] as const
-        ).map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            aria-pressed={kind === option.id}
-            onClick={() => changeKind(option.id)}
-            className={`rounded-full py-1.5 text-[13px] font-medium transition-colors ${
-              kind === option.id
-                ? "bg-primary text-primary-foreground"
-                : "text-muted hover:text-body"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      <div>
-        <label className="text-[12px] font-medium text-muted" htmlFor="ledger-amount">
-          금액
-        </label>
-        <div className="relative mt-1">
-          <Input
-            id="ledger-amount"
-            value={numberDisplay(amount)}
-            onChange={(event) => setAmount(cleanDigits(event.target.value).slice(0, 10))}
-            inputMode="numeric"
-            placeholder="0"
-            autoComplete="off"
-            className="h-14 pr-8 text-right text-2xl font-semibold tabular-nums"
-          />
-          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted">
-            원
-          </span>
+    <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="-mx-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4">
+        <div className="grid grid-cols-2 rounded-full bg-canvas-soft p-1">
+          {(
+            [
+              { id: "expense", label: "지출" },
+              { id: "income", label: "입금" },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={kind === option.id}
+              onClick={() => changeKind(option.id)}
+              className={`rounded-full py-1.5 text-[13px] font-medium transition-colors ${
+                kind === option.id
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted hover:text-body"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-      </div>
 
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <div className="min-w-0">
-          <label className="text-[12px] font-medium text-muted" htmlFor="ledger-date">
-            날짜
+        <div>
+          <label className="text-[12px] font-medium text-muted" htmlFor="ledger-amount">
+            금액
+          </label>
+          <div className="relative mt-1">
+            <Input
+              id="ledger-amount"
+              value={numberDisplay(amount)}
+              onChange={(event) =>
+                setAmount(cleanDigits(event.target.value).slice(0, 10))
+              }
+              inputMode="numeric"
+              placeholder="0"
+              autoComplete="off"
+              className="h-14 pr-8 text-right text-2xl font-semibold tabular-nums"
+            />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted">
+              원
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="min-w-0">
+            <label
+              className="block text-[12px] font-medium text-muted"
+              htmlFor="ledger-date"
+            >
+              날짜
+            </label>
+            <Input
+              id="ledger-date"
+              type="date"
+              value={entryDate}
+              onChange={(event) => setEntryDate(event.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-[12px] font-medium text-muted"
+              htmlFor="ledger-time"
+            >
+              시각
+            </label>
+            <Input
+              id="ledger-time"
+              type="time"
+              value={entryTime}
+              onChange={(event) => setEntryTime(event.target.value)}
+              className="mt-1 w-36"
+            />
+          </div>
+        </div>
+
+        {kind === "expense" && (
+          <div>
+            <p className="text-[12px] font-medium text-muted">분류</p>
+            {categories.length ? (
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {categories.map((category) => {
+                  const selected = category.id === categoryId;
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setCategoryId(selected ? null : category.id)}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
+                        selected
+                          ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
+                          : "border-hairline bg-surface text-body hover:bg-canvas-soft"
+                      }`}
+                    >
+                      <CategoryIcon
+                        icon={category.icon}
+                        color={category.color}
+                        size={20}
+                      />
+                      {category.name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-1 text-[12px] text-muted">
+                분류가 없어요. 예산·설정에서 추가해 주세요.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="text-[12px] font-medium text-muted" htmlFor="ledger-memo">
+            내용
           </label>
           <Input
-            id="ledger-date"
-            type="date"
-            value={entryDate}
-            onChange={(event) => setEntryDate(event.target.value)}
+            id="ledger-memo"
+            value={memo}
+            onChange={(event) => setMemo(event.target.value)}
+            placeholder="예: 성수동 카페"
+            maxLength={200}
             className="mt-1"
           />
         </div>
+
         <div>
-          <label
-            className="block text-[12px] font-medium text-muted"
-            htmlFor="ledger-time"
-          >
-            시각
+          <label className="text-[12px] font-medium text-muted" htmlFor="ledger-tags">
+            태그
           </label>
           <Input
-            id="ledger-time"
-            type="time"
-            value={entryTime}
-            onChange={(event) => setEntryTime(event.target.value)}
-            className="mt-1 w-36"
+            id="ledger-tags"
+            value={tags}
+            onChange={(event) => setTags(event.target.value)}
+            placeholder="쉼표로 구분 (예: 데이트, 생일)"
+            maxLength={100}
+            className="mt-1"
           />
         </div>
       </div>
 
-      {kind === "expense" && (
-        <div>
-          <p className="text-[12px] font-medium text-muted">분류</p>
-          {categories.length ? (
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {categories.map((category) => {
-                const selected = category.id === categoryId;
-                return (
-                  <button
-                    key={category.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setCategoryId(selected ? null : category.id)}
-                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
-                      selected
-                        ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
-                        : "border-hairline bg-surface text-body hover:bg-canvas-soft"
-                    }`}
-                  >
-                    <CategoryIcon icon={category.icon} color={category.color} size={20} />
-                    {category.name}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mt-1 text-[12px] text-muted">
-              분류가 없어요. 예산·설정에서 추가해 주세요.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div>
-        <label className="text-[12px] font-medium text-muted" htmlFor="ledger-memo">
-          내용
-        </label>
-        <Input
-          id="ledger-memo"
-          value={memo}
-          onChange={(event) => setMemo(event.target.value)}
-          placeholder="예: 성수동 카페"
-          maxLength={200}
-          className="mt-1"
-        />
-      </div>
-
-      <div>
-        <label className="text-[12px] font-medium text-muted" htmlFor="ledger-tags">
-          태그
-        </label>
-        <Input
-          id="ledger-tags"
-          value={tags}
-          onChange={(event) => setTags(event.target.value)}
-          placeholder="쉼표로 구분 (예: 데이트, 생일)"
-          maxLength={100}
-          className="mt-1"
-        />
-      </div>
-
-      <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-between gap-2 border-t border-hairline bg-popover px-4 py-3">
+      <div className="-mx-4 -mb-4 flex shrink-0 items-center justify-between gap-2 border-t border-hairline bg-popover px-4 py-3">
         {entry && confirmDelete ? (
           <div className="flex w-full items-center gap-2 text-[12px] text-destructive">
             <span className="flex-1">정말 지울까요?</span>

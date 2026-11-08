@@ -291,6 +291,47 @@ test("전체 탭과 큰 지출 TOP 8에서 분류로 거를 수 있다", async (
   await expect(top).not.toContainText("점심");
 });
 
+test("내역 창의 버튼 줄은 맨 아래에 붙고 입력칸이 그 뒤로 비치지 않는다", async ({
+  page,
+  request,
+}) => {
+  await addEntry(request, token, { entryDate: today(), amount: 1_000, memo: "긴 내역" });
+  await page.setViewportSize({ width: 390, height: 600 });
+  await openLedger(page, token);
+  await page.getByRole("button", { name: /긴 내역/ }).click();
+
+  const dialog = page.getByRole("dialog");
+  const footer = dialog
+    .getByRole("button", { name: "저장" })
+    .locator("xpath=ancestor::div[contains(@class,'border-t')][1]");
+  const tags = dialog.locator("#ledger-tags");
+  await tags.waitFor();
+
+  const box = async (locator: typeof dialog) => {
+    const value = await locator.boundingBox();
+    if (!value) throw new Error("요소를 찾을 수 없습니다.");
+    return value;
+  };
+
+  const measureGap = async () => {
+    const [outer, bar] = await Promise.all([box(dialog), box(footer)]);
+    return outer.y + outer.height - (bar.y + bar.height);
+  };
+
+  expect(Math.abs(await measureGap())).toBeLessThanOrEqual(1);
+
+  const [date, time] = await Promise.all([
+    box(dialog.locator("#ledger-date")),
+    box(dialog.locator("#ledger-time")),
+  ]);
+  expect(Math.abs(date.y - time.y)).toBeLessThanOrEqual(1);
+
+  await tags.scrollIntoViewIfNeeded();
+  const [field, bar] = await Promise.all([box(tags), box(footer)]);
+  expect(field.y + field.height).toBeLessThanOrEqual(bar.y + 1);
+  expect(Math.abs(await measureGap())).toBeLessThanOrEqual(1);
+});
+
 test("상대방이 입력한 내역이 새로고침 없이 나타난다", async ({ page, request }) => {
   await openLedger(page, token);
   await addEntry(request, token, {
