@@ -10,6 +10,7 @@ import {
   CreateIssueDialog,
 } from "@/components/monitor/create-dialogs";
 import { IssueView } from "@/components/monitor/issue-view";
+import { TodayBoard } from "@/components/monitor/today-board";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -115,6 +116,15 @@ export const MonitorPage = () => {
             </>
           )}
         </nav>
+
+        {data && (
+          <TodayBoard
+            overview={data}
+            isSelected={(kind, id) => selected?.kind === kind && selected.id === id}
+            onSelectClient={(id) => setStored({ kind: "client", id })}
+            onSelectIssue={(id) => setStored({ kind: "issue", id })}
+          />
+        )}
 
         {isLoading && (
           <div className="flex justify-center py-20">

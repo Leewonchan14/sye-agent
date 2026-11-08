@@ -1,7 +1,12 @@
 import type { Dayjs } from "dayjs";
 
 import { kst } from "@/lib/kst";
-import { DEFAULT_PERIOD, type MonitorPeriod, parsePeriod } from "@/lib/monitor/period";
+import {
+  DEFAULT_PERIOD,
+  type MonitorPeriod,
+  parsePeriod,
+  resolvePeriod,
+} from "@/lib/monitor/period";
 import type {
   MonitorClientView,
   MonitorIssuePayload,
@@ -14,7 +19,7 @@ const FALLBACK_COLLECT_TIME = "09:00";
 /** 대시보드에 "찾고 있어요 · ○○"로 보이는 문구이자 자동 수집을 구분하는 표시 */
 export const DAILY_COLLECT_REQUEST = "매일 자동 수집";
 
-type CollectSettings = Pick<MonitorClientView, "rules" | "collectTime">;
+type CollectSettings = Pick<MonitorClientView, "rules" | "collectTime" | "weekdaysOnly">;
 
 const atTime = (day: Dayjs, time: string) => {
   const [h, m] = time.split(":").map(Number);
@@ -47,15 +52,29 @@ export const effectiveCollectTime = ({ rules, collectTime }: CollectSettings) =>
 export const collectSlotOn = (client: CollectSettings, day: Dayjs) =>
   atTime(day, effectiveCollectTime(client));
 
+/** 이 날 자동 수집을 하는지 — 평일만 수집이면 토·일은 건너뛴다. */
+export const isCollectDay = (client: CollectSettings, day: Dayjs) =>
+  !client.weekdaysOnly || (day.day() >= 1 && day.day() <= 5);
+
+/** 이번 수집 구간 — 평일만 수집이면 월요일은 주말을 합쳐 금요일 구간부터 모은다. */
+export const collectWindow = (client: CollectSettings, now: Dayjs) => {
+  const { since, until } = resolvePeriod(clientPeriod(client.rules), now);
+  return {
+    since: client.weekdaysOnly && now.day() === 1 ? since.subtract(2, "day") : since,
+    until,
+  };
+};
+
 export const nextCollectAt = (
   client: CollectSettings,
   collectedToday: boolean,
   now: Dayjs = kst()
 ) => {
   const today = collectSlotOn(client, now);
-  return !collectedToday && now.isBefore(today)
-    ? today
-    : collectSlotOn(client, now.add(1, "day"));
+  if (!collectedToday && isCollectDay(client, now) && now.isBefore(today)) return today;
+  let day = now.add(1, "day");
+  while (!isCollectDay(client, day)) day = day.add(1, "day");
+  return collectSlotOn(client, day);
 };
 
 export const nextCollectLabel = (client: CollectSettings, collectedToday: boolean) =>

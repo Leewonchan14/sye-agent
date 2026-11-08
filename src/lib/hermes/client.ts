@@ -204,20 +204,24 @@ export const readLatestHermesMessages = async (
   }
 };
 
+export interface HermesSessionSummary {
+  tool_call_count?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
 /** 세션 요약 — 도구 사용 횟수처럼 전체 대화를 읽지 않고 알 수 있는 값 */
 export const readHermesSessionSummary = async (
   config: HermesBackendConfig,
   sessionId: string
-): Promise<{ tool_call_count?: number } | null> => {
+): Promise<HermesSessionSummary | null> => {
   try {
     const res = await fetch(
       `${config.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}`,
       { headers: requestHeaders(config), signal: AbortSignal.timeout(10_000) }
     );
     if (!res.ok) return null;
-    return (
-      ((await res.json()) as { session?: { tool_call_count?: number } }).session ?? null
-    );
+    return ((await res.json()) as { session?: HermesSessionSummary }).session ?? null;
   } catch {
     return null;
   }

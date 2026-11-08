@@ -272,6 +272,8 @@ export const monitorClients = pgTable(
     autoCollect: boolean("auto_collect").notNull().default(true),
     /** 수집 시작 시각(HH:mm, KST). 비우면 모니터링 기간이 끝나는 시각 */
     collectTime: text("collect_time"),
+    /** 평일에만 수집한다. 월요일에는 지난 금요일부터 모은다. */
+    weekdaysOnly: boolean("weekdays_only").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -304,6 +306,8 @@ export const monitorRuns = pgTable(
     lastError: text("last_error"),
     /** 매일 자동 수집의 날짜(YYYY-MM-DD, KST). 같은 날 두 번 시작하지 않게 막는다. 수동 수집은 null. */
     collectKey: text("collect_key"),
+    /** 자동 수집 진행 — running → (실패 시 retried) → done. 재시도와 알림을 한 번만 하게 막는다. */
+    autoState: text("auto_state"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (t) => ({
@@ -390,6 +394,12 @@ export const monitorIssues = pgTable("monitor_issues", {
   collectGapMinutes: integer("collect_gap_minutes").notNull().default(360),
   /** 마지막으로 시작한 자동 집계 시각 키(YYYY-MM-DD-HH:mm, KST). 같은 시각에 두 번 돌지 않게 막는다. */
   lastAutoSlot: text("last_auto_slot"),
+  /** 자동 집계 진행 — running → (실패 시 retried) → done */
+  autoState: text("auto_state"),
+  /** 보고 초안을 받는 사람(예: 김슬기 매니저님). 비우면 "담당 매니저님" */
+  reportRecipient: text("report_recipient").notNull().default(""),
+  /** 보고 초안 서식. 비우면 하치와레가 기본 형식으로 쓴다. */
+  reportTemplate: text("report_template").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -412,6 +422,8 @@ export const monitorIssueSnapshots = pgTable(
     reportText: text("report_text"),
     /** 정기 보고(15시 등)인지, 중간 확인인지 */
     isReport: boolean("is_report").notNull().default(true),
+    /** 이 집계에 쓴 하치와레 작업량 { tokens, tools } */
+    usage: jsonb("usage"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (t) => ({ issueIdx: index("monitor_issue_snapshots_issue_idx").on(t.issueId, t.at) })

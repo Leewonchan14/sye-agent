@@ -169,6 +169,13 @@
       "when": 1794148156602,
       "tag": "0024_graceful_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794148262534,
+      "tag": "0025_left_power_pack",
+      "breakpoints": true
     }
   ]
 }

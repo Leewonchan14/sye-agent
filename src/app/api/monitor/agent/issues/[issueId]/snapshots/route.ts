@@ -1,10 +1,11 @@
-import { addIssueSnapshot } from "@/lib/db/monitor";
+import { addIssueSnapshot, getIssueRow } from "@/lib/db/monitor";
 import {
   monitorErrorResponse,
   parseId,
   readJson,
   requireAgentAccess,
 } from "@/lib/monitor/api";
+import { readRunUsage } from "@/lib/monitor/progress";
 import { agentSnapshotSchema } from "@/lib/monitor/types";
 
 export const runtime = "nodejs";
@@ -27,7 +28,11 @@ export const POST = async (
     const input = agentSnapshotSchema.parse(await readJson(req));
     // 버튼으로 시작한 집계(콜백 토큰)는 에이전트의 시계·시간대를 믿지 않고 받은 시각을 쓴다.
     if (req.headers.get("x-monitor-token")) input.at = undefined;
-    const snapshot = await addIssueSnapshot(issueId, input);
+    const pendingRunId = (await getIssueRow(issueId))?.pendingHermesRunId;
+    const usage = pendingRunId
+      ? await readRunUsage(pendingRunId).catch(() => null)
+      : null;
+    const snapshot = await addIssueSnapshot(issueId, input, usage);
     return Response.json({ snapshot }, { status: 201 });
   } catch (error) {
     return monitorErrorResponse(error, "집계를 저장하지 못했어요.");

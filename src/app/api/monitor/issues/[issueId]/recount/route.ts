@@ -40,6 +40,8 @@ export const POST = async (
       keywords: issue.keywords,
       brandTerms: issue.brandTerms,
       lastSnapshotAt: lastReport?.at ?? null,
+      reportRecipient: issue.reportRecipient,
+      reportTemplate: issue.reportTemplate,
       isReport,
     });
     return Response.json({ ok: true }, { status: 202 });

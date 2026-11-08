@@ -14,7 +14,9 @@ export const POST = async (req: Request) => {
   const authError = requireAgentKey(req);
   if (authError) return authError;
   try {
-    return Response.json(await runDailyCollectTick(publicOrigin(req)));
+    return Response.json(
+      await runDailyCollectTick(publicOrigin(req), undefined, new URL(req.url).origin)
+    );
   } catch (error) {
     return monitorErrorResponse(error, "오늘 수집을 시작하지 못했어요.");
   }

@@ -37,6 +37,7 @@ const FLAG_LABEL: Record<string, { label: string; tone: string }> = {
   new: { label: "방금 찾음", tone: "bg-primary/10 text-primary" },
   dup: { label: "같은 보도자료", tone: "bg-canvas-card text-muted" },
   reported: { label: "이전에 보고함", tone: "bg-warning/15 text-warning" },
+  "over-limit": { label: "최대 건수 초과", tone: "bg-canvas-card text-muted" },
   blocked: { label: "원문 차단", tone: "bg-error/10 text-error" },
 };
 
@@ -303,9 +304,18 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
   const categoryKeys = new Set(client.categories.map((c) => c.key));
   const excluded = items.filter((i) => !i.category || !categoryKeys.has(i.category));
   const pending = Boolean(run.pendingSince);
+  const reportedCount = items.filter(
+    (i) => i.flags.includes("reported") && !i.included
+  ).length;
 
   return (
     <div className="flex flex-col gap-8">
+      {reportedCount > 0 && (
+        <p className="rounded-xl bg-warning/10 px-4 py-2.5 text-[13px] text-body">
+          이전에 보고한 기사 {reportedCount}건은 체크를 해제해 뒀어요. 다시 보내려면
+          체크해 주세요.
+        </p>
+      )}
       {client.categories.map((category) => {
         const all = items.filter((i) => i.category === category.key);
         const leads = all.filter((i) => i.isLead || !i.dupGroup);

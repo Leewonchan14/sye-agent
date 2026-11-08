@@ -2,7 +2,7 @@
 """매일 자동 수집 시계 — Oracle에서 Hermes no_agent 예약 작업으로 1분마다 돈다.
 
 사이트에 "할 일 있어?"를 묻고, 서버가 알려 준 다음 확인 시각까지는 호출하지 않는다.
-stdout은 그대로 Discord로 가므로 실패했을 때와 복구됐을 때만 출력한다.
+stdout은 그대로 Discord로 가므로 완료·실패 알림, 시작 실패와 복구만 출력한다.
 """
 import json
 import os
@@ -63,6 +63,8 @@ def main():
 
     result, error = call_tick()
     if result is not None:
+        for message in result.get("notifications") or []:
+            print(message)
         failed = result.get("failed") or []
         error = "; ".join(f"{f['client']}: {f['error']}" for f in failed) or None
 

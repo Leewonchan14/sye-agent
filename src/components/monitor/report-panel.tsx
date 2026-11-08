@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Undo2 } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { toast } from "sonner";
 import useLocalStorageState from "use-local-storage-state";
@@ -42,11 +42,17 @@ export const ReportPanel = ({ client, run, items, mutations }: Props) => {
     (i) => i.category && i.included && (i.isLead || !i.dupGroup)
   );
   const missing = leads.filter((i) => !i.reporter || !i.publishedAt).length;
+  const skipReported = client.rules.some(
+    (r) => r.id === "skip-reported" && r.value === true
+  );
+  const exclusionNote = skipReported
+    ? `포함한 ${leads.length}건은 다음 수집부터 자동으로 빠져요.`
+    : '"어제 보고한 기사 제외" 규칙이 꺼져 있어서 다음 수집에도 다시 나와요.';
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("리포트를 복사했어요. 다음 수집부터 이 기사들은 자동으로 빠져요.");
+      toast.success("리포트를 복사했어요. 보낸 뒤 '보고 완료로 표시'를 눌러 주세요.");
     } catch {
       const range = document.createRange();
       if (preRef.current) range.selectNodeContents(preRef.current);
@@ -55,8 +61,21 @@ export const ReportPanel = ({ client, run, items, mutations }: Props) => {
       selection?.addRange(range);
       toast("텍스트를 선택해 뒀어요. 복사 단축키를 눌러 주세요.");
     }
-    mutations.markReported.mutate({ runId: run.id, reportText: text });
   };
+
+  const markReported = () =>
+    mutations.markReported.mutate(
+      { runId: run.id, reportText: text },
+      {
+        onSuccess: () =>
+          toast.success(`보고 완료로 표시했어요. ${exclusionNote}`, {
+            action: {
+              label: "되돌리기",
+              onClick: () => mutations.unmarkReported.mutate(run.id),
+            },
+          }),
+      }
+    );
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
@@ -118,16 +137,39 @@ export const ReportPanel = ({ client, run, items, mutations }: Props) => {
         <Button onClick={copy} disabled={!leads.length}>
           <Copy /> 리포트 복사
         </Button>
-        {run.reportedAt ? (
-          <p className="flex items-center gap-1.5 text-[12px] text-success">
-            <Check className="size-3.5" />
-            {kst(run.reportedAt).format("M월 D일 HH:mm")}에 보고 완료
-          </p>
-        ) : (
-          <p className="text-[12px] text-muted">
-            복사하면 보고한 것으로 기록되고, 다음 수집 때 같은 기사가 빠져요.
-          </p>
-        )}
+        <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+          {run.reportedAt ? (
+            <>
+              <p className="flex items-center gap-1.5 text-[13px] font-medium text-success">
+                <Check className="size-3.5" />
+                {kst(run.reportedAt).format("M월 D일 HH:mm")}에 보고 완료
+              </p>
+              <p className="text-[12px] text-muted">{exclusionNote}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={mutations.unmarkReported.isPending}
+                onClick={() => mutations.unmarkReported.mutate(run.id)}
+              >
+                <Undo2 /> 보고 전으로 되돌리기
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-[12px] text-muted">
+                고객사에 보낸 뒤 눌러 주세요. {exclusionNote} 잘못 눌러도 되돌릴 수
+                있어요.
+              </p>
+              <Button
+                variant="outline"
+                disabled={!leads.length || mutations.markReported.isPending}
+                onClick={markReported}
+              >
+                <Check /> 보고 완료로 표시
+              </Button>
+            </>
+          )}
+        </div>
       </aside>
     </div>
   );
