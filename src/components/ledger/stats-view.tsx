@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Wallet } from "lucide-react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import {
@@ -16,17 +16,25 @@ import type { LedgerEntryView, LedgerMonthPayload } from "@/lib/db/ledger";
 import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
-import { formatCompactWon, formatWon, todayKst } from "@/lib/ledger/format";
+import {
+  currentMonthKst,
+  formatCompactWon,
+  formatMonthKo,
+  formatWon,
+  shiftMonth,
+  todayKst,
+} from "@/lib/ledger/format";
 
 interface Props {
   categories: LedgerMonthPayload["categories"];
+  month: string;
+  onMonthChange: (month: string) => void;
   onEdit: (entry: LedgerEntryView) => void;
 }
 
 const RANGES = [
+  { id: "month", label: "월별" },
   { id: "all", label: "전체" },
-  { id: "thisMonth", label: "이번 달" },
-  { id: "lastMonth", label: "지난달" },
   { id: "3m", label: "최근 3개월" },
   { id: "30", label: "최근 30일" },
   { id: "7", label: "최근 7일" },
@@ -796,11 +804,6 @@ const presetRange = (id: RangeId): { from?: string; to?: string } => {
   const base = kst(today);
   const day = (value: typeof base) => value.format("YYYY-MM-DD");
 
-  if (id === "thisMonth") return { from: day(base.startOf("month")), to: today };
-  if (id === "lastMonth") {
-    const last = base.subtract(1, "month");
-    return { from: day(last.startOf("month")), to: day(last.endOf("month")) };
-  }
   if (id === "3m") {
     return { from: day(base.subtract(2, "month").startOf("month")), to: today };
   }
@@ -809,28 +812,44 @@ const presetRange = (id: RangeId): { from?: string; to?: string } => {
   return {};
 };
 
-export const StatsView = ({ categories, onEdit }: Props) => {
+/** 해당 달의 첫날부터 마지막 날까지. 이번 달은 오늘까지다. */
+const monthRange = (month: string): { from: string; to: string } => {
+  const first = kst(`${month}-01`);
+  return {
+    from: first.format("YYYY-MM-DD"),
+    to:
+      month === currentMonthKst()
+        ? todayKst()
+        : first.endOf("month").format("YYYY-MM-DD"),
+  };
+};
+
+export const StatsView = ({ categories, month, onMonthChange, onEdit }: Props) => {
   const token = useAuthStore((s) => s.token);
-  const [range, setRange] = useState<RangeId>("all");
+  const [range, setRange] = useState<RangeId>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
-  const [applied, setApplied] = useState<{ from?: string; to?: string }>({});
+  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
+  const applied = range === "month" ? monthRange(month) : appliedRange;
+  const thisMonth = currentMonthKst();
 
   const selectRange = (id: RangeId) => {
     setRange(id);
     setCustomError(null);
 
+    if (id === "month") return;
+
     if (id === "custom") {
-      if (!customFrom || !customTo) {
-        const today = todayKst();
-        setCustomFrom(kst(today).subtract(30, "day").format("YYYY-MM-DD"));
-        setCustomTo(today);
-      }
+      const from = customFrom || kst(todayKst()).subtract(30, "day").format("YYYY-MM-DD");
+      const to = customTo || todayKst();
+      setCustomFrom(from);
+      setCustomTo(to);
+      setAppliedRange({ from, to });
       return;
     }
 
-    setApplied(presetRange(id));
+    setAppliedRange(presetRange(id));
   };
 
   const applyCustomRange = () => {
@@ -843,13 +862,14 @@ export const StatsView = ({ categories, onEdit }: Props) => {
       return;
     }
     setCustomError(null);
-    setApplied({ from: customFrom, to: customTo });
+    setAppliedRange({ from: customFrom, to: customTo });
   };
 
   const statsQuery = useQuery({
     queryKey: ledgerKeys.stats(applied.from, applied.to),
     queryFn: () => fetchStats(token, applied.from, applied.to),
     enabled: Boolean(token),
+    placeholderData: keepPreviousData,
     ...LEDGER_LIVE_QUERY,
   });
   const stats = statsQuery.data;
@@ -868,7 +888,11 @@ export const StatsView = ({ categories, onEdit }: Props) => {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between md:col-span-2">
         <p className="text-[12px] font-medium text-muted">기간별 리포트</p>
         <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
-          <div className="flex flex-wrap rounded-full bg-canvas-soft p-1">
+          <div
+            role="group"
+            aria-label="리포트 기간"
+            className="flex flex-wrap rounded-full bg-canvas-soft p-1"
+          >
             {RANGES.map((option) => {
               const active = option.id === range;
               return (
@@ -886,6 +910,40 @@ export const StatsView = ({ categories, onEdit }: Props) => {
               );
             })}
           </div>
+
+          {range === "month" && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="이전 달"
+                onClick={() => onMonthChange(shiftMonth(month, -1))}
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
+                {formatMonthKo(month)}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="다음 달"
+                disabled={month >= thisMonth}
+                onClick={() => onMonthChange(shiftMonth(month, 1))}
+              >
+                <ChevronRight />
+              </Button>
+              {month !== thisMonth && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onMonthChange(thisMonth)}
+                >
+                  이번 달
+                </Button>
+              )}
+            </div>
+          )}
 
           {range === "custom" ? (
             <div className="w-full">
@@ -955,10 +1013,10 @@ export const StatsView = ({ categories, onEdit }: Props) => {
         </StatCard>
       ) : stats ? (
         <>
+          {hasActivity && <KpiCards stats={stats} />}
           <AllTimeCard allTime={stats.allTime} />
           {hasActivity ? (
             <>
-              <KpiCards stats={stats} />
               <BalanceCard daily={stats.daily} />
               <CategoryCard stats={stats} />
               <PeriodEntriesCard
@@ -966,7 +1024,7 @@ export const StatsView = ({ categories, onEdit }: Props) => {
                 categories={categories}
                 onEdit={onEdit}
               />
-              <MonthlyCard monthly={stats.monthly} />
+              {stats.monthly.length > 1 && <MonthlyCard monthly={stats.monthly} />}
               <TopExpensesCard entries={stats.entries} categories={categories} />
             </>
           ) : (
