@@ -17,6 +17,7 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
   const meta = [
     entry.entryTime,
     !isIncome && (entry.categoryName ?? "분류 없음"),
+    entry.tripName,
     entry.tags,
   ]
     .filter(Boolean)

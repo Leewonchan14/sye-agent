@@ -72,6 +72,20 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
   const [memo, setMemo] = useState(entry?.memo ?? "");
   const [tags, setTags] = useState(entry?.tags ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // undefined면 아직 고르지 않은 상태라 날짜로 여행을 추천한다.
+  const [tripChoice, setTripChoice] = useState<number | null | undefined>(
+    entry ? entry.tripId : undefined
+  );
+
+  const tripsOnDate = ledger.trips.filter(
+    (trip) => trip.startDate <= entryDate && entryDate <= trip.endDate
+  );
+  const selectedTripId =
+    tripChoice !== undefined
+      ? tripChoice
+      : tripsOnDate.length === 1
+        ? tripsOnDate[0].id
+        : null;
 
   const categories = ledger.categories.filter((category) => category.kind === kind);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
@@ -86,6 +100,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         categoryId,
         memo: memo.trim(),
         tags: tags.trim(),
+        tripId: kind === "expense" ? selectedTripId : (entry?.tripId ?? null),
       };
       return ledgerRequest(token, "/api/ledger/entries", {
         method: entry ? "PATCH" : "POST",
@@ -270,6 +285,32 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
                 분류가 없어요. 예산·설정에서 추가해 주세요.
               </p>
             )}
+          </div>
+        )}
+
+        {kind === "expense" && ledger.trips.length > 0 && (
+          <div>
+            <p className="text-[12px] font-medium text-muted">여행</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {ledger.trips.map((trip) => {
+                const selected = trip.id === selectedTripId;
+                return (
+                  <button
+                    key={trip.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setTripChoice(selected ? null : trip.id)}
+                    className={`rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
+                      selected
+                        ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
+                        : "border-hairline bg-surface text-body hover:bg-canvas-soft"
+                    }`}
+                  >
+                    {trip.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

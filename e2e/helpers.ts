@@ -17,7 +17,7 @@ export const daysAgo = (days: number) => kst().subtract(days, "day").format("YYY
 
 export const resetLedger = async () => {
   await pool.query(`
-    truncate auth_login_attempts, ledger_entry_history, ledger_account, ledger_budgets, ledger_months,
+    truncate auth_login_attempts, ledger_trips, ledger_entry_history, ledger_account, ledger_budgets, ledger_months,
       ledger_entries, ledger_categories, ledger_assets restart identity cascade
   `);
 };
@@ -68,6 +68,7 @@ export const addEntry = async (
     memo?: string;
     entryTime?: string | null;
     tags?: string;
+    tripId?: number | null;
   }
 ) => {
   const res = await request.post("/api/ledger/entries", {

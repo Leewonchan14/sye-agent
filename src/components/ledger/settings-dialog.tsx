@@ -29,6 +29,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import type {
   LedgerCategoryInput,
   LedgerEntryKind,
+  LedgerEntryView,
   LedgerHistoryItem,
   LedgerMonthPayload,
 } from "@/lib/db/ledger";
@@ -46,6 +47,7 @@ const TABS = [
   { id: "budget", label: "예산" },
   { id: "categories", label: "분류" },
   { id: "account", label: "통장" },
+  { id: "trips", label: "여행" },
   { id: "data", label: "기록" },
 ] as const;
 
@@ -192,6 +194,305 @@ const AccountTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
           첫 기록 이전에 통장에 있던 돈이에요.
         </p>
       </div>
+    </div>
+  );
+};
+
+type LedgerTrip = LedgerMonthPayload["trips"][number];
+
+const TripForm = ({
+  initial,
+  submitLabel,
+  pending,
+  onSubmit,
+  onCancel,
+}: {
+  initial?: LedgerTrip;
+  submitLabel: string;
+  pending: boolean;
+  onSubmit: (input: { name: string; startDate: string; endDate: string }) => void;
+  onCancel?: () => void;
+}) => {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [startDate, setStartDate] = useState(initial?.startDate ?? "");
+  const [endDate, setEndDate] = useState(initial?.endDate ?? "");
+  const ready = name.trim() && startDate && endDate;
+
+  return (
+    <div className="space-y-2 rounded-xl border border-hairline p-2.5">
+      <Input
+        aria-label="여행 이름"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        placeholder="예: 2026 제주"
+        maxLength={30}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          aria-label="여행 시작일"
+          type="date"
+          value={startDate}
+          onChange={(event) => setStartDate(event.target.value)}
+        />
+        <Input
+          aria-label="여행 종료일"
+          type="date"
+          value={endDate}
+          onChange={(event) => setEndDate(event.target.value)}
+        />
+      </div>
+      <div className="flex justify-end gap-1.5">
+        {onCancel && (
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+            취소
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          disabled={!ready || pending}
+          onClick={() => onSubmit({ name, startDate, endDate })}
+        >
+          {submitLabel}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const TripCandidates = ({ trip, onDone }: { trip: LedgerTrip; onDone: () => void }) => {
+  const token = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
+  const [unchecked, setUnchecked] = useState<Set<number>>(() => new Set());
+
+  const candidates = useQuery({
+    queryKey: ledgerKeys.tripCandidates(trip.id),
+    queryFn: async () => {
+      const data = await ledgerRequest<{ entries: LedgerEntryView[] }>(
+        token,
+        `/api/ledger/trips/entries?tripId=${trip.id}`
+      );
+      return data.entries;
+    },
+    enabled: Boolean(token),
+  });
+
+  const selectedIds = (candidates.data ?? [])
+    .map((entry) => entry.id)
+    .filter((id) => !unchecked.has(id));
+
+  const attach = useMutation({
+    mutationFn: () =>
+      ledgerRequest(token, "/api/ledger/trips/entries", {
+        method: "POST",
+        body: { tripId: trip.id, entryIds: selectedIds },
+      }),
+    onSuccess: () => {
+      toast.success(`${selectedIds.length}건을 연결했어요.`);
+      queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
+      onDone();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  if (candidates.isPending) {
+    return <p className="py-3 text-center text-[12px] text-muted">불러오는 중…</p>;
+  }
+  if (!candidates.data?.length) {
+    return (
+      <p className="py-3 text-center text-[12px] text-muted">
+        기간 안에 연결할 지출이 없어요. 미리 결제한 내역은 내역 수정에서 여행을 골라
+        주세요.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-hairline p-2.5">
+      <ul aria-label={`${trip.name} 연결 후보`} className="space-y-1.5">
+        {candidates.data.map((entry) => (
+          <li key={entry.id}>
+            <label className="flex items-center gap-2 text-[12px] text-body">
+              <input
+                type="checkbox"
+                checked={!unchecked.has(entry.id)}
+                onChange={(event) =>
+                  setUnchecked((prev) => {
+                    const next = new Set(prev);
+                    if (event.target.checked) next.delete(entry.id);
+                    else next.add(entry.id);
+                    return next;
+                  })
+                }
+              />
+              <span className="shrink-0 text-muted-soft tabular-nums">
+                {entry.entryDate.slice(5).replace("-", ".")}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{entry.memo || "지출"}</span>
+              <span className="shrink-0 tabular-nums">{formatWon(entry.amount)}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!selectedIds.length || attach.isPending}
+          onClick={() => attach.mutate()}
+        >
+          {selectedIds.length}건 연결
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
+  const token = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [linkingId, setLinkingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [formKey, setFormKey] = useState(0);
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
+
+  const create = useMutation({
+    mutationFn: (body: { name: string; startDate: string; endDate: string }) =>
+      ledgerRequest(token, "/api/ledger/trips", { method: "POST", body }),
+    onSuccess: () => {
+      toast.success("여행을 추가했어요.");
+      setFormKey((key) => key + 1);
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const update = useMutation({
+    mutationFn: (body: {
+      id: number;
+      name: string;
+      startDate: string;
+      endDate: string;
+    }) => ledgerRequest(token, "/api/ledger/trips", { method: "PATCH", body }),
+    onSuccess: () => {
+      toast.success("여행을 수정했어요.");
+      setEditingId(null);
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) =>
+      ledgerRequest(token, "/api/ledger/trips", { method: "DELETE", body: { id } }),
+    onSuccess: () => {
+      toast.success("여행을 삭제했어요.");
+      setDeletingId(null);
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  return (
+    <div className="space-y-3">
+      <ul className="divide-y divide-hairline-soft">
+        {ledger.trips.map((trip) => (
+          <li key={trip.id} className="py-2">
+            {editingId === trip.id ? (
+              <TripForm
+                initial={trip}
+                submitLabel="저장"
+                pending={update.isPending}
+                onSubmit={(input) => update.mutate({ id: trip.id, ...input })}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-ink">
+                      {trip.name}
+                    </p>
+                    <p className="text-[11px] text-muted tabular-nums">
+                      {trip.startDate.replaceAll("-", ".")} ~{" "}
+                      {trip.endDate.slice(5).replace("-", ".")} · {trip.entryCount}건 ·{" "}
+                      {formatWon(trip.expense)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${trip.name} 수정`}
+                    onClick={() => setEditingId(trip.id)}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${trip.name} 삭제`}
+                    onClick={() => setDeletingId(trip.id)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1"
+                  onClick={() => setLinkingId(linkingId === trip.id ? null : trip.id)}
+                >
+                  기간 내역 연결
+                </Button>
+                {linkingId === trip.id && (
+                  <TripCandidates trip={trip} onDone={() => setLinkingId(null)} />
+                )}
+
+                {deletingId === trip.id && (
+                  <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline p-2.5 text-[12px] text-body">
+                    <span className="flex-1">여행만 지워지고 내역은 남아요.</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeletingId(null)}
+                    >
+                      취소
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(trip.id)}
+                    >
+                      여행 삭제
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </li>
+        ))}
+        {!ledger.trips.length && (
+          <li className="py-4 text-center text-[12px] text-muted">
+            등록된 여행이 없어요
+          </li>
+        )}
+      </ul>
+
+      <TripForm
+        key={formKey}
+        submitLabel="여행 추가"
+        pending={create.isPending}
+        onSubmit={(input) => create.mutate(input)}
+      />
     </div>
   );
 };
@@ -1019,6 +1320,8 @@ const SettingsBody = ({
       )}
 
       {tab === "account" && <AccountTab ledger={ledger} />}
+
+      {tab === "trips" && <TripsTab ledger={ledger} />}
 
       {tab === "data" && <DataTab />}
 

@@ -29,7 +29,7 @@ export const CATEGORY_ICON_OPTIONS = [
   {
     key: "bus",
     label: "교통",
-    keywords: ["교통", "버스", "지하철", "택시", "렌터카"],
+    keywords: ["교통", "버스", "지하철", "택시", "렌터카", "렌트"],
     defaultColor: "blue",
   },
   {

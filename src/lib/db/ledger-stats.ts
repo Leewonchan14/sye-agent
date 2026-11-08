@@ -64,7 +64,8 @@ const normalizeDate = (value: string, label: string): string => {
  */
 export const getLedgerStats = async (
   fromInput?: string | null,
-  toInput?: string | null
+  toInput?: string | null,
+  options: { tripId?: number | null; excludeTrips?: boolean } = {}
 ): Promise<LedgerStats> => {
   const db = getDb();
   const today = kst().format("YYYY-MM-DD");
@@ -76,7 +77,7 @@ export const getLedgerStats = async (
   if (from) from = normalizeDate(from, "시작 날짜");
   if (to) to = normalizeDate(to, "종료 날짜");
 
-  const [entryRows, categoryRows, openingBalance] = await Promise.all([
+  const [entryRows, categoryRows, openingBalance, tripRows] = await Promise.all([
     db
       .select()
       .from(schema.ledgerEntries)
@@ -89,7 +90,20 @@ export const getLedgerStats = async (
       .orderBy(asc(schema.ledgerEntries.entryDate), asc(schema.ledgerEntries.id)),
     db.select().from(schema.ledgerCategories),
     getLedgerOpeningBalance(),
+    db.select().from(schema.ledgerTrips),
   ]);
+
+  const trip =
+    options.tripId == null
+      ? null
+      : (tripRows.find((row) => row.id === options.tripId) ?? null);
+  if (options.tripId != null && !trip) {
+    throw new LedgerError("여행을 찾을 수 없어요.");
+  }
+  if (trip) {
+    from = trip.startDate;
+    to = trip.endDate;
+  }
 
   if (!from) from = entryRows[0]?.entryDate ?? today;
   if (!to) to = today;
@@ -104,6 +118,7 @@ export const getLedgerStats = async (
   }
 
   const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
+  const tripById = new Map(tripRows.map((row) => [row.id, row]));
 
   let income = 0;
   let expense = 0;
@@ -120,13 +135,13 @@ export const getLedgerStats = async (
   const dailyTotals = new Map<string, { income: number; expense: number }>();
 
   const start = kst(from);
-  for (let index = 0; index < days; index += 1) {
+  for (let index = 0; !trip && index < days; index += 1) {
     const date = start.add(index, "day").format("YYYY-MM-DD");
     dailyTotals.set(date, { income: 0, expense: 0 });
   }
 
   for (const entry of entryRows) {
-    const view = toLedgerEntryView(entry, categoryById);
+    const view = toLedgerEntryView(entry, categoryById, tripById);
     const isIncome = view.kind === "income";
 
     if (isIncome) {
@@ -137,28 +152,38 @@ export const getLedgerStats = async (
       allTimeExpenseCount += 1;
     }
 
-    if (entry.entryDate < from) {
-      balanceBeforeRange += isIncome ? entry.amount : -entry.amount;
-      continue;
+    if (trip) {
+      // 미리 결제한 항공권처럼 여행 기간 밖의 내역도 연결돼 있으면 포함한다.
+      if (entry.tripId !== trip.id) continue;
+    } else {
+      if (entry.entryDate < from) {
+        balanceBeforeRange += isIncome ? entry.amount : -entry.amount;
+        continue;
+      }
+      if (entry.entryDate > to) continue;
+
+      // 잔액 추이는 실제 통장 기준이라 여행 제외와 상관없이 모두 더한다.
+      const dayTotals = dailyTotals.get(entry.entryDate);
+      if (dayTotals) {
+        if (isIncome) dayTotals.income += entry.amount;
+        else dayTotals.expense += entry.amount;
+      }
+      if (options.excludeTrips && entry.tripId != null) continue;
     }
-    if (entry.entryDate > to) continue;
 
     entries.push(view);
 
     const month = entry.entryDate.slice(0, 7);
     const monthTotals = monthlyTotals.get(month) ?? { income: 0, expense: 0 };
-    const dayTotals = dailyTotals.get(entry.entryDate);
 
     if (isIncome) {
       income += entry.amount;
       incomeCount += 1;
       monthTotals.income += entry.amount;
-      if (dayTotals) dayTotals.income += entry.amount;
     } else {
       expense += entry.amount;
       expenseCount += 1;
       monthTotals.expense += entry.amount;
-      if (dayTotals) dayTotals.expense += entry.amount;
       categoryTotals.set(
         entry.categoryId,
         (categoryTotals.get(entry.categoryId) ?? 0) + entry.amount
