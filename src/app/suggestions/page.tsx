@@ -115,7 +115,7 @@ const SuggestionsContent = () => {
       if (!res.ok) throw new Error("초기화 실패");
       return res.json() as Promise<{ ok: boolean; count: number }>;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       setEditId(undefined);
       setLabel("");
       setPrompt("");

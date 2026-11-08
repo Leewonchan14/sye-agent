@@ -27,8 +27,7 @@ const SITE_URL = BASE_URL.startsWith("http") ? BASE_URL : `https://${BASE_URL}`;
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "하치와레 메이트",
-  description:
-    "작고 귀여운 하치와레가 메이트로 도와줄게요♪",
+  description: "작고 귀여운 하치와레가 메이트로 도와줄게요♪",
   icons: {
     icon: [{ url: "/munjackgui.png", sizes: "384x384", type: "image/png" }],
     apple: { url: "/munjackgui.png", sizes: "384x384", type: "image/png" },
