@@ -524,7 +524,6 @@ const SettingsBody = ({
 
   const categorySections: { kind: LedgerEntryKind; label: string }[] = [
     { kind: "expense", label: "지출" },
-    { kind: "income", label: "수입" },
   ];
 
   return (

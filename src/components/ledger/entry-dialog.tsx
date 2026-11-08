@@ -230,36 +230,38 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         </div>
       </div>
 
-      <div>
-        <p className="text-[12px] font-medium text-muted">분류</p>
-        {categories.length ? (
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {categories.map((category) => {
-              const selected = category.id === categoryId;
-              return (
-                <button
-                  key={category.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setCategoryId(selected ? null : category.id)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
-                    selected
-                      ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
-                      : "border-hairline bg-surface text-body hover:bg-canvas-soft"
-                  }`}
-                >
-                  <CategoryIcon icon={category.icon} color={category.color} size={20} />
-                  {category.name}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="mt-1 text-[12px] text-muted">
-            분류가 없어요. 예산·설정에서 추가해 주세요.
-          </p>
-        )}
-      </div>
+      {kind === "expense" && (
+        <div>
+          <p className="text-[12px] font-medium text-muted">분류</p>
+          {categories.length ? (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {categories.map((category) => {
+                const selected = category.id === categoryId;
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setCategoryId(selected ? null : category.id)}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
+                      selected
+                        ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
+                        : "border-hairline bg-surface text-body hover:bg-canvas-soft"
+                    }`}
+                  >
+                    <CategoryIcon icon={category.icon} color={category.color} size={20} />
+                    {category.name}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-1 text-[12px] text-muted">
+              분류가 없어요. 예산·설정에서 추가해 주세요.
+            </p>
+          )}
+        </div>
+      )}
 
       <div>
         <label className="text-[12px] font-medium text-muted" htmlFor="ledger-memo">

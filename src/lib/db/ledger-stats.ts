@@ -45,7 +45,6 @@ export type LedgerStats = {
   monthly: { month: string; income: number; expense: number }[];
   /** balance는 시작 잔액부터 그날까지 누적한 통장 잔액이다. */
   daily: { date: string; income: number; expense: number; balance: number }[];
-  topExpenses: { name: string; amount: number; count: number }[];
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -118,7 +117,6 @@ export const getLedgerStats = async (
   const entries: LedgerEntryView[] = [];
   const categoryTotals = new Map<number | null, number>();
   const monthlyTotals = new Map<string, { income: number; expense: number }>();
-  const expenseTotals = new Map<string, { amount: number; count: number }>();
   const dailyTotals = new Map<string, { income: number; expense: number }>();
 
   const start = kst(from);
@@ -165,12 +163,6 @@ export const getLedgerStats = async (
         entry.categoryId,
         (categoryTotals.get(entry.categoryId) ?? 0) + entry.amount
       );
-
-      const name = view.memo.trim() || view.categoryName || "지출";
-      const totals = expenseTotals.get(name) ?? { amount: 0, count: 0 };
-      totals.amount += entry.amount;
-      totals.count += 1;
-      expenseTotals.set(name, totals);
     }
 
     monthlyTotals.set(month, monthTotals);
@@ -213,13 +205,6 @@ export const getLedgerStats = async (
       return { date, income: totals.income, expense: totals.expense, balance };
     });
 
-  const topExpenses = [...expenseTotals.entries()]
-    .map(([name, totals]) => ({ name, amount: totals.amount, count: totals.count }))
-    .sort(
-      (a, b) => b.amount - a.amount || b.count - a.count || a.name.localeCompare(b.name)
-    )
-    .slice(0, 8);
-
   return {
     from,
     to,
@@ -238,6 +223,5 @@ export const getLedgerStats = async (
     byCategory,
     monthly,
     daily,
-    topExpenses,
   };
 };

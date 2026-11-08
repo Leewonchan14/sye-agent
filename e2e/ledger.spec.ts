@@ -162,6 +162,90 @@ test("통계 탭의 기간 설정은 기간별 리포트 하나뿐이다", async
   await expect(page.getByRole("button", { name: "이전 달" })).toBeVisible();
 });
 
+test("입금은 분류로 나누지 않는다", async ({ page, request }) => {
+  await addEntry(request, token, {
+    entryDate: today(),
+    kind: "income",
+    amount: 50_000,
+    memo: "통장 충전",
+  });
+  await addEntry(request, token, { entryDate: today(), amount: 1_000, memo: "지출" });
+  await openLedger(page, token);
+  await expect(page.getByRole("button", { name: /통장 충전/ })).not.toContainText(
+    "분류 없음"
+  );
+
+  await page.getByRole("tab", { name: "통계" }).click();
+  const income = page.getByRole("button", { name: "입금", exact: true });
+  await income.click();
+  await expect(page.getByRole("button", { name: "급여", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /통장 충전/ })).toBeVisible();
+  await page.getByRole("button", { name: "지출", exact: true }).click();
+  await expect(
+    page
+      .getByRole("group", { name: "지출·입금 내역 분류" })
+      .getByRole("button", { name: "식비", exact: true })
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "내역 추가" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "식비", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "입금", exact: true }).click();
+  await expect(dialog.getByText("분류", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "급여", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "취소" }).click();
+
+  const settings = await openSettingsTab(page, "분류");
+  await expect(settings.getByRole("button", { name: "식비 삭제" })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "급여 삭제" })).toHaveCount(0);
+});
+
+test("전체 탭과 큰 지출 TOP 8에서 분류로 거를 수 있다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  const add = (amount: number, memo: string, name: string) =>
+    addEntry(request, token, {
+      entryDate: today(),
+      amount,
+      memo,
+      categoryId: categoryId(name),
+    });
+  await add(9_000, "점심", "식비");
+  await add(8_000, "저녁", "식비");
+  await add(5_000, "커피", "카페");
+  await addEntry(request, token, {
+    entryDate: today(),
+    kind: "income",
+    amount: 50_000,
+    memo: "충전",
+  });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+
+  const chips = page.getByRole("group", { name: "지출·입금 내역 분류" });
+  await chips.getByRole("button", { name: "식비", exact: true }).click();
+  await expect(page.getByRole("button", { name: /점심/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /커피/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /충전/ })).toHaveCount(0);
+  await expect(page.getByText("2건 · 지출 17,000원 · 입금 0원")).toBeVisible();
+
+  await chips.getByRole("button", { name: "전체", exact: true }).click();
+  await expect(page.getByRole("button", { name: /충전/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "입금", exact: true }).click();
+  await expect(chips).toHaveCount(0);
+
+  const top = page.getByRole("list", { name: "큰 지출 목록" });
+  await expect(top).toContainText("점심");
+  await expect(top).toContainText("커피");
+  await page
+    .getByRole("group", { name: "큰 지출 분류" })
+    .getByRole("button", { name: "카페", exact: true })
+    .click();
+  await expect(top).toContainText("커피");
+  await expect(top).not.toContainText("점심");
+});
+
 test("상대방이 입력한 내역이 새로고침 없이 나타난다", async ({ page, request }) => {
   await openLedger(page, token);
   await addEntry(request, token, {
