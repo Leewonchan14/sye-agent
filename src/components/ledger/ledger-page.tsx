@@ -605,6 +605,8 @@ export const LedgerPage = () => {
                   categories={ledger.categories}
                   month={month}
                   onMonthChange={setMonth}
+                  expenseReference={ledger.expenseReference}
+                  totalBudget={ledger.budget.totalBudget}
                   onEdit={openEdit}
                 />
               )}

@@ -110,7 +110,7 @@ export const CalendarView = ({ ledger, activeDay, onSelectDay, onEdit }: Props) 
           <h3 className="text-[13px] font-medium text-ink">{formatDayKo(activeDay)}</h3>
           <span className="text-[11px] text-muted tabular-nums">
             지출 {formatWon(activeTotals.expense)}
-            {activeTotals.income > 0 && ` · 수입 ${formatWon(activeTotals.income)}`}
+            {activeTotals.income > 0 && ` · 입금 ${formatWon(activeTotals.income)}`}
           </span>
         </div>
         <LedgerEntryList

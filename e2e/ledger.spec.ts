@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import {
   buildLedgerAgentInstructions,
@@ -330,6 +330,200 @@ test("내역 창의 버튼 줄은 맨 아래에 붙고 입력칸이 그 뒤로 �
   const [field, bar] = await Promise.all([box(tags), box(footer)]);
   expect(field.y + field.height).toBeLessThanOrEqual(bar.y + 1);
   expect(Math.abs(await measureGap())).toBeLessThanOrEqual(1);
+});
+
+test("검색은 숨긴 예전 태그를 찾지 않는다", async ({ page, request }) => {
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 1_000,
+    memo: "성수 산책",
+    tags: "모임통장, 15:52, 데이트",
+  });
+  await openLedger(page, token);
+  const search = page.getByRole("searchbox", { name: "내역 검색" });
+
+  await search.fill("모임통장");
+  await expect(page.getByText("일치하는 내역이 없어요")).toBeVisible();
+  await search.fill("데이트");
+  await expect(page.getByRole("button", { name: /성수 산책/ })).toBeVisible();
+});
+
+test("통계 내역은 10건만 먼저 보여 주고 더 보기로 펼친다", async ({ page, request }) => {
+  for (let index = 0; index < 13; index += 1) {
+    await addEntry(request, token, {
+      entryDate: today(),
+      amount: 1_000 + index,
+      memo: `반복 지출 ${index}`,
+    });
+  }
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+
+  const rows = page.getByRole("button", { name: /반복 지출/ });
+  await expect(rows).toHaveCount(10);
+  await page.getByRole("button", { name: /더 보기 · 3건 남음/ }).click();
+  await expect(rows).toHaveCount(13);
+  await page.getByRole("button", { name: "접기" }).click();
+  await expect(rows).toHaveCount(10);
+  await expect(page.getByText("큰 지출 TOP 8")).toBeVisible();
+});
+
+test("전월 대비와 이번 달 예상 지출을 보여 준다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 10_000,
+    memo: "이번 달 식사",
+    categoryId: categoryId("식비"),
+  });
+  await addEntry(request, token, {
+    entryDate: `${lastMonth()}-01`,
+    amount: 3_000,
+    memo: "지난달 식사",
+    categoryId: categoryId("식비"),
+  });
+  await request.put("/api/ledger/budget", {
+    headers: authHeaders(token),
+    data: { month: thisMonth(), totalBudget: 5_000, note: "", categories: [] },
+  });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+
+  await expect(page.getByText("전월 대비")).toBeVisible();
+  await expect(page.getByText("+7,000원").first()).toBeVisible();
+  await expect(page.getByRole("list", { name: "분류별 증감" })).toContainText("식비");
+  await expect(page.getByText("이번 달 예상 지출")).toBeVisible();
+  await expect(page.getByText("최근 1개월 평균")).toBeVisible();
+  await expect(page.getByText(/초과 예상/)).toBeVisible();
+
+  await page.getByRole("button", { name: "이전 달" }).click();
+  await expect(page.getByText("비교할 지난달 기록이 없어요")).toBeVisible();
+  await expect(page.getByText("이번 달 예상 지출")).toHaveCount(0);
+});
+
+test("예산 설정에서 최근 평균을 참고하고 채울 수 있다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  await addEntry(request, token, {
+    entryDate: `${lastMonth()}-10`,
+    amount: 12_345,
+    memo: "지난달 지출",
+    categoryId: categoryId("식비"),
+  });
+  await openLedger(page, token);
+  const dialog = await openSettingsTab(page, "예산");
+  await expect(dialog.getByText(/최근 1개월 평균 지출 12,345원/)).toBeVisible();
+  await dialog.getByRole("button", { name: "평균으로 채우기" }).click();
+  await expect(dialog.locator("#ledger-total-budget")).toHaveValue("12,000");
+  await expect(dialog.getByRole("textbox", { name: "식비 예산" })).toHaveValue("12,000");
+});
+
+test("입금 용어로 통일되고 여행·항공 분류를 쓸 수 있다", async ({ page, request }) => {
+  await addEntry(request, token, {
+    entryDate: today(),
+    kind: "income",
+    amount: 5_000,
+    memo: "충전",
+  });
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  await expect(page.getByText("이제까지 총 입금·지출")).toBeVisible();
+  await expect(page.getByText(/수입/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "내역 추가" }).first().click();
+  await expect(
+    page.getByRole("dialog").getByRole("button", { name: "여행·항공", exact: true })
+  ).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "취소" }).click();
+
+  const res = await request.post("/api/ledger/entries/bulk", {
+    headers: authHeaders(token),
+    data: {
+      entries: [
+        { entryDate: today(), kind: "expense", amount: 155_800, memo: "이스타항공(주)" },
+      ],
+    },
+  });
+  expect(res.status()).toBe(201);
+  const { rows } = await pool.query(
+    `select c.name from ledger_entries e join ledger_categories c on c.id = e.category_id
+     where e.memo = '이스타항공(주)'`
+  );
+  expect(rows).toEqual([{ name: "여행·항공" }]);
+});
+
+const tryLogin = (request: APIRequestContext, ip: string, password: string) =>
+  request.post("/api/auth", {
+    headers: { "x-real-ip": ip, "x-forwarded-for": ip },
+    data: { password },
+  });
+
+test("로그인: 같은 IP에서 5번 틀리면 맞는 비밀번호도 막히고 다른 IP는 가능하다", async ({
+  request,
+}) => {
+  const correct = process.env.SITE_PASSWORD ?? "";
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const res = await tryLogin(request, "203.0.113.1", "wrong");
+    expect(res.status()).toBe(200);
+    expect((await res.json()).error).toBe("비밀번호가 틀렸습니다.");
+  }
+
+  const blocked = await tryLogin(request, "203.0.113.1", correct);
+  expect(blocked.status()).toBe(429);
+  expect(blocked.headers()["retry-after"]).toBeTruthy();
+  expect((await blocked.json()).token).toBeUndefined();
+
+  const other = await tryLogin(request, "203.0.113.2", correct);
+  expect((await other.json()).success).toBe(true);
+
+  const { rows } = await pool.query(
+    "select count(*)::int as count from auth_login_attempts where ip = '203.0.113.1'"
+  );
+  expect(rows[0].count).toBe(5);
+});
+
+test("로그인: 성공하면 그 IP의 실패 기록을 지운다", async ({ request }) => {
+  const correct = process.env.SITE_PASSWORD ?? "";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await tryLogin(request, "203.0.113.3", "wrong");
+  }
+  expect((await (await tryLogin(request, "203.0.113.3", correct)).json()).success).toBe(
+    true
+  );
+  const { rows } = await pool.query(
+    "select count(*)::int as count from auth_login_attempts where ip = '203.0.113.3'"
+  );
+  expect(rows[0].count).toBe(0);
+});
+
+test("로그인: 전체 실패가 30번이면 새 IP도 막힌다", async ({ request }) => {
+  for (let group = 0; group < 6; group += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await tryLogin(request, `198.51.100.${group}`, "wrong");
+    }
+  }
+  const res = await tryLogin(request, "198.51.100.200", process.env.SITE_PASSWORD ?? "");
+  expect(res.status()).toBe(429);
+});
+
+test("로그인: 동시에 몰린 요청도 한도를 크게 넘지 못한다", async ({ request }) => {
+  const results = await Promise.all(
+    Array.from({ length: 20 }, () => tryLogin(request, "203.0.113.9", "wrong"))
+  );
+  const compared = results.filter((res) => res.status() === 200).length;
+  expect(compared).toBeLessThanOrEqual(5);
+  expect(results.filter((res) => res.status() === 429).length).toBeGreaterThanOrEqual(15);
+});
+
+test("로그인 화면에 차단 안내가 나온다", async ({ page, request }) => {
+  await page.setExtraHTTPHeaders({ "x-real-ip": "203.0.113.20" });
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await tryLogin(request, "203.0.113.20", "wrong");
+  }
+  await page.goto("/ledger");
+  await page.locator('input[type="password"]').fill("아무거나");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/로그인 시도가 너무 많아요/)).toBeVisible();
 });
 
 test("상대방이 입력한 내역이 새로고침 없이 나타난다", async ({ page, request }) => {

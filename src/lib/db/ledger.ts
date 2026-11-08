@@ -1,5 +1,5 @@
 import type { SQL } from "drizzle-orm";
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs, kst } from "@/lib/kst";
@@ -36,7 +36,7 @@ export type LedgerEntryView = {
 
 export type LedgerAccountView = {
   openingBalance: number;
-  /** 시작 잔액 + 오늘까지의 수입 - 지출 */
+  /** 시작 잔액 + 오늘까지의 입금 - 지출 */
   currentBalance: number;
   checkedBalance: number | null;
   checkedAt: string | null;
@@ -58,6 +58,12 @@ export type LedgerMonthPayload = {
     entryCount: number;
   }[];
   entries: LedgerEntryView[];
+  /** 이 달 이전 3개월 중 지출이 있던 달의 평균. 예산을 정할 때 참고한다. */
+  expenseReference: {
+    months: number;
+    average: number | null;
+    byCategory: { categoryId: number | null; average: number }[];
+  };
   budget: {
     totalBudget: number | null;
     note: string;
@@ -166,6 +172,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   ["의료", "💊"],
   ["주거", "🏠"],
   ["숙박", "🏨"],
+  ["여행·항공", "✈️"],
   ["기타", "🧾"],
 ] as const;
 
@@ -190,7 +197,7 @@ const normalizeOptionalId = (value: unknown, label: string): number | null => {
 
 const normalizeEntryKind = (value: unknown): LedgerEntryKind => {
   if (value !== "expense" && value !== "income") {
-    throw new LedgerError("수입/지출 구분을 확인해 주세요.");
+    throw new LedgerError("입금/지출 구분을 확인해 주세요.");
   }
   return value;
 };
@@ -434,7 +441,7 @@ export const ensureLedgerDefaults = async (): Promise<void> => {
     .onConflictDoNothing();
 };
 
-/** 오늘까지 기록의 순증감(수입 - 지출). */
+/** 오늘까지 기록의 순증감(입금 - 지출). */
 const getNetThroughToday = async (): Promise<number> => {
   const [row] = await getDb()
     .select({
@@ -525,38 +532,64 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
   const monthStart = `${validMonth}-01`;
   const monthEnd = `${validMonth}-31`;
 
-  const [categoryRows, entryRows, monthRows, budgetRows, usageRows, account] =
-    await Promise.all([
-      getCategoryRows(),
-      db
-        .select()
-        .from(schema.ledgerEntries)
-        .where(
-          and(
-            activeEntry,
-            gte(schema.ledgerEntries.entryDate, monthStart),
-            lte(schema.ledgerEntries.entryDate, monthEnd)
-          )
+  const referenceStart = dayjs(monthStart).subtract(3, "month").format("YYYY-MM-DD");
+  const referenceMonth = sql<string>`substr(${schema.ledgerEntries.entryDate}, 1, 7)`;
+
+  const [
+    categoryRows,
+    entryRows,
+    monthRows,
+    budgetRows,
+    usageRows,
+    account,
+    referenceRows,
+  ] = await Promise.all([
+    getCategoryRows(),
+    db
+      .select()
+      .from(schema.ledgerEntries)
+      .where(
+        and(
+          activeEntry,
+          gte(schema.ledgerEntries.entryDate, monthStart),
+          lte(schema.ledgerEntries.entryDate, monthEnd)
         )
-        .orderBy(desc(schema.ledgerEntries.entryDate), desc(schema.ledgerEntries.id)),
-      db
-        .select()
-        .from(schema.ledgerMonths)
-        .where(eq(schema.ledgerMonths.month, validMonth))
-        .limit(1),
-      db
-        .select()
-        .from(schema.ledgerBudgets)
-        .where(eq(schema.ledgerBudgets.month, validMonth)),
-      db
-        .select({
-          categoryId: schema.ledgerEntries.categoryId,
-          value: sql<number>`count(*)::int`,
-        })
-        .from(schema.ledgerEntries)
-        .groupBy(schema.ledgerEntries.categoryId),
-      getLedgerAccount(),
-    ]);
+      )
+      .orderBy(desc(schema.ledgerEntries.entryDate), desc(schema.ledgerEntries.id)),
+    db
+      .select()
+      .from(schema.ledgerMonths)
+      .where(eq(schema.ledgerMonths.month, validMonth))
+      .limit(1),
+    db
+      .select()
+      .from(schema.ledgerBudgets)
+      .where(eq(schema.ledgerBudgets.month, validMonth)),
+    db
+      .select({
+        categoryId: schema.ledgerEntries.categoryId,
+        value: sql<number>`count(*)::int`,
+      })
+      .from(schema.ledgerEntries)
+      .groupBy(schema.ledgerEntries.categoryId),
+    getLedgerAccount(),
+    db
+      .select({
+        month: referenceMonth,
+        categoryId: schema.ledgerEntries.categoryId,
+        amount: sql<number>`sum(${schema.ledgerEntries.amount})::bigint`,
+      })
+      .from(schema.ledgerEntries)
+      .where(
+        and(
+          activeEntry,
+          eq(schema.ledgerEntries.kind, "expense"),
+          gte(schema.ledgerEntries.entryDate, referenceStart),
+          lt(schema.ledgerEntries.entryDate, monthStart)
+        )
+      )
+      .groupBy(referenceMonth, schema.ledgerEntries.categoryId),
+  ]);
 
   const usageByCategory = new Map(usageRows.map((row) => [row.categoryId, row.value]));
   const categories = categoryRows.map((category) => ({
@@ -600,6 +633,28 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
 
   const totalBudget = monthRows[0]?.totalBudget ?? null;
 
+  const referenceMonths = new Set(referenceRows.map((row) => row.month)).size;
+  const referenceByCategory = new Map<number | null, number>();
+  for (const row of referenceRows) {
+    referenceByCategory.set(
+      row.categoryId,
+      (referenceByCategory.get(row.categoryId) ?? 0) + Number(row.amount)
+    );
+  }
+  const expenseReference = {
+    months: referenceMonths,
+    average: referenceMonths
+      ? Math.round(
+          [...referenceByCategory.values()].reduce((sum, value) => sum + value, 0) /
+            referenceMonths
+        )
+      : null,
+    byCategory: [...referenceByCategory.entries()].map(([categoryId, amount]) => ({
+      categoryId,
+      average: Math.round(amount / referenceMonths),
+    })),
+  };
+
   const byCategory = [...categoryTotals.entries()]
     .map(([categoryId, amount]) => {
       const category = categoryId == null ? null : categoryById.get(categoryId);
@@ -626,6 +681,7 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     account,
     categories,
     entries,
+    expenseReference,
     budget: {
       totalBudget,
       note: monthRows[0]?.note ?? "",
@@ -668,7 +724,7 @@ const assertCategoryKind = async (categoryId: number | null, kind: LedgerEntryKi
     .limit(1);
   if (!category) throw new LedgerError("분류를 찾을 수 없어요.");
   if (toEntryKind(category.kind) !== kind) {
-    throw new LedgerError("분류의 수입/지출 구분이 맞지 않아요.");
+    throw new LedgerError("분류의 입금/지출 구분이 맞지 않아요.");
   }
 };
 
@@ -749,7 +805,7 @@ export const createLedgerEntriesBulk = async (
           category.id === fields.categoryId && toEntryKind(category.kind) === fields.kind
       )
     ) {
-      throw new LedgerError("분류의 수입/지출 구분이 맞지 않아요.");
+      throw new LedgerError("분류의 입금/지출 구분이 맞지 않아요.");
     }
   }
 
@@ -888,24 +944,20 @@ export const searchLedgerEntries = async (query: string, limit = 200) => {
   const q = query.trim();
   if (!q) return { entries: [] as LedgerEntryView[], income: 0, expense: 0, count: 0 };
 
-  const categoryById = await getCategoryMap();
+  const [rows, categoryById] = await Promise.all([
+    getDb().select().from(schema.ledgerEntries).where(activeEntry),
+    getCategoryMap(),
+  ]);
   const lowered = q.toLowerCase();
-  const categoryIds = [...categoryById.values()]
-    .filter((category) => category.name.toLowerCase().includes(lowered))
-    .map((category) => category.id);
 
-  const textMatch = or(
-    sql`strpos(lower(${schema.ledgerEntries.memo}), ${lowered}) > 0`,
-    sql`strpos(lower(${schema.ledgerEntries.tags}), ${lowered}) > 0`,
-    ...(categoryIds.length ? [inArray(schema.ledgerEntries.categoryId, categoryIds)] : [])
-  );
-
-  const rows = await getDb()
-    .select()
-    .from(schema.ledgerEntries)
-    .where(and(activeEntry, textMatch));
+  // 화면에 보이는 값으로 찾는다. 숨긴 예전 태그(모임통장, 시각)는 찾지 않는다.
   const views = rows
     .map((row) => toLedgerEntryView(row, categoryById))
+    .filter((entry) =>
+      [entry.memo, entry.tags, entry.categoryName ?? ""].some((value) =>
+        value.toLowerCase().includes(lowered)
+      )
+    )
     .sort(compareLedgerEntries);
 
   return {

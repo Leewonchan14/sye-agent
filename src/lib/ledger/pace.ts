@@ -16,6 +16,19 @@ export type LedgerBudgetPace =
       elapsedPct: number;
     };
 
+/** 진행 중인 달을 지금 속도로 끝까지 썼을 때의 예상 지출. 다른 달은 null. */
+export const projectMonthExpense = (input: {
+  month: string;
+  today: string;
+  spent: number;
+}): { projected: number; day: number; daysInMonth: number } | null => {
+  const { month, today, spent } = input;
+  if (!today.startsWith(`${month}-`)) return null;
+  const day = Number(today.slice(8, 10));
+  const daysInMonth = kst(`${month}-01`).daysInMonth();
+  return { projected: Math.round((spent / day) * daysInMonth), day, daysInMonth };
+};
+
 /** 이번 달의 예산 사용 속도. 지난달·다음 달은 속도를 계산하지 않는다. */
 export const getBudgetPace = (input: {
   month: string;

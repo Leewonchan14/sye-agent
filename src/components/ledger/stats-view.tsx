@@ -16,6 +16,7 @@ import type { LedgerEntryView, LedgerMonthPayload } from "@/lib/db/ledger";
 import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
+import { comparableMonthRange, compareLedgerPeriods } from "@/lib/ledger/compare";
 import {
   currentMonthKst,
   formatCompactWon,
@@ -24,11 +25,15 @@ import {
   shiftMonth,
   todayKst,
 } from "@/lib/ledger/format";
+import { projectMonthExpense } from "@/lib/ledger/pace";
+import { cn } from "@/lib/utils";
 
 interface Props {
   categories: LedgerMonthPayload["categories"];
   month: string;
   onMonthChange: (month: string) => void;
+  expenseReference: LedgerMonthPayload["expenseReference"];
+  totalBudget: number | null;
   onEdit: (entry: LedgerEntryView) => void;
 }
 
@@ -88,7 +93,7 @@ const KpiCards = ({ stats }: { stats: LedgerStats }) => {
   return (
     <div className="grid grid-cols-2 gap-2 md:col-span-2 md:grid-cols-4">
       <div className="rounded-2xl border border-hairline bg-surface px-4 py-3">
-        <p className="text-[11px] font-medium text-muted">총 수입 · {incomeCount}건</p>
+        <p className="text-[11px] font-medium text-muted">총 입금 · {incomeCount}건</p>
         <p className="mt-1 text-[17px] font-semibold text-[color:var(--color-success)] tabular-nums">
           {formatWon(income)}
         </p>
@@ -130,7 +135,7 @@ const AllTimeCard = ({ allTime }: { allTime: LedgerStats["allTime"] }) => {
   return (
     <StatCard className="md:col-span-2">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">이제까지 총 수입·지출</p>
+        <p className="text-[12px] font-medium text-muted">이제까지 총 입금·지출</p>
         {from && to ? (
           <span className="shrink-0 text-[10px] text-muted-soft tabular-nums">
             {from.replaceAll("-", ".")} ~ {to.replaceAll("-", ".")}
@@ -140,7 +145,7 @@ const AllTimeCard = ({ allTime }: { allTime: LedgerStats["allTime"] }) => {
 
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="min-w-0 rounded-xl bg-canvas-soft/70 p-2.5">
-          <p className="text-[11px] text-muted">수입 · {incomeCount}건</p>
+          <p className="text-[11px] text-muted">입금 · {incomeCount}건</p>
           <p className="mt-0.5 truncate text-[13px] font-semibold text-[color:var(--color-success)] tabular-nums">
             {formatWon(income)}
           </p>
@@ -152,7 +157,7 @@ const AllTimeCard = ({ allTime }: { allTime: LedgerStats["allTime"] }) => {
           </p>
         </div>
         <div className="col-span-2 min-w-0 rounded-xl bg-canvas-soft/70 p-2.5 sm:col-span-1">
-          <p className="text-[11px] text-muted">수입 - 지출</p>
+          <p className="text-[11px] text-muted">입금 - 지출</p>
           <p
             className={`mt-0.5 truncate text-[13px] font-semibold tabular-nums ${
               net > 0
@@ -280,7 +285,7 @@ const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
               strokeWidth={1.5}
             >
               <title>
-                {day.date} · 수입 {formatWon(day.income)} · 잔액 {formatWon(day.balance)}
+                {day.date} · 입금 {formatWon(day.income)} · 잔액 {formatWon(day.balance)}
               </title>
             </circle>
           ) : null
@@ -501,6 +506,9 @@ const ExpenseCategoryChips = ({
   </div>
 );
 
+const ENTRY_PAGE_SIZE = 10;
+const ENTRY_MORE_SIZE = 20;
+
 const PeriodEntriesCard = ({
   entries,
   categories,
@@ -512,6 +520,12 @@ const PeriodEntriesCard = ({
 }) => {
   const [kind, setKind] = useState<EntryKindFilter>("all");
   const [selected, setSelected] = useState<CategoryFilter>("all");
+  const [visibleCount, setVisibleCount] = useState(ENTRY_PAGE_SIZE);
+
+  const selectCategory = (value: CategoryFilter) => {
+    setSelected(value);
+    setVisibleCount(ENTRY_PAGE_SIZE);
+  };
 
   const rows = entries
     .filter(
@@ -551,7 +565,8 @@ const PeriodEntriesCard = ({
               aria-pressed={active}
               onClick={() => {
                 setKind(option.id);
-                if (option.id === "income") setSelected("all");
+                if (option.id === "income") selectCategory("all");
+                else setVisibleCount(ENTRY_PAGE_SIZE);
               }}
               className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 active
@@ -570,13 +585,13 @@ const PeriodEntriesCard = ({
           label="지출·입금 내역 분류"
           categories={categories}
           selected={selected}
-          onSelect={setSelected}
+          onSelect={selectCategory}
         />
       )}
 
       {rows.length ? (
         <ul className="mt-2 divide-y divide-hairline-soft">
-          {rows.map((entry) => {
+          {rows.slice(0, visibleCount).map((entry) => {
             const isIncome = entry.kind === "income";
             return (
               <li key={entry.id}>
@@ -608,6 +623,29 @@ const PeriodEntriesCard = ({
       ) : (
         <p className="mt-3 text-[12px] text-muted">이 {emptyLabel} 내역이 없어요</p>
       )}
+
+      {rows.length > ENTRY_PAGE_SIZE && (
+        <div className="mt-2 flex justify-center gap-1">
+          {rows.length > visibleCount && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setVisibleCount((count) => count + ENTRY_MORE_SIZE)}
+            >
+              더 보기 · {rows.length - visibleCount}건 남음
+            </Button>
+          )}
+          {visibleCount > ENTRY_PAGE_SIZE && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setVisibleCount(ENTRY_PAGE_SIZE)}
+            >
+              접기
+            </Button>
+          )}
+        </div>
+      )}
     </StatCard>
   );
 };
@@ -633,7 +671,7 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
         <div className="flex items-center gap-2 text-[10px] text-muted">
           <span className="flex items-center gap-1">
             <span className="size-1.5 rounded-full bg-[color:var(--color-success)]" />
-            수입
+            입금
           </span>
           <span className="flex items-center gap-1">
             <span className="size-1.5 rounded-full bg-primary" />
@@ -692,7 +730,7 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
                   fill="var(--color-success)"
                 >
                   <title>
-                    {month.month} 수입 {formatWon(month.income)}
+                    {month.month} 입금 {formatWon(month.income)}
                   </title>
                 </rect>
                 <rect
@@ -824,7 +862,151 @@ const monthRange = (month: string): { from: string; to: string } => {
   };
 };
 
-export const StatsView = ({ categories, month, onMonthChange, onEdit }: Props) => {
+const signedWon = (value: number) => `${value > 0 ? "+" : ""}${formatWon(value)}`;
+
+const MonthCompareCard = ({
+  current,
+  previous,
+  range,
+  isCurrentMonth,
+  wide,
+}: {
+  current: LedgerStats;
+  previous: LedgerStats;
+  range: { from: string; to: string };
+  isCurrentMonth: boolean;
+  wide: boolean;
+}) => {
+  const result = compareLedgerPeriods(current, previous);
+  const { expense, income } = result;
+  const span = `${range.from.slice(5).replace("-", ".")} ~ ${range.to.slice(5).replace("-", ".")}`;
+
+  return (
+    <StatCard className={cn(wide && "md:col-span-2")}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[12px] font-medium text-muted">전월 대비</p>
+        <span className="shrink-0 text-[10px] text-muted-soft tabular-nums">
+          {isCurrentMonth ? `지난달 같은 기간 ${span}` : `지난달 ${span}`}
+        </span>
+      </div>
+
+      {result.hasPrevious ? (
+        <>
+          <p className="mt-2 text-[11px] text-muted">지출</p>
+          <p
+            className={cn(
+              "text-lg font-semibold tabular-nums",
+              expense.diff > 0 && "text-[color:var(--color-error)]",
+              expense.diff < 0 && "text-[color:var(--color-success)]",
+              expense.diff === 0 && "text-ink"
+            )}
+          >
+            {signedWon(expense.diff)}
+            {expense.pct != null && (
+              <span className="ml-1 text-[12px] font-normal">
+                ({expense.pct > 0 ? "+" : ""}
+                {expense.pct}%)
+              </span>
+            )}
+          </p>
+          <p className="text-[11px] text-muted-soft tabular-nums">
+            지난달 {formatWon(expense.previous)} → {formatWon(expense.current)}
+          </p>
+          <p className="mt-1.5 text-[11px] text-body tabular-nums">
+            입금 {signedWon(income.diff)}
+          </p>
+
+          {result.categories.length > 0 && (
+            <ul aria-label="분류별 증감" className="mt-3 space-y-2">
+              {result.categories.map((category) => (
+                <li
+                  key={category.categoryId ?? "none"}
+                  className="flex items-center justify-between gap-2 text-[12px]"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 text-ink">
+                    <CategoryIcon icon={category.icon} color={category.color} size={18} />
+                    <span className="truncate">{category.name}</span>
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 font-medium tabular-nums",
+                      category.diff > 0 && "text-[color:var(--color-error)]",
+                      category.diff < 0 && "text-[color:var(--color-success)]"
+                    )}
+                  >
+                    {signedWon(category.diff)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p className="mt-2 text-[12px] text-muted">비교할 지난달 기록이 없어요</p>
+      )}
+    </StatCard>
+  );
+};
+
+const MonthForecastCard = ({
+  month,
+  spent,
+  reference,
+  totalBudget,
+}: {
+  month: string;
+  spent: number;
+  reference: LedgerMonthPayload["expenseReference"];
+  totalBudget: number | null;
+}) => {
+  const forecast = projectMonthExpense({ month, today: todayKst(), spent });
+  if (!forecast) return null;
+  const budgetGap = totalBudget == null ? null : forecast.projected - totalBudget;
+
+  return (
+    <StatCard>
+      <p className="text-[12px] font-medium text-muted">이번 달 예상 지출</p>
+      <p className="mt-2 text-lg font-semibold text-ink tabular-nums">
+        {formatWon(forecast.projected)}
+      </p>
+      <p className="text-[11px] text-muted-soft tabular-nums">
+        지금 속도 기준 · {forecast.day}/{forecast.daysInMonth}일 지남
+      </p>
+      <dl className="mt-3 space-y-1.5 text-[12px] tabular-nums">
+        {reference.average != null && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-muted">최근 {reference.months}개월 평균</dt>
+            <dd className="text-ink">{formatWon(reference.average)}</dd>
+          </div>
+        )}
+        {totalBudget != null && budgetGap != null && (
+          <div className="flex justify-between gap-2">
+            <dt className="text-muted">예산 {formatWon(totalBudget)}</dt>
+            <dd
+              className={cn(
+                budgetGap > 0 && "text-[color:var(--color-error)]",
+                budgetGap <= 0 && "text-ink"
+              )}
+            >
+              {budgetGap > 0
+                ? `${formatWon(budgetGap)} 초과 예상`
+                : `${formatWon(-budgetGap)} 남을 예상`}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </StatCard>
+  );
+};
+
+export const StatsView = ({
+  categories,
+  month,
+  onMonthChange,
+  expenseReference,
+  totalBudget,
+  onEdit,
+}: Props) => {
   const token = useAuthStore((s) => s.token);
   const [range, setRange] = useState<RangeId>("month");
   const [customFrom, setCustomFrom] = useState("");
@@ -873,6 +1055,16 @@ export const StatsView = ({ categories, month, onMonthChange, onEdit }: Props) =
     ...LEDGER_LIVE_QUERY,
   });
   const stats = statsQuery.data;
+
+  const previousRange =
+    range === "month" ? comparableMonthRange(month, todayKst()) : null;
+  const previousQuery = useQuery({
+    queryKey: ledgerKeys.stats(previousRange?.from, previousRange?.to),
+    queryFn: () => fetchStats(token, previousRange?.from, previousRange?.to),
+    enabled: Boolean(token && previousRange),
+    placeholderData: keepPreviousData,
+    ...LEDGER_LIVE_QUERY,
+  });
 
   const hasActivity = stats
     ? stats.summary.income !== 0 || stats.summary.expense !== 0
@@ -1014,6 +1206,23 @@ export const StatsView = ({ categories, month, onMonthChange, onEdit }: Props) =
       ) : stats ? (
         <>
           {hasActivity && <KpiCards stats={stats} />}
+          {hasActivity && previousRange && previousQuery.data && (
+            <MonthCompareCard
+              current={stats}
+              previous={previousQuery.data}
+              range={previousRange}
+              isCurrentMonth={month === thisMonth}
+              wide={month !== thisMonth}
+            />
+          )}
+          {hasActivity && range === "month" && (
+            <MonthForecastCard
+              month={month}
+              spent={stats.summary.expense}
+              reference={expenseReference}
+              totalBudget={totalBudget}
+            />
+          )}
           <AllTimeCard allTime={stats.allTime} />
           {hasActivity ? (
             <>
