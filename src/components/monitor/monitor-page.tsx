@@ -62,6 +62,16 @@ const ChipButton = ({
   </button>
 );
 
+/** 고객사와 이슈를 섞이지 않게 종류별로 한 줄씩 보여 준다. */
+const NavRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+    <span className="shrink-0 text-xs font-medium text-muted sm:w-[88px]">{label}</span>
+    <div className="-m-1 flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1.5 overflow-x-auto p-1">
+      {children}
+    </div>
+  </div>
+);
+
 export const MonitorPage = () => {
   const { data, isLoading, error } = useMonitorOverview();
   const { createPresets } = useSetupMutations();
@@ -76,45 +86,48 @@ export const MonitorPage = () => {
   return (
     <SidebarLayout activeNav="monitor">
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 pt-5 md:px-8 md:pt-8">
-        <nav
-          aria-label="고객사와 이슈"
-          className="-mx-1 -mt-1 flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-1 pt-1 pb-1"
-        >
-          {data?.clients.map((c) => (
-            <ChipButton
-              key={`c-${c.id}`}
-              active={selected?.kind === "client" && selected.id === c.id}
-              onClick={() => setStored({ kind: "client", id: c.id })}
-            >
-              <Newspaper className="size-3.5 text-primary" />
-              {c.name}
-              {c.latestRun && !c.latestRun.reportedAt && (
-                <span className="size-1.5 rounded-full bg-primary" aria-label="보고 전" />
-              )}
-            </ChipButton>
-          ))}
-          {data?.issues.map((i) => (
-            <ChipButton
-              key={`i-${i.id}`}
-              active={selected?.kind === "issue" && selected.id === i.id}
-              onClick={() => setStored({ kind: "issue", id: i.id })}
-            >
-              <Siren className="size-3.5 text-primary" />
-              {i.title}
-              {!i.isActive && <span className="text-[11px] text-muted-soft">종료</span>}
-            </ChipButton>
-          ))}
-          {data && (
-            <>
-              <span className="mx-1 h-4 w-px shrink-0 bg-hairline" />
+        <nav aria-label="고객사와 이슈" className="flex flex-col gap-1.5">
+          <NavRow label="데일리 모니터링">
+            {data?.clients.map((c) => (
+              <ChipButton
+                key={`c-${c.id}`}
+                active={selected?.kind === "client" && selected.id === c.id}
+                onClick={() => setStored({ kind: "client", id: c.id })}
+              >
+                <Newspaper className="size-3.5 text-primary" />
+                {c.name}
+                {c.latestRun && !c.latestRun.reportedAt && (
+                  <span
+                    className="size-1.5 rounded-full bg-primary"
+                    aria-label="보고 전"
+                  />
+                )}
+              </ChipButton>
+            ))}
+            {data && (
               <Button variant="ghost" size="sm" onClick={() => setClientDialog(true)}>
                 <Plus /> 고객사
               </Button>
+            )}
+          </NavRow>
+          <NavRow label="이슈 트래커">
+            {data?.issues.map((i) => (
+              <ChipButton
+                key={`i-${i.id}`}
+                active={selected?.kind === "issue" && selected.id === i.id}
+                onClick={() => setStored({ kind: "issue", id: i.id })}
+              >
+                <Siren className="size-3.5 text-primary" />
+                {i.title}
+                {!i.isActive && <span className="text-[11px] text-muted-soft">종료</span>}
+              </ChipButton>
+            ))}
+            {data && (
               <Button variant="ghost" size="sm" onClick={() => setIssueDialog(true)}>
                 <Plus /> 이슈
               </Button>
-            </>
-          )}
+            )}
+          </NavRow>
         </nav>
 
         {data && (
