@@ -169,6 +169,7 @@ export const openHermesRunEvents = async (
 
 export interface HermesRunStatus {
   status: string;
+  session_id?: string;
   output?: string;
   error?: string;
   partial?: boolean;

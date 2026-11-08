@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { HermesProgress } from "@/components/monitor/hermes-progress";
 import { IssueScheduleEditor } from "@/components/monitor/schedule-editors";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -248,6 +249,16 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
           {issue.isActive ? "감시 끝내기" : "다시 감시하기"}
         </button>
       </div>
+
+      {issue.pendingSince && (
+        <HermesProgress
+          key={issue.pendingSince}
+          kind="issue"
+          id={issue.id}
+          since={issue.pendingSince}
+          title="하치와레가 보도량을 집계하고 있어요"
+        />
+      )}
 
       {issue.isActive && (
         <IssueScheduleEditor
