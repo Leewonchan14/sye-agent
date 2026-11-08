@@ -4,7 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import { CATEGORY_COLOR_HEX, CategoryIcon } from "@/components/ledger/category-icon";
+import {
+  CATEGORY_COLOR_HEX,
+  CategoryIcon,
+  EntryIcon,
+} from "@/components/ledger/category-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuthStore } from "@/lib/auth-store";
@@ -442,6 +446,52 @@ const KIND_FILTERS = [
 ] as const;
 
 type EntryKindFilter = (typeof KIND_FILTERS)[number]["id"];
+type CategoryFilter = number | "all";
+
+const categoryChipClass = (active: boolean) =>
+  `inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+    active
+      ? "border-primary/30 bg-primary/10 text-primary"
+      : "border-hairline bg-surface text-muted hover:text-ink"
+  }`;
+
+const ExpenseCategoryChips = ({
+  label,
+  categories,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  categories: LedgerMonthPayload["categories"];
+  selected: CategoryFilter;
+  onSelect: (value: CategoryFilter) => void;
+}) => (
+  <div role="group" aria-label={label} className="mt-1.5 flex flex-wrap gap-1.5">
+    <button
+      type="button"
+      aria-pressed={selected === "all"}
+      onClick={() => onSelect("all")}
+      className={categoryChipClass(selected === "all")}
+    >
+      <CategoryIcon icon="wallet" color="neutral" size={16} />
+      <span className="truncate">전체</span>
+    </button>
+    {categories
+      .filter((category) => category.kind === "expense")
+      .map((category) => (
+        <button
+          key={category.id}
+          type="button"
+          aria-pressed={selected === category.id}
+          onClick={() => onSelect(category.id)}
+          className={categoryChipClass(selected === category.id)}
+        >
+          <CategoryIcon icon={category.icon} color={category.color} size={16} />
+          <span className="min-w-0 truncate">{category.name}</span>
+        </button>
+      ))}
+  </div>
+);
 
 const PeriodEntriesCard = ({
   entries,
@@ -453,9 +503,8 @@ const PeriodEntriesCard = ({
   onEdit: (entry: LedgerEntryView) => void;
 }) => {
   const [kind, setKind] = useState<EntryKindFilter>("all");
-  const [selected, setSelected] = useState<number | "all">("all");
+  const [selected, setSelected] = useState<CategoryFilter>("all");
 
-  const categoryOptions = categories.filter((category) => category.kind === kind);
   const rows = entries
     .filter(
       (entry) =>
@@ -494,7 +543,7 @@ const PeriodEntriesCard = ({
               aria-pressed={active}
               onClick={() => {
                 setKind(option.id);
-                setSelected("all");
+                if (option.id === "income") setSelected("all");
               }}
               className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 active
@@ -508,42 +557,14 @@ const PeriodEntriesCard = ({
         })}
       </div>
 
-      {kind !== "all" ? (
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            aria-pressed={selected === "all"}
-            onClick={() => setSelected("all")}
-            className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
-              selected === "all"
-                ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-hairline bg-surface text-muted hover:text-ink"
-            }`}
-          >
-            <CategoryIcon icon="wallet" color="neutral" size={16} />
-            <span className="truncate">전체</span>
-          </button>
-          {categoryOptions.map((category) => {
-            const active = selected === category.id;
-            return (
-              <button
-                key={category.id}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setSelected(category.id)}
-                className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
-                  active
-                    ? "border-primary/30 bg-primary/10 text-primary"
-                    : "border-hairline bg-surface text-muted hover:text-ink"
-                }`}
-              >
-                <CategoryIcon icon={category.icon} color={category.color} size={16} />
-                <span className="min-w-0 truncate">{category.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {kind !== "income" && (
+        <ExpenseCategoryChips
+          label="지출·입금 내역 분류"
+          categories={categories}
+          selected={selected}
+          onSelect={setSelected}
+        />
+      )}
 
       {rows.length ? (
         <ul className="mt-2 divide-y divide-hairline-soft">
@@ -556,11 +577,7 @@ const PeriodEntriesCard = ({
                   onClick={() => onEdit(entry)}
                   className="flex w-full items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  <CategoryIcon
-                    icon={entry.categoryIcon}
-                    color={entry.categoryColor}
-                    size={20}
-                  />
+                  <EntryIcon entry={entry} size={20} />
                   <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
                     {entry.entryDate.slice(5).replace("-", ".")}
                   </span>
@@ -702,14 +719,49 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
   );
 };
 
-const TopExpensesCard = ({ merchants }: { merchants: LedgerStats["topExpenses"] }) => {
+const groupTopExpenses = (entries: LedgerEntryView[], selected: CategoryFilter) => {
+  const totals = new Map<string, { amount: number; count: number }>();
+
+  for (const entry of entries) {
+    if (entry.kind !== "expense") continue;
+    if (selected !== "all" && entry.categoryId !== selected) continue;
+    const name = entry.memo.trim() || entry.categoryName || "지출";
+    const total = totals.get(name) ?? { amount: 0, count: 0 };
+    total.amount += entry.amount;
+    total.count += 1;
+    totals.set(name, total);
+  }
+
+  return [...totals.entries()]
+    .map(([name, total]) => ({ name, ...total }))
+    .sort(
+      (a, b) => b.amount - a.amount || b.count - a.count || a.name.localeCompare(b.name)
+    )
+    .slice(0, 8);
+};
+
+const TopExpensesCard = ({
+  entries,
+  categories,
+}: {
+  entries: LedgerEntryView[];
+  categories: LedgerMonthPayload["categories"];
+}) => {
+  const [selected, setSelected] = useState<CategoryFilter>("all");
+  const merchants = groupTopExpenses(entries, selected);
   const max = Math.max(1, ...merchants.map((merchant) => merchant.amount));
 
   return (
     <StatCard>
       <p className="text-[12px] font-medium text-muted">큰 지출 TOP 8</p>
+      <ExpenseCategoryChips
+        label="큰 지출 분류"
+        categories={categories}
+        selected={selected}
+        onSelect={setSelected}
+      />
       {merchants.length ? (
-        <ul className="mt-2 space-y-2.5">
+        <ul aria-label="큰 지출 목록" className="mt-2 space-y-2.5">
           {merchants.map((merchant) => (
             <li key={merchant.name}>
               <div className="flex items-baseline justify-between gap-2">
@@ -915,7 +967,7 @@ export const StatsView = ({ categories, onEdit }: Props) => {
                 onEdit={onEdit}
               />
               <MonthlyCard monthly={stats.monthly} />
-              <TopExpensesCard merchants={stats.topExpenses} />
+              <TopExpensesCard entries={stats.entries} categories={categories} />
             </>
           ) : (
             <StatCard className="md:col-span-2">

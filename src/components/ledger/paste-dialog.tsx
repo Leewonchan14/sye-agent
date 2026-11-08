@@ -102,7 +102,7 @@ const PasteForm = ({ onOpenChange }: Pick<Props, "onOpenChange">) => {
                       {[
                         formatDayKo(item.entryDate),
                         item.entryTime,
-                        item.categoryName ?? "분류 없음",
+                        item.kind === "expense" && (item.categoryName ?? "분류 없음"),
                       ]
                         .filter(Boolean)
                         .join(" · ")}

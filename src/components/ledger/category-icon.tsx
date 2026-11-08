@@ -36,6 +36,7 @@ import {
 import {
   categoryColorOption,
   categoryIconOption,
+  defaultCategoryColor,
   type LedgerCategoryColorKey,
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
@@ -107,6 +108,36 @@ export const CategoryIcon = ({
     </span>
   );
 };
+
+/** 입금은 통장 충전뿐이라 분류와 상관없이 같은 아이콘을 쓴다. */
+export const EntryIcon = ({
+  entry,
+  size,
+  className,
+}: {
+  entry: {
+    kind: "expense" | "income";
+    categoryIcon: string | null;
+    categoryColor: string | null;
+  };
+  size?: number;
+  className?: string;
+}) =>
+  entry.kind === "income" ? (
+    <CategoryIcon
+      icon="users"
+      color={defaultCategoryColor("users")}
+      size={size}
+      className={className}
+    />
+  ) : (
+    <CategoryIcon
+      icon={entry.categoryIcon}
+      color={entry.categoryColor}
+      size={size}
+      className={className}
+    />
+  );
 
 export const CATEGORY_COLOR_HEX = (color: string | null | undefined) =>
   categoryColorOption(color).fg;
