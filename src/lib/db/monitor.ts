@@ -7,6 +7,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  max,
   or,
   sql,
 } from "drizzle-orm";
@@ -154,6 +155,7 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   greeting: row.greeting,
   closing: row.closing,
   autoCollect: row.autoCollect,
+  collectTime: row.collectTime,
 });
 
 /** 기본 고객사(홍콩관광청·파나소닉코리아)를 만든다. 이미 있는 slug는 건너뛴다. */
@@ -193,6 +195,7 @@ export const updateMonitorClient = async (
       | "greeting"
       | "closing"
       | "autoCollect"
+      | "collectTime"
     >
   >
 ) => {
@@ -245,6 +248,7 @@ export const getMonitorClientPayload = async (
       until: runsT.until,
       reportedAt: runsT.reportedAt,
       pendingHermesRunId: runsT.pendingHermesRunId,
+      collectKey: runsT.collectKey,
     })
     .from(runsT)
     .where(eq(runsT.clientId, clientId))
@@ -317,6 +321,7 @@ export const getMonitorClientPayload = async (
       includedCount: runCounts.find((c) => c.runId === r.id)?.n ?? 0,
       pending: Boolean(r.pendingHermesRunId),
     })),
+    collectedToday: runs.some((r) => r.collectKey === kst().format("YYYY-MM-DD")),
   };
 };
 
@@ -656,6 +661,9 @@ export const updateMonitorIssue = async (
     brandTerms: string[];
     isActive: boolean;
     events: MonitorIssueEvent[];
+    collectStart: string;
+    collectGapMinutes: number;
+    lastAutoSlot: string;
   }>
 ) => {
   const db = getDb();
@@ -668,6 +676,58 @@ export const getIssueRow = async (id: number) => {
   const db = getDb();
   const [row] = await db.select().from(issuesT).where(eq(issuesT.id, id)).limit(1);
   return row ?? null;
+};
+
+/** 자동 집계 대상(감시 중인 이슈)과 직전 정기 보고 시각 */
+export const listAutoIssues = async () => {
+  const db = getDb();
+  const issues = await db
+    .select()
+    .from(issuesT)
+    .where(eq(issuesT.isActive, true))
+    .orderBy(asc(issuesT.id));
+  if (!issues.length) return [];
+
+  const reports = await db
+    .select({ issueId: snapsT.issueId, at: max(snapsT.at) })
+    .from(snapsT)
+    .where(
+      and(
+        inArray(
+          snapsT.issueId,
+          issues.map((i) => i.id)
+        ),
+        eq(snapsT.isReport, true)
+      )
+    )
+    .groupBy(snapsT.issueId);
+
+  return issues.map((issue) => ({
+    issue,
+    lastReportAt: iso(reports.find((r) => r.issueId === issue.id)?.at),
+  }));
+};
+
+/** 이 시각의 자동 집계를 선점한다. 이미 누가 시작했으면 false — 동시에 불려도 한 번만 돈다. */
+export const claimIssueSlot = async (issueId: number, slot: string) => {
+  const db = getDb();
+  const rows = await db
+    .update(issuesT)
+    .set({ lastAutoSlot: slot })
+    .where(
+      and(
+        eq(issuesT.id, issueId),
+        or(isNull(issuesT.lastAutoSlot), sql`${issuesT.lastAutoSlot} <> ${slot}`)
+      )
+    )
+    .returning();
+  return rows.length > 0;
+};
+
+/** 하치와레에게 넘기지 못했으면 선점을 되돌려 다음 확인 때 다시 시도하게 한다. */
+export const releaseIssueSlot = async (issueId: number, previous: string | null) => {
+  const db = getDb();
+  await db.update(issuesT).set({ lastAutoSlot: previous }).where(eq(issuesT.id, issueId));
 };
 
 export const getMonitorIssuePayload = async (
@@ -699,6 +759,8 @@ export const getMonitorIssuePayload = async (
       brandTerms: issue.brandTerms,
       events: issue.events as MonitorIssueEvent[],
       isActive: issue.isActive,
+      collectStart: issue.collectStart,
+      collectGapMinutes: issue.collectGapMinutes,
       pendingSince: issue.pendingHermesRunId ? iso(issue.pendingSince) : null,
       lastError: issue.lastError,
     },

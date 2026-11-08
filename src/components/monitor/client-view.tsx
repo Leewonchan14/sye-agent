@@ -67,7 +67,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
     );
   }
 
-  const { client, run, items, runs } = data;
+  const { client, run, items, runs, collectedToday } = data;
   const leadsIncluded = items.filter(
     (i) => i.category && i.included && (i.isLead || !i.dupGroup)
   ).length;
@@ -120,7 +120,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           <h2 className="text-lg font-medium text-ink">아직 수집 결과가 없어요</h2>
           <p className="max-w-md text-sm text-muted">
             {client.autoCollect
-              ? `${nextCollectLabel(client.rules)}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
+              ? `${nextCollectLabel(client, collectedToday)}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
               : "매일 자동 수집이 꺼져 있어요. 고객사 규칙에서 켜면 다음 수집 시각부터 모아요."}
           </p>
           <Button variant="outline" onClick={() => setTab("rules")}>
@@ -128,7 +128,12 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           </Button>
           {tab === "rules" && (
             <div className="mt-6 w-full text-left">
-              <RulesPanel key={client.id} client={client} mutations={mutations} />
+              <RulesPanel
+                key={client.id}
+                client={client}
+                mutations={mutations}
+                collectedToday={collectedToday}
+              />
             </div>
           )}
         </div>
@@ -283,7 +288,12 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             <ReportPanel client={client} run={run} items={items} mutations={mutations} />
           )}
           {tab === "rules" && (
-            <RulesPanel key={client.id} client={client} mutations={mutations} />
+            <RulesPanel
+              key={client.id}
+              client={client}
+              mutations={mutations}
+              collectedToday={collectedToday}
+            />
           )}
         </div>
       )}

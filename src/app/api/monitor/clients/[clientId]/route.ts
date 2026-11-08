@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { getMonitorClientPayload, updateMonitorClient } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId, readJson } from "@/lib/monitor/api";
 import { reconcileRunPending } from "@/lib/monitor/hermes";
+import { TIME } from "@/lib/monitor/period";
 import { ruleValueError } from "@/lib/monitor/rules";
 import { monitorCategorySchema, monitorRuleSchema } from "@/lib/monitor/types";
 
@@ -64,6 +65,11 @@ const patchSchema = z.object({
   greeting: z.string().max(1000).optional(),
   closing: z.string().max(500).optional(),
   autoCollect: z.boolean().optional(),
+  collectTime: z
+    .string()
+    .regex(TIME, "시각 형식이 올바르지 않아요.")
+    .nullable()
+    .optional(),
 });
 
 export const PATCH = async (

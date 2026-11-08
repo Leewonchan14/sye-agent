@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { IssueScheduleEditor } from "@/components/monitor/schedule-editors";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
@@ -247,6 +248,19 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
           {issue.isActive ? "감시 끝내기" : "다시 감시하기"}
         </button>
       </div>
+
+      {issue.isActive && (
+        <IssueScheduleEditor
+          key={`${issue.collectStart}-${issue.collectGapMinutes}`}
+          schedule={issue}
+          saving={updateIssue.isPending}
+          onSave={(schedule) =>
+            updateIssue.mutate(schedule, {
+              onSuccess: () => toast.success("자동 집계 일정을 저장했어요."),
+            })
+          }
+        />
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-hairline bg-surface p-5">

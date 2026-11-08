@@ -415,7 +415,7 @@ export const RuleValueEditor = ({
       return (
         <Input
           aria-label={label}
-          className={cn("h-8 w-full", !live && "sm:w-56")}
+          className={cn("h-8 w-full", align === "end" && "sm:w-56")}
           {...(live
             ? {
                 value: String(rule.value ?? ""),

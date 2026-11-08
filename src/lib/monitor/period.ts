@@ -24,7 +24,7 @@ export const DEFAULT_PERIOD: MonitorPeriod = {
   endTime: "09:00",
 };
 
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export const dayLabel = (day: number) =>
   day === 0 ? "당일" : day === -1 ? "전일" : `${-day}일 전`;
