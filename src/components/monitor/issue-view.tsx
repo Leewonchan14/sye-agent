@@ -201,7 +201,7 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
               disabled={pending}
               onClick={() => recount.mutate(false)}
             >
-              <Sparkles /> 건수만 확인
+              <Sparkles /> 늘어난 기사 수 확인
             </Button>
             <Button size="lg" disabled={pending} onClick={() => recount.mutate(true)}>
               <FileText /> 보고 초안 만들기
@@ -209,8 +209,8 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
           </div>
           <div className="text-xs text-muted md:text-right">
             <p>
-              <b className="font-medium text-body">건수만 확인</b>: 하치와레가 직전 보고
-              이후 새 기사 수를 세서 아래에 +N건으로 알려 줘요. 몇 분 걸려요.
+              <b className="font-medium text-body">늘어난 기사 수 확인</b>: 하치와레가
+              직전 보고 이후 새 기사 수를 세서 아래에 +N건으로 알려 줘요. 몇 분 걸려요.
             </p>
             <p>
               <b className="font-medium text-body">보고 초안 만들기</b>: 같은 건수를
