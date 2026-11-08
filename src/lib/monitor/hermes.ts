@@ -102,7 +102,7 @@ export const startMoreSearch = async (options: {
     JSON.stringify(options.rules.map(({ title, value }) => ({ title, value }))),
     "",
     "네가 가진 뉴스 검색·모니터링 스킬로 기사를 찾고, 원문에서 기자명과 게재 시각을 확인해.",
-    "기자는 naver-search-api 스킬의 byline.py로 확인하고, 결과의 status를 reporterStatus에 그대로 넣어. 원문을 못 열었으면 기자 표기가 없다고 쓰지 마.",
+    "기자는 naver-search-api 스킬의 byline.py로 확인하고, fetch_failed나 not_on_page면 browser_exec로 원문을 열어 확인한 최종 결과를 reporterStatus에 넣어. 원문을 못 열었으면 기자 표기가 없다고 쓰지 마.",
     ...(options.daily
       ? [
           "이 고객사 전용 모니터링 스킬이 있으면 그 스킬의 수집·검증 절차를 그대로 따라.",
