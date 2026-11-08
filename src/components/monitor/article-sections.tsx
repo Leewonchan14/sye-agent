@@ -196,9 +196,9 @@ const ItemRow = ({
         )}
       </div>
 
-      <div className="col-start-2 flex items-center justify-between gap-2 sm:col-start-auto sm:flex-col sm:items-end">
+      <div className="col-start-2 flex flex-col gap-2 sm:col-start-auto sm:items-end">
         <span
-          className="inline-flex items-center gap-1.5 font-mono text-[12px] text-muted tabular-nums"
+          className="inline-flex items-center gap-1.5 font-mono text-[12px] whitespace-nowrap text-muted tabular-nums"
           title="AI 관련도"
         >
           관련도 {item.score}
@@ -209,7 +209,7 @@ const ItemRow = ({
             />
           </span>
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
           {subs?.length ? (
             <Select
               items={subs.map((s) => ({ value: s, label: s }))}
@@ -220,7 +220,7 @@ const ItemRow = ({
             >
               <SelectTrigger
                 size="sm"
-                className="w-[104px] text-[12px]"
+                className="w-full min-w-0 flex-1 text-[12px] sm:w-[104px] sm:flex-none"
                 aria-label="세부 분류"
               >
                 <SelectValue placeholder="세부 분류" />
@@ -247,7 +247,7 @@ const ItemRow = ({
           >
             <SelectTrigger
               size="sm"
-              className="w-[148px] text-[12px]"
+              className="w-full min-w-0 flex-1 text-[12px] sm:w-[148px] sm:flex-none"
               aria-label="카테고리 이동"
             >
               <SelectValue />

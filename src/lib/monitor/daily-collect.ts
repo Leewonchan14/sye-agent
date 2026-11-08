@@ -4,6 +4,7 @@ import {
   claimDailyRun,
   claimIssueSlot,
   countRunLeads,
+  createCollectNowRun,
   getIssueRow,
   getLatestSnapshot,
   getRunRow,
@@ -44,6 +45,25 @@ const STALE_ERROR = "하치와레가 3시간 안에 결과를 보내지 않았�
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+/** 정해진 시각을 기다리지 않고 지금 수집한다. 끝난 구간까지만 모은다. */
+export const startCollectNow = async (origin: string, client: MonitorClientView) => {
+  const now = kst();
+  const { since, until } = collectWindow(client, now);
+  const runId = await createCollectNowRun({
+    clientId: client.id,
+    collectKey: now.format("YYYY-MM-DD"),
+    since: since.toDate(),
+    until: (until.isAfter(now) ? now : until).toDate(),
+  });
+  try {
+    await startDaily(origin, client, runId);
+  } catch (error) {
+    await releaseDailyRun(runId);
+    throw error;
+  }
+  return runId;
+};
 
 const startDaily = (origin: string, client: MonitorClientView, runId: number) =>
   startMoreSearch({
@@ -141,10 +161,14 @@ export const runDailyCollectTick = async (
   }
 
   /* 오늘 수집 시작 */
-  for (const { client, collected } of await listAutoCollectClients(collectKey)) {
+  for (const { client, createdAt, collected } of await listAutoCollectClients(
+    collectKey
+  )) {
     const slot = collectSlotOn(client, now);
     upcoming.push(nextCollectAt(client, collected, now).valueOf());
     if (collected || !isCollectDay(client, now) || now.isBefore(slot)) continue;
+    // 오늘 수집 시각이 지난 뒤 등록한 고객사는 다음 수집 시각부터 돈다.
+    if (createdAt && createdAt.valueOf() > slot.valueOf()) continue;
 
     const { since, until } = collectWindow(client, now);
     const runId = await claimDailyRun({

@@ -6,13 +6,16 @@ import {
   Copy,
   Inbox,
   Newspaper,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import { useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 
 import { ArticleSections } from "@/components/monitor/article-sections";
 import { HermesProgress } from "@/components/monitor/hermes-progress";
 import { ReportPanel } from "@/components/monitor/report-panel";
+import { ReportSteps } from "@/components/monitor/report-steps";
 import { RulesPanel } from "@/components/monitor/rules-panel";
 import { RunHistory } from "@/components/monitor/run-history";
 import { Button } from "@/components/ui/button";
@@ -62,6 +65,12 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
   const [askCategory, setAskCategory] = useState<MonitorCategory | null>(null);
   const { data, isLoading, isPlaceholderData, error } = useMonitorClient(clientId, runId);
   const mutations = useMonitorMutations(clientId);
+  const [copiedRuns, setCopiedRuns] = useLocalStorageState<number[]>(
+    "monitor.copiedRuns",
+    {
+      defaultValue: [],
+    }
+  );
 
   if (isLoading) {
     return (
@@ -134,9 +143,17 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               ? `${nextCollectLabel(client, collectedToday)}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
               : "매일 자동 수집이 꺼져 있어요. 고객사 규칙에서 켜면 다음 수집 시각부터 모아요."}
           </p>
-          <Button variant="outline" onClick={() => setTab("rules")}>
-            규칙 먼저 정리하기
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button
+              disabled={mutations.collectNow.isPending}
+              onClick={() => mutations.collectNow.mutate(client.id)}
+            >
+              <Sparkles /> 지금 한 번 수집
+            </Button>
+            <Button variant="outline" onClick={() => setTab("rules")}>
+              규칙 먼저 정리하기
+            </Button>
+          </div>
           {tab === "rules" && (
             <div className="mt-6 w-full text-left">
               <RulesPanel
@@ -161,6 +178,16 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               activeId={runId ?? run.id}
               activeCount={isPlaceholderData ? undefined : leadsIncluded}
               onSelect={setRunId}
+            />
+          )}
+          {tab !== "rules" && (
+            <ReportSteps
+              pending={Boolean(run.pendingSince)}
+              failed={Boolean(run.lastError) && !items.length}
+              tab={tab}
+              copied={copiedRuns.includes(run.id)}
+              reported={Boolean(run.reportedAt)}
+              onGo={setTab}
             />
           )}
           <div
@@ -228,7 +255,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               since={run.pendingSince}
               title={
                 run.pendingRequest === DAILY_COLLECT_REQUEST
-                  ? "하치와레가 오늘 기사를 모으고 있어요"
+                  ? "하치와레가 기사를 모으고 있어요"
                   : "하치와레가 기사를 더 찾고 있어요"
               }
             />
@@ -328,7 +355,13 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             </>
           )}
           {tab === "report" && (
-            <ReportPanel client={client} run={run} items={items} mutations={mutations} />
+            <ReportPanel
+              client={client}
+              run={run}
+              items={items}
+              mutations={mutations}
+              onCopied={() => setCopiedRuns((list) => [run.id, ...list].slice(0, 30))}
+            />
           )}
           {tab === "rules" && (
             <RulesPanel

@@ -5,10 +5,8 @@ import { useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
 import { ClientView } from "@/components/monitor/client-view";
-import {
-  CreateClientDialog,
-  CreateIssueDialog,
-} from "@/components/monitor/create-dialogs";
+import { ClientWizard } from "@/components/monitor/client-wizard";
+import { CreateIssueDialog } from "@/components/monitor/create-dialogs";
 import { IssueView } from "@/components/monitor/issue-view";
 import { TodayBoard } from "@/components/monitor/today-board";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -80,6 +78,7 @@ export const MonitorPage = () => {
   });
   const [clientDialog, setClientDialog] = useState(false);
   const [issueDialog, setIssueDialog] = useState(false);
+  const [wizardKey, setWizardKey] = useState(0);
   const selected = resolveSelection(stored, data);
   const empty = data && !data.clients.length && !data.issues.length;
 
@@ -105,7 +104,14 @@ export const MonitorPage = () => {
               </ChipButton>
             ))}
             {data && (
-              <Button variant="ghost" size="sm" onClick={() => setClientDialog(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setWizardKey((k) => k + 1);
+                  setClientDialog(true);
+                }}
+              >
                 <Plus /> 고객사
               </Button>
             )}
@@ -179,7 +185,8 @@ export const MonitorPage = () => {
         <div className="h-6" />
       </main>
 
-      <CreateClientDialog
+      <ClientWizard
+        key={wizardKey}
         open={clientDialog}
         onOpenChange={setClientDialog}
         onCreated={(id) => setStored({ kind: "client", id })}

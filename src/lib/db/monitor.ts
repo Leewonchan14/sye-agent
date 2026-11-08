@@ -199,19 +199,38 @@ export const createPresetClients = async () => {
     .onConflictDoNothing({ target: clientsT.slug });
 };
 
-export const createMonitorClient = async (input: { name: string; slug: string }) => {
+/** 화면 등록은 사람이 고를 필요 없는 식별자를 자동으로 만든다. */
+const newClientSlug = () => `client-${Date.now().toString(36)}`;
+
+export const createMonitorClient = async (input: {
+  name: string;
+  slug?: string;
+  categories?: MonitorCategory[];
+  rules?: MonitorRule[];
+  weekdaysOnly?: boolean;
+}) => {
   const db = getDb();
   const [row] = await db
     .insert(clientsT)
     .values({
       name: input.name,
-      slug: input.slug,
-      categories: [{ key: "main", name: `${input.name} 관련 보도`, goal: null }],
-      rules: [],
+      slug: input.slug ?? newClientSlug(),
+      categories: input.categories ?? [
+        { key: "main", name: `${input.name} 관련 보도`, goal: null },
+      ],
+      rules: input.rules ?? [],
+      weekdaysOnly: input.weekdaysOnly ?? true,
       reportTitle: `[${input.name}] Daily Monitoring_{date}`,
       sortOrder: 100,
     })
     .returning();
+  return toClientView(row);
+};
+
+export const getClientView = async (id: number) => {
+  const db = getDb();
+  const [row] = await db.select().from(clientsT).where(eq(clientsT.id, id)).limit(1);
+  if (!row) throw new MonitorError("고객사를 찾을 수 없어요.", 404);
   return toClientView(row);
 };
 
@@ -392,6 +411,7 @@ export const listAutoCollectClients = async (collectKey: string) => {
     .orderBy(asc(clientsT.sortOrder), asc(clientsT.id));
   return rows.map((r) => ({
     client: toClientView(r.client),
+    createdAt: r.client.createdAt,
     collected: r.runId !== null,
   }));
 };
@@ -410,6 +430,38 @@ export const claimDailyRun = async (input: {
     .onConflictDoNothing({ target: [runsT.clientId, runsT.collectKey] })
     .returning();
   return row?.id ?? null;
+};
+
+/**
+ * "지금 한 번 수집"의 빈 수집을 만든다. 오늘 자동 수집이 아직이면 그것으로 쳐서 두 번 돌지 않게 한다.
+ * 돌고 있는 수집이 있으면 막는다.
+ */
+export const createCollectNowRun = async (input: {
+  clientId: number;
+  collectKey: string;
+  since: Date;
+  until: Date;
+}) => {
+  const db = getDb();
+  const [busy] = await db
+    .select({ id: runsT.id })
+    .from(runsT)
+    .where(and(eq(runsT.clientId, input.clientId), isNotNull(runsT.pendingHermesRunId)))
+    .limit(1);
+  if (busy) throw new MonitorError("이미 하치와레가 모으고 있어요.", 409);
+
+  const claimed = await claimDailyRun(input);
+  if (claimed) return claimed;
+  const [row] = await db
+    .insert(runsT)
+    .values({
+      clientId: input.clientId,
+      since: input.since,
+      until: input.until,
+      autoState: "running",
+    })
+    .returning();
+  return row.id;
 };
 
 /** 아직 끝나지 않았다고 기록된 자동 수집과 그 고객사 */

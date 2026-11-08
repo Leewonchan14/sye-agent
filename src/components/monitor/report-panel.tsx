@@ -21,6 +21,7 @@ interface Props {
   run: MonitorRunView;
   items: MonitorItemView[];
   mutations: ReturnType<typeof useMonitorMutations>;
+  onCopied: () => void;
 }
 
 const FORMATS: { id: ReportFormat; label: string }[] = [
@@ -28,7 +29,7 @@ const FORMATS: { id: ReportFormat; label: string }[] = [
   { id: "plain", label: "리포트만" },
 ];
 
-export const ReportPanel = ({ client, run, items, mutations }: Props) => {
+export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) => {
   const [format, setFormat] = useLocalStorageState<ReportFormat>("monitor.reportFormat", {
     defaultValue: "email",
   });
@@ -61,6 +62,7 @@ export const ReportPanel = ({ client, run, items, mutations }: Props) => {
       selection?.addRange(range);
       toast("텍스트를 선택해 뒀어요. 복사 단축키를 눌러 주세요.");
     }
+    onCopied();
   };
 
   const markReported = () =>
