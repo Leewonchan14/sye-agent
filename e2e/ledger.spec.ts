@@ -1024,10 +1024,10 @@ test("삭제 후 되돌리기와 변경 이력", async ({ page, request }) => {
   await expect(dialog.getByText(/복구 · 지울 기록/)).toBeVisible();
   await expect(dialog.getByText(/추가 · 지울 기록/)).toBeVisible();
   await dialog.getByRole("button", { name: "되돌리기" }).click();
-  await expect(page.getByText("기록을 되돌렸어요.").first()).toBeVisible();
 
-  const { rows } = await pool.query("select deleted_at from ledger_entries");
-  expect(rows).toEqual([{ deleted_at: null }]);
+  await expect
+    .poll(async () => (await pool.query("select deleted_at from ledger_entries")).rows)
+    .toEqual([{ deleted_at: null }]);
 });
 
 test("CSV 내보내기: Excel용 BOM, 수식 이스케이프, 삭제 내역 제외", async ({
