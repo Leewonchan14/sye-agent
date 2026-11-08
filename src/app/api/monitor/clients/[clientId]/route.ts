@@ -63,6 +63,7 @@ const patchSchema = z.object({
   reportTitle: z.string().max(200).optional(),
   greeting: z.string().max(1000).optional(),
   closing: z.string().max(500).optional(),
+  autoCollect: z.boolean().optional(),
 });
 
 export const PATCH = async (

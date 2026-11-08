@@ -5,7 +5,7 @@
 **결과를 채팅으로 답하는 대신 아래 API로 POST**한다. 사람은 대시보드에서 선별·리포트 복사만 한다.
 
 ```
-Hermes 크론(매일 09:00) ──┐
+Oracle 스크립트(1분 시계) ──┐
 대시보드 "더 찾기" ─────────┼─▶ Hermes 런 ─▶ POST /api/monitor/agent/runs ─▶ 대시보드 표
 대시보드 "다시 집계" ──────┘              └▶ POST /api/monitor/agent/issues/{id}/snapshots
 ```
@@ -17,9 +17,10 @@ Hermes 크론(매일 09:00) ──┐
 1. **대시보드 버튼("더 찾기", "다시 집계")** — 앱이 요청마다 **일회성 콜백 토큰**을 만들어
    Hermes 프롬프트에 `x-monitor-token` 헤더와 curl 예시째로 넣는다. 토큰은 그 런/이슈에만,
    3시간 동안 유효하다. **Hermes 쪽 설정은 필요 없다.**
-2. **크론 수집(새 런 만들기)·규칙 조회** — 고정 키가 필요하다.
+2. **Oracle 시계(`/api/monitor/agent/tick`)·직접 올리는 수집·규칙 조회** — 고정 키가 필요하다.
    - 앱 env: `MONITOR_INGEST_KEY=<임의의 긴 문자열>`
-   - Hermes env(hachi 프로필 `.env`): 같은 값을 넣고 `x-monitor-key` 헤더로 보낸다.
+   - Oracle: `~/.config/sye-monitor/ingest.key`(권한 600)에 같은 값을 둔다. 스크립트만 읽고,
+     하치와레에게는 넘기지 않는다. 자동 수집도 런마다 일회성 토큰을 받는다.
 
 Hermes의 터미널은 도커 컨테이너에서 돈다. 앱이 공개 주소(Vercel)면 그대로 닿지만,
 로컬에서 테스트할 때는 `MONITOR_CALLBACK_ORIGIN=http://172.17.0.1:<port>`처럼
@@ -150,12 +151,27 @@ POST /api/monitor/agent/issues/{issueId}/snapshots
 }
 ```
 
-## 4. 매일 자동 수집 걸기
+## 4. 매일 자동 수집
 
-Hermes `cronjob_manage`로 매일 09:00 KST에 아래 프롬프트를 돌린다.
+앱에 있는 고객사는 "매일 자동 수집" 스위치가 켜져 있으면 추가 설정 없이 09:00 KST에 수집된다.
 
 ```
-홍콩관광청 모니터링해줘. GET {APP}/api/monitor/agent/clients/hktb 규칙대로
-전일 09:00~당일 09:00 기사를 찾고, 결과는 채팅 대신 POST {APP}/api/monitor/agent/runs 로 보내.
-형식은 sye-agent docs/monitor-agent.md 참고.
+Oracle: Hermes no_agent 예약 작업이 1분마다 scripts/monitor-tick.py 실행
+  └▶ POST /api/monitor/agent/tick (x-monitor-key)
+       └▶ 앱이 오늘 수집할 고객사를 선점 → 빈 런 생성 → Hermes 런 시작 (일회성 토큰)
+            └▶ Hermes가 POST /api/monitor/agent/runs { runId, stats, items }
+```
+
+- 수집 기간은 `모니터링 기간` 규칙을 쓴다. 끝 시각이 아직 안 지났으면 하루 전 구간을 쓴다.
+- `(client_id, collect_key)` 유니크 인덱스로 하루 한 번만 시작한다. 동시에 불려도 안전하다.
+- 응답의 `nextCheckAt`까지 스크립트는 호출하지 않는다. 09:00 전에는 앱이 DB도 건드리지 않는다.
+- Hermes 시작에 실패하면 빈 런을 지우고 5분 뒤 다시 시도한다. 스크립트는 실패·복구 때만 출력하고,
+  그 출력이 Discord로 간다.
+
+설치:
+
+```bash
+cp scripts/monitor-tick.py ~/.hermes/scripts/monitor_tick.py
+hermes cron create "every 1m" --name "모니터링 자동 수집 시계" \
+  --script monitor_tick.py --no-agent --deliver discord
 ```

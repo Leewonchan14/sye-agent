@@ -76,6 +76,7 @@ export interface MonitorClientView {
   reportTitle: string;
   greeting: string;
   closing: string;
+  autoCollect: boolean;
 }
 
 export interface MonitorItemView {

@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { kst } from "@/lib/kst";
 import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
+import { DAILY_COLLECT_REQUEST } from "@/lib/monitor/schedule";
 import type {
   AgentRunInput,
   AgentSnapshotInput,
@@ -141,6 +142,7 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   reportTitle: row.reportTitle,
   greeting: row.greeting,
   closing: row.closing,
+  autoCollect: row.autoCollect,
 });
 
 /** 기본 고객사(홍콩관광청·파나소닉코리아)를 만든다. 이미 있는 slug는 건너뛴다. */
@@ -173,7 +175,13 @@ export const updateMonitorClient = async (
   patch: Partial<
     Pick<
       MonitorClientView,
-      "name" | "categories" | "rules" | "reportTitle" | "greeting" | "closing"
+      | "name"
+      | "categories"
+      | "rules"
+      | "reportTitle"
+      | "greeting"
+      | "closing"
+      | "autoCollect"
     >
   >
 ) => {
@@ -278,6 +286,45 @@ export const getMonitorClientPayload = async (
       reportedAt: iso(r.reportedAt),
     })),
   };
+};
+
+/* ───────────────────────── 매일 자동 수집 ───────────────────────── */
+
+/** 자동 수집이 켜져 있고 이 날짜 수집을 아직 시작하지 않은 고객사 */
+export const listClientsDueForCollect = async (collectKey: string) => {
+  const db = getDb();
+  const rows = await db
+    .select({ client: clientsT })
+    .from(clientsT)
+    .leftJoin(
+      runsT,
+      and(eq(runsT.clientId, clientsT.id), eq(runsT.collectKey, collectKey))
+    )
+    .where(and(eq(clientsT.autoCollect, true), isNull(runsT.id)))
+    .orderBy(asc(clientsT.sortOrder), asc(clientsT.id));
+  return rows.map((r) => toClientView(r.client));
+};
+
+/** 이 날짜의 수집을 선점한다. 이미 누가 시작했으면 null — 동시에 불려도 한 번만 시작된다. */
+export const claimDailyRun = async (input: {
+  clientId: number;
+  collectKey: string;
+  since: Date;
+  until: Date;
+}) => {
+  const db = getDb();
+  const [row] = await db
+    .insert(runsT)
+    .values(input)
+    .onConflictDoNothing({ target: [runsT.clientId, runsT.collectKey] })
+    .returning();
+  return row?.id ?? null;
+};
+
+/** 하치와레에게 넘기지 못한 빈 수집을 지워서 다음 확인 때 다시 시도하게 한다. */
+export const releaseDailyRun = async (runId: number) => {
+  const db = getDb();
+  await db.delete(runsT).where(eq(runsT.id, runId));
 };
 
 /* ───────────────────────── 기사 선별 ───────────────────────── */
@@ -468,6 +515,9 @@ export const ingestAgentRun = async (input: AgentRunInput) => {
       .returning();
   }
 
+  // 자동 수집의 첫 결과는 그날의 본 수집이라 "새로 찾음" 표시를 붙이지 않는다.
+  const flagNew = appending && run.pendingRequest !== DAILY_COLLECT_REQUEST;
+
   const [client] = await db.select().from(clientsT).where(eq(clientsT.id, run.clientId));
   const skipReported = (client.rules as MonitorRule[]).some(
     (r) => r.id === "skip-reported" && r.value === true
@@ -510,7 +560,7 @@ export const ingestAgentRun = async (input: AgentRunInput) => {
     const isReported = reported.has(item.url);
     const flags = [
       ...(item.blocked ? ["blocked"] : []),
-      ...(appending ? ["new"] : []),
+      ...(flagNew ? ["new"] : []),
       ...(isReported ? ["reported"] : []),
       ...(item.dupGroup && !item.isLead ? ["dup"] : []),
     ];

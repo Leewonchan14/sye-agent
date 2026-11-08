@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { CategoryEditor } from "@/components/monitor/category-editor";
 import { RuleDialog } from "@/components/monitor/rule-dialog";
-import { RuleValueEditor } from "@/components/monitor/rule-value-editors";
+import { RuleSwitch, RuleValueEditor } from "@/components/monitor/rule-value-editors";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { useMonitorMutations } from "@/lib/monitor/queries";
 import { newRuleId, ruleKindLabel } from "@/lib/monitor/rules";
+import { nextCollectLabel } from "@/lib/monitor/schedule";
 import type {
   MonitorCategory,
   MonitorClientView,
@@ -204,6 +205,26 @@ export const RulesPanel = ({ client, mutations }: Props) => {
 
   return (
     <div className="flex flex-col gap-8">
+      <section
+        aria-label="매일 자동 수집"
+        className="flex items-center justify-between gap-4 rounded-xl border border-hairline bg-surface px-4 py-3.5"
+      >
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-medium text-ink">매일 자동 수집</h2>
+          <p className="mt-0.5 text-[13px] text-muted">
+            {client.autoCollect
+              ? `다음 수집: ${nextCollectLabel()} · 아래 모니터링 기간 규칙대로 모아요.`
+              : "꺼져 있어요. 켜면 다음 수집 시각부터 하치와레가 모아요."}
+          </p>
+        </div>
+        <RuleSwitch
+          checked={client.autoCollect}
+          label="매일 자동 수집"
+          onChange={(autoCollect) =>
+            mutations.updateClient.mutate({ id: client.id, autoCollect })
+          }
+        />
+      </section>
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div className="min-w-0">

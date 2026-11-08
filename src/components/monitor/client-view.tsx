@@ -24,6 +24,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
 import { useMonitorClient, useMonitorMutations } from "@/lib/monitor/queries";
+import { nextCollectLabel } from "@/lib/monitor/schedule";
 import type { MonitorCategory } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
@@ -142,9 +143,9 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           <Newspaper className="size-6 text-primary" />
           <h2 className="text-lg font-medium text-ink">아직 수집 결과가 없어요</h2>
           <p className="max-w-md text-sm text-muted">
-            하치와레 모니터링 스킬이 수집을 마치면 여기에 기사가 쌓여요. 스킬 설정에서
-            고객사 slug를 <code className="font-mono text-ink">{client.slug}</code>로
-            지정해 주세요.
+            {client.autoCollect
+              ? `${nextCollectLabel()}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
+              : "매일 자동 수집이 꺼져 있어요. 고객사 규칙에서 켜면 다음 수집 시각부터 모아요."}
           </p>
           <Button variant="outline" onClick={() => setTab("rules")}>
             규칙 먼저 정리하기

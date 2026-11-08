@@ -79,6 +79,8 @@ export const startMoreSearch = async (options: {
   category: MonitorCategory | null;
   request: string;
   existingUrls: string[];
+  /** 매일 자동 수집 — 하루치 본 수집이라 소스별 통계까지 함께 받는다. */
+  daily?: boolean;
 }) => {
   const config = ensureHermes();
   const run = await getRunRow(options.runId);
@@ -99,9 +101,21 @@ export const startMoreSearch = async (options: {
     JSON.stringify(options.rules.map(({ title, value }) => ({ title, value }))),
     "",
     "네가 가진 뉴스 검색·모니터링 스킬로 기사를 찾고, 원문에서 기자명과 게재 시각을 확인해.",
+    ...(options.daily
+      ? [
+          "이 고객사 전용 모니터링 스킬이 있으면 그 스킬의 수집·검증 절차를 그대로 따라.",
+          "결과는 나눠 보내지 말고 다 모아서 한 번에 보내. 찾은 기사가 없어도 빈 items로 꼭 보내.",
+        ]
+      : []),
     "결과는 채팅으로 길게 답하지 말고 아래 API로 보내. 다 보낸 뒤 채팅에는 몇 건 보냈는지만 한 줄로 말해.",
     ITEM_FORMAT,
-    curlExample(url, token, `{"runId": ${options.runId}, "items": [ ... ]}`),
+    curlExample(
+      url,
+      token,
+      options.daily
+        ? `{"runId": ${options.runId}, "stats": {"sources": [{"name": "네이버 뉴스", "count": 0}], "blocked": ["접근이 막힌 매체"], "durationSec": 0}, "items": [ ... ]}`
+        : `{"runId": ${options.runId}, "items": [ ... ]}`
+    ),
     "",
     `이미 표에 있는 URL(${options.existingUrls.length}건)은 보내지 마:`,
     ...options.existingUrls.slice(0, 200),

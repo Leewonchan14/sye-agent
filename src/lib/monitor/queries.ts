@@ -167,6 +167,7 @@ export const useMonitorMutations = (clientId?: number) => {
       reportTitle?: string;
       greeting?: string;
       closing?: string;
+      autoCollect?: boolean;
     }) => {
       const { id, ...body } = v;
       return api(`/api/monitor/clients/${id}`, { method: "PATCH", body });
