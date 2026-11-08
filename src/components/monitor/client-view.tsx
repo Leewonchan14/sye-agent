@@ -3,8 +3,8 @@
 import {
   ArrowUp,
   CircleCheck,
-  Clock,
   Copy,
+  Inbox,
   Newspaper,
   TriangleAlert,
 } from "lucide-react";
@@ -32,6 +32,15 @@ type Tab = (typeof TABS)[number]["id"];
 
 const windowLabel = (since: string, until: string) =>
   `${kst(since).format("MM.DD HH:mm")} → ${kst(until).format("MM.DD HH:mm")}`;
+
+/** 앱이 잰 수집 소요 시간 */
+const formatMeasured = (sec: number) => {
+  if (sec < 60) return "1분 미만 소요";
+  const minutes = Math.round(sec / 60);
+  return minutes < 60
+    ? `약 ${minutes}분 소요`
+    : `약 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 소요`;
+};
 
 const LoadingDots = () => (
   <span className="inline-flex gap-[3px]" aria-hidden>
@@ -157,15 +166,25 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             role="status"
             className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-hairline bg-canvas-soft px-4 py-3 text-[13px] text-body"
           >
-            {run.reportedAt ? (
+            {run.pendingSince ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-primary">
+                <Spinner className="size-3.5" />
+                수집 중
+              </span>
+            ) : run.lastError && !items.length ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-error">
+                <TriangleAlert className="size-4" />
+                수집 실패
+              </span>
+            ) : run.reportedAt ? (
               <span className="inline-flex items-center gap-1.5 font-medium text-success">
                 <CircleCheck className="size-4" />
                 {kst(run.reportedAt).format("HH:mm")} 보고 완료
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 font-medium text-ink">
-                <Clock className="size-4 text-primary" />
-                선별 중
+                <Inbox className="size-4 text-primary" />
+                수집 완료 · 보고 전
               </span>
             )}
             <span className="text-muted">{windowLabel(run.since, run.until)}</span>
@@ -182,11 +201,9 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
                 </b>
               </span>
             ))}
-            {run.stats.durationSec ? (
-              <span className="text-muted">
-                {Math.floor(run.stats.durationSec / 60)}분 {run.stats.durationSec % 60}초
-              </span>
-            ) : null}
+            {run.stats.measuredSec !== undefined && (
+              <span className="text-muted">{formatMeasured(run.stats.measuredSec)}</span>
+            )}
             {run.stats.blocked?.length ? (
               <span className="inline-flex items-center gap-1.5">
                 <span className="rounded-full bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">

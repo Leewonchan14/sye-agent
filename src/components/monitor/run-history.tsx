@@ -9,7 +9,13 @@ import type { MonitorRunSummary } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
 const statusLabel = (run: MonitorRunSummary) =>
-  run.pending ? "수집 중" : run.reportedAt ? "보고 완료" : "선별 중";
+  run.pending
+    ? "수집 중"
+    : run.failed
+      ? "수집 실패"
+      : run.reportedAt
+        ? "보고 완료"
+        : "보고 전";
 
 /**
  * 지난 수집 결과를 날짜 순서대로 늘어놓고 눌러서 바로 보는 줄.
@@ -91,7 +97,12 @@ export const RunHistory = ({
                 {r.reportedAt && !r.pending && (
                   <CircleCheck className="size-3 text-success" />
                 )}
-                <span className={cn(r.reportedAt && !r.pending && "text-success")}>
+                <span
+                  className={cn(
+                    r.reportedAt && !r.pending && "text-success",
+                    r.failed && !r.pending && "text-error"
+                  )}
+                >
                   {statusLabel(r)}
                 </span>
               </span>
