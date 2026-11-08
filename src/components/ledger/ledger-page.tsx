@@ -403,32 +403,34 @@ export const LedgerPage = () => {
         </header>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="이전 달"
-              onClick={() => setMonth((current) => shiftMonth(current, -1))}
-            >
-              <ChevronLeft />
-            </Button>
-            <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
-              {monthLabel}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="다음 달"
-              onClick={() => setMonth((current) => shiftMonth(current, 1))}
-            >
-              <ChevronRight />
-            </Button>
-            {month !== thisMonth && (
-              <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
-                이번 달
+          {tab !== "stats" && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="이전 달"
+                onClick={() => setMonth((current) => shiftMonth(current, -1))}
+              >
+                <ChevronLeft />
               </Button>
-            )}
-          </div>
+              <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
+                {monthLabel}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="다음 달"
+                onClick={() => setMonth((current) => shiftMonth(current, 1))}
+              >
+                <ChevronRight />
+              </Button>
+              {month !== thisMonth && (
+                <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
+                  이번 달
+                </Button>
+              )}
+            </div>
+          )}
 
           <LedgerTabs tab={tab} onChange={setTab} />
         </div>
@@ -599,11 +601,7 @@ export const LedgerPage = () => {
               )}
 
               {tab === "stats" && (
-                <StatsView
-                  ledger={ledger}
-                  onOpenSettings={() => openSettings()}
-                  onEdit={openEdit}
-                />
+                <StatsView categories={ledger.categories} onEdit={openEdit} />
               )}
             </>
           ) : null}

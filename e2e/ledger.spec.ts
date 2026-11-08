@@ -147,6 +147,21 @@ test("통계 탭에서 내역을 추가하면 통계가 바로 갱신된다", as
   await expect(page.getByText("총 지출 · 2건")).toBeVisible({ timeout: 5_000 });
 });
 
+test("통계 탭의 기간 설정은 기간별 리포트 하나뿐이다", async ({ page, request }) => {
+  await addEntry(request, token, { entryDate: today(), amount: 1_000, memo: "지출" });
+  await openLedger(page, token);
+  await expect(page.getByRole("button", { name: "이전 달" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "통계" }).click();
+  await expect(page.getByText("기간별 리포트")).toBeVisible();
+  await expect(page.getByRole("button", { name: "이전 달" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "다음 달" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "메모 저장" })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "내역" }).click();
+  await expect(page.getByRole("button", { name: "이전 달" })).toBeVisible();
+});
+
 test("상대방이 입력한 내역이 새로고침 없이 나타난다", async ({ page, request }) => {
   await openLedger(page, token);
   await addEntry(request, token, {
@@ -159,7 +174,7 @@ test("상대방이 입력한 내역이 새로고침 없이 나타난다", async 
   });
 });
 
-test("1년이 넘는 기록도 전체 통계가 열리고, 통계가 실패해도 예산·메모는 남는다", async ({
+test("1년이 넘는 기록도 전체 통계가 열리고, 실패하면 다시 시도할 수 있다", async ({
   page,
   request,
 }) => {
@@ -177,8 +192,7 @@ test("1년이 넘는 기록도 전체 통계가 열리고, 통계가 실패해�
   await openLedger(page, token);
   await page.getByRole("tab", { name: "통계" }).click();
   await expect(page.getByText("통계 실패")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "메모 저장" })).toBeVisible();
-  await expect(page.getByText("예산을 정하면 진행률을 보여줄게요")).toBeVisible();
+  await expect(page.getByRole("button", { name: "다시 불러오기" })).toBeVisible();
 });
 
 test("쓰인 분류는 내역을 옮겨야 삭제되고, 내역은 분류를 잃지 않는다", async ({
