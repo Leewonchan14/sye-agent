@@ -4,8 +4,9 @@ import {
   BellRing,
   CircleCheck,
   Copy,
-  RefreshCw,
+  FileText,
   Siren,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -188,18 +189,30 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
             {issue.title} 보도 추이
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="lg"
-            disabled={pending}
-            onClick={() => recount.mutate(false)}
-          >
-            <RefreshCw /> 지금 몇 건인지 확인
-          </Button>
-          <Button size="lg" disabled={pending} onClick={() => recount.mutate(true)}>
-            <BellRing /> 정기 보고 집계
-          </Button>
+        <div className="flex flex-col gap-2 md:items-end">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={pending}
+              onClick={() => recount.mutate(false)}
+            >
+              <Sparkles /> 건수만 확인
+            </Button>
+            <Button size="lg" disabled={pending} onClick={() => recount.mutate(true)}>
+              <FileText /> 보고 초안 만들기
+            </Button>
+          </div>
+          <div className="text-xs text-muted md:text-right">
+            <p>
+              <b className="font-medium text-body">건수만 확인</b>: 하치와레가 직전 보고
+              이후 새 기사 수를 세서 아래에 +N건으로 알려 줘요. 몇 분 걸려요.
+            </p>
+            <p>
+              <b className="font-medium text-body">보고 초안 만들기</b>: 같은 건수를
+              그래프에 쌓고 보고 초안까지 써요.
+            </p>
+          </div>
         </div>
       </header>
 
@@ -285,7 +298,7 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-hairline px-4 py-10 text-center text-sm text-muted">
-              정기 보고 집계를 한 번 돌리면 여기에 막대가 생겨요.
+              보고 초안 만들기를 한 번 돌리면 여기에 막대가 생겨요.
             </p>
           )}
         </section>
@@ -385,7 +398,7 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
               {latestReport.reportText}
             </pre>
           ) : (
-            <p className="text-sm text-muted">정기 보고 집계를 돌리면 초안이 생겨요.</p>
+            <p className="text-sm text-muted">보고 초안 만들기를 돌리면 초안이 생겨요.</p>
           )}
         </section>
       </div>
