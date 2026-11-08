@@ -113,6 +113,7 @@ export const parseLedgerNotifications = (
     .filter((item): item is ParsedLedgerNotification => item !== null);
 
 const EXPENSE_KEYWORDS: [string, RegExp][] = [
+  ["여행·항공", /항공|렌터카|렌트카|공항|여행/],
   ["카페", /카페|커피|스타벅스|투썸|이디야|메가|컴포즈|빽다방|베이커리/],
   ["교통", /택시|버스|지하철|코레일|KTX|SRT|주유|톨게이트|주차|티머니/i],
   ["숙박", /호텔|모텔|펜션|숙박|에어비앤비|야놀자|여기어때/],

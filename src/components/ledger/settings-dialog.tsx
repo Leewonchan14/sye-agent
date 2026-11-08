@@ -58,6 +58,8 @@ const HISTORY_ACTION_LABEL: Record<LedgerHistoryItem["action"], string> = {
   restore: "복구",
 };
 
+const roundToThousand = (value: number) => Math.round(value / 1000) * 1000;
+
 const numberDisplay = (digits: string) =>
   digits ? Number(digits).toLocaleString("ko-KR") : "";
 
@@ -337,6 +339,30 @@ const SettingsBody = ({
     );
   const totalBudgetNumber = totalBudget ? Number(totalBudget) : null;
 
+  const { expenseReference } = ledger;
+  const referenceByCategory = new Map(
+    expenseReference.byCategory.map((row) => [
+      row.categoryId,
+      roundToThousand(row.average),
+    ])
+  );
+
+  const fillBudgetFromAverage = () => {
+    if (expenseReference.average == null) return;
+    setTotalBudget(String(roundToThousand(expenseReference.average)));
+    setCategoryAmounts(
+      Object.fromEntries(
+        ledger.categories
+          .filter((category) => category.kind === "expense")
+          .map((category) => [
+            String(category.id),
+            String(referenceByCategory.get(category.id) || ""),
+          ])
+      )
+    );
+    toast.success("최근 평균으로 채웠어요. 저장하면 적용돼요.");
+  };
+
   const saveBudget = useMutation({
     mutationFn: () => {
       const body = {
@@ -582,6 +608,22 @@ const SettingsBody = ({
                 원
               </span>
             </div>
+            {expenseReference.average != null && (
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted tabular-nums">
+                  최근 {expenseReference.months}개월 평균 지출{" "}
+                  {formatWon(expenseReference.average)}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={fillBudgetFromAverage}
+                >
+                  평균으로 채우기
+                </Button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -641,7 +683,9 @@ const SettingsBody = ({
                               }))
                             }
                             inputMode="numeric"
-                            placeholder="0"
+                            placeholder={numberDisplay(
+                              String(referenceByCategory.get(category.id) ?? 0)
+                            )}
                             className="pr-6 text-right tabular-nums"
                           />
                           <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-muted">

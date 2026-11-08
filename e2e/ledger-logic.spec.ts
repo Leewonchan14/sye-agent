@@ -1,10 +1,16 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  exceedsLoginLimit,
+  getLoginBlockSeconds,
+  LOGIN_WINDOW_MS,
+} from "../src/lib/auth-rate-limit";
+import { comparableMonthRange, compareLedgerPeriods } from "../src/lib/ledger/compare";
+import {
   parseLedgerNotifications,
   suggestLedgerCategoryName,
 } from "../src/lib/ledger/notification";
-import { getBudgetPace } from "../src/lib/ledger/pace";
+import { getBudgetPace, projectMonthExpense } from "../src/lib/ledger/pace";
 
 test.describe("은행 알림 해석", () => {
   const today = "2026-11-08";
@@ -104,4 +110,125 @@ test.describe("예산 속도", () => {
       state: "other-month",
     });
   });
+});
+
+test.describe("로그인 제한 계산", () => {
+  const now = 1_000_000_000;
+  const minutes = (value: number) => value * 60 * 1000;
+  const fails = (ip: string, ...ago: number[]) =>
+    ago.map((value) => ({ ip, at: now - minutes(value) }));
+
+  test("4번까지는 막지 않는다", () => {
+    expect(getLoginBlockSeconds(fails("a", 1, 2, 3, 4), "a", now)).toBe(0);
+  });
+
+  test("15분 안에 5번이면 마지막 실패부터 15분 막는다", () => {
+    expect(getLoginBlockSeconds(fails("a", 1, 2, 3, 4, 5), "a", now)).toBe(14 * 60);
+  });
+
+  test("차단 시간이 지나면 다시 시도할 수 있다", () => {
+    expect(getLoginBlockSeconds(fails("a", 16, 17, 18, 19, 20), "a", now)).toBe(0);
+  });
+
+  test("15분에 걸쳐 흩어진 실패는 막지 않는다", () => {
+    expect(getLoginBlockSeconds(fails("a", 1, 6, 11, 16, 21), "a", now)).toBe(0);
+  });
+
+  test("다른 IP의 실패는 IP 한도에 세지 않지만 전체 한도에는 센다", () => {
+    expect(getLoginBlockSeconds(fails("b", 1, 2, 3, 4, 5), "a", now)).toBe(0);
+    const many = Array.from({ length: 6 }, (_, group) =>
+      fails(`ip${group}`, 1, 2, 3, 4)
+    ).flat();
+    expect(getLoginBlockSeconds(many.slice(0, 29), "z", now)).toBe(0);
+    const thirty = Array.from({ length: 30 }, (_, index) => ({
+      ip: `ip${index}`,
+      at: now - 1000 * (index + 1),
+    }));
+    expect(getLoginBlockSeconds(thirty, "z", now)).toBeGreaterThan(0);
+  });
+
+  test("동시 요청으로 한도를 넘었는지 판단한다", () => {
+    expect(exceedsLoginLimit(fails("a", 1, 2, 3, 4, 5), "a", now)).toBe(false);
+    expect(exceedsLoginLimit(fails("a", 1, 2, 3, 4, 5, 6), "a", now)).toBe(true);
+    expect(
+      exceedsLoginLimit(
+        [{ ip: "a", at: now - LOGIN_WINDOW_MS - 1 }, ...fails("a", 1, 2, 3, 4, 5)],
+        "a",
+        now
+      )
+    ).toBe(false);
+  });
+});
+
+test.describe("전월 대비", () => {
+  test("진행 중인 달은 지난달의 같은 날까지 비교한다", () => {
+    expect(comparableMonthRange("2026-11", "2026-11-08")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-08",
+    });
+  });
+
+  test("지난달이 더 짧으면 마지막 날까지 비교한다", () => {
+    expect(comparableMonthRange("2026-03", "2026-03-31")).toEqual({
+      from: "2026-02-01",
+      to: "2026-02-28",
+    });
+  });
+
+  test("끝난 달은 지난달 전체와 비교한다", () => {
+    expect(comparableMonthRange("2026-10", "2026-11-08")).toEqual({
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
+  });
+
+  test("증감을 계산하고 사라진 분류도 포함한다", () => {
+    const row = (categoryId: number, name: string, amount: number) => ({
+      categoryId,
+      name,
+      icon: "tag" as const,
+      color: "neutral" as const,
+      amount,
+    });
+    const result = compareLedgerPeriods(
+      { summary: { income: 0, expense: 150 }, byCategory: [row(1, "식비", 150)] },
+      {
+        summary: { income: 10, expense: 100 },
+        byCategory: [row(1, "식비", 70), row(2, "카페", 30)],
+      }
+    );
+    expect(result.expense).toMatchObject({ diff: 50, pct: 50 });
+    expect(result.income).toMatchObject({ diff: -10, pct: -100 });
+    expect(result.categories.map((c) => [c.name, c.diff])).toEqual([
+      ["식비", 80],
+      ["카페", -30],
+    ]);
+  });
+
+  test("지난달 금액이 0이면 비율을 계산하지 않는다", () => {
+    const result = compareLedgerPeriods(
+      { summary: { income: 0, expense: 10 }, byCategory: [] },
+      { summary: { income: 0, expense: 0 }, byCategory: [] }
+    );
+    expect(result.expense.pct).toBeNull();
+    expect(result.hasPrevious).toBe(false);
+  });
+});
+
+test.describe("예상 지출", () => {
+  test("진행 중인 달을 지금 속도로 계산하고 다른 달은 null이다", () => {
+    expect(
+      projectMonthExpense({ month: "2026-11", today: "2026-11-10", spent: 100_000 })
+    ).toEqual({ projected: 300_000, day: 10, daysInMonth: 30 });
+    expect(
+      projectMonthExpense({ month: "2026-10", today: "2026-11-10", spent: 100_000 })
+    ).toBeNull();
+  });
+});
+
+test("항공·렌터카는 여행·항공으로 추측한다", () => {
+  expect(suggestLedgerCategoryName("이스타항공(주)", "expense")).toBe("여행·항공");
+  expect(suggestLedgerCategoryName("토스페이_렌터카_나이스", "expense")).toBe(
+    "여행·항공"
+  );
 });
