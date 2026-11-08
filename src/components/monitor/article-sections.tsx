@@ -21,6 +21,7 @@ import type {
   MonitorItemView,
   MonitorRunView,
 } from "@/lib/monitor/types";
+import { getReporterGap } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
 type Mutations = ReturnType<typeof useMonitorMutations>;
@@ -90,6 +91,7 @@ const ItemRow = ({
   const link = preferredLink(item, preferNaver);
   const categoryOptions = client.categories.map((c) => ({ value: c.key, label: c.name }));
   const subs = client.categories.find((c) => c.key === item.category)?.subs;
+  const reporterGap = getReporterGap(item.flags);
 
   return (
     <div
@@ -140,7 +142,10 @@ const ItemRow = ({
                 </Pill>
               )
           )}
-          {!item.reporter && !item.flags.includes("blocked") && (
+          {!item.reporter && reporterGap && (
+            <Pill className="bg-warning/15 text-warning">{reporterGap.label}</Pill>
+          )}
+          {!item.reporter && !reporterGap && !item.flags.includes("blocked") && (
             <Pill className="bg-warning/15 text-warning">기자 확인 필요</Pill>
           )}
         </div>

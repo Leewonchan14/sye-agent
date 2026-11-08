@@ -36,6 +36,7 @@ import type {
   MonitorRunView,
   MonitorUsage,
 } from "@/lib/monitor/types";
+import { REPORTER_GAPS } from "@/lib/monitor/types";
 
 const {
   monitorClients: clientsT,
@@ -813,6 +814,9 @@ export const ingestAgentRun = async (
       ...(flagNew ? ["new"] : []),
       ...(isReported ? ["reported"] : []),
       ...(item.dupGroup && !item.isLead ? ["dup"] : []),
+      ...(!item.reporter && item.reporterStatus && item.reporterStatus !== "found"
+        ? [REPORTER_GAPS[item.reporterStatus].flag]
+        : []),
     ];
     const excluded = !item.category || Boolean(item.excludedReason);
 

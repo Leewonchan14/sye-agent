@@ -206,6 +206,10 @@ export const agentItemSchema = z.object({
   media: z.string().min(1).max(80),
   title: z.string().min(1).max(400),
   reporter: z.string().max(80).nullish(),
+  /** byline.py의 status. 기자를 못 찾았을 때 이유를 구분한다. */
+  reporterStatus: z
+    .enum(["found", "fetch_failed", "not_on_page", "unverified"])
+    .nullish(),
   /** ISO 8601 (오프셋 포함 권장, 예: 2026-11-05T16:23:00+09:00) */
   publishedAt: z.string().max(40).nullish(),
   summary: z.string().max(2000).nullish(),
@@ -221,6 +225,28 @@ export const agentItemSchema = z.object({
   blocked: z.boolean().default(false),
 });
 export type AgentItem = z.infer<typeof agentItemSchema>;
+
+/** 기자를 못 찾은 이유. 접속 실패와 표기 없음은 뜻이 달라서 구분해 보여 준다. */
+export const REPORTER_GAPS = {
+  fetch_failed: {
+    flag: "reporter-fetch-failed",
+    label: "원문 접속 실패",
+    report: "확인 불가(원문 접속 실패)",
+  },
+  not_on_page: {
+    flag: "reporter-not-on-page",
+    label: "기자 표기 없음",
+    report: "확인 불가(페이지에 기자 표기 없음)",
+  },
+  unverified: {
+    flag: "reporter-unverified",
+    label: "원문 미검증",
+    report: "미검증",
+  },
+} as const;
+
+export const getReporterGap = (flags: string[]) =>
+  Object.values(REPORTER_GAPS).find((gap) => flags.includes(gap.flag));
 
 export const agentRunSchema = z
   .object({
