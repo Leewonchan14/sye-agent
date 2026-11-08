@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 const HEART_COLORS = ["#ff6b8a", "#ff8fab", "#ffb3c6", "#ff4d6d", "#ff758f", "#ff99ac"];
 
@@ -20,19 +20,13 @@ interface HeartsOverlayProps {
 }
 
 export const HeartsOverlay = ({ show, onDone }: HeartsOverlayProps) => {
-  const [visible, setVisible] = useState(false);
-
   useEffect(() => {
     if (!show) return;
-    setVisible(true);
-    const timer = setTimeout(() => {
-      setVisible(false);
-      onDone();
-    }, 3500);
+    const timer = setTimeout(onDone, 3500);
     return () => clearTimeout(timer);
   }, [show, onDone]);
 
-  if (!visible) return null;
+  if (!show) return null;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
