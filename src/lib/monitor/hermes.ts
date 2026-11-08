@@ -113,7 +113,7 @@ export const startMoreSearch = async (options: {
       url,
       token,
       options.daily
-        ? `{"runId": ${options.runId}, "stats": {"sources": [{"name": "네이버 뉴스", "count": 0}], "blocked": ["접근이 막힌 매체"], "durationSec": 0}, "items": [ ... ]}`
+        ? `{"runId": ${options.runId}, "stats": {"sources": [{"name": "네이버 뉴스", "count": 0}], "blocked": ["접근이 막힌 매체"]}, "items": [ ... ]}`
         : `{"runId": ${options.runId}, "items": [ ... ]}`
     ),
     "",

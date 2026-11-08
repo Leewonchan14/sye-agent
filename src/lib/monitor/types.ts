@@ -37,7 +37,10 @@ export type MonitorRuleKind = MonitorRule["kind"];
 export interface MonitorRunStats {
   sources?: { name: string; count: number }[];
   blocked?: string[];
+  /** 하치와레가 적어 보낸 값 — 정확하지 않아 화면에 쓰지 않는다. */
   durationSec?: number;
+  /** 앱이 잰 수집 소요 시간(시작 ~ 결과 수신) */
+  measuredSec?: number;
   note?: string;
 }
 
@@ -124,6 +127,8 @@ export interface MonitorRunSummary {
   /** 리포트에 포함된 대표 기사 수 */
   includedCount: number;
   pending: boolean;
+  /** 기사 없이 실패로 끝났는지 */
+  failed: boolean;
 }
 
 export interface MonitorClientPayload {

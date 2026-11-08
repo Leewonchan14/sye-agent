@@ -275,7 +275,7 @@ export const monitorRuns = pgTable(
       .references(() => monitorClients.id, { onDelete: "cascade" }),
     since: timestamp("since", { withTimezone: true }).notNull(),
     until: timestamp("until", { withTimezone: true }).notNull(),
-    /** { sources: [{ name, count }], blocked: string[], durationSec, note } */
+    /** { sources: [{ name, count }], blocked: string[], durationSec, measuredSec, note } */
     stats: jsonb("stats").notNull().default({}),
     reportText: text("report_text"),
     reportedAt: timestamp("reported_at", { withTimezone: true }),

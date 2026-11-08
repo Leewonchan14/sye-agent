@@ -249,11 +249,28 @@ export const getMonitorClientPayload = async (
       reportedAt: runsT.reportedAt,
       pendingHermesRunId: runsT.pendingHermesRunId,
       collectKey: runsT.collectKey,
+      lastError: runsT.lastError,
     })
     .from(runsT)
     .where(eq(runsT.clientId, clientId))
     .orderBy(desc(runsT.until), desc(runsT.id))
     .limit(30);
+
+  const runItemCounts = new Set(
+    runs.length
+      ? (
+          await db
+            .selectDistinct({ runId: itemsT.runId })
+            .from(itemsT)
+            .where(
+              inArray(
+                itemsT.runId,
+                runs.map((r) => r.id)
+              )
+            )
+        ).map((r) => r.runId)
+      : []
+  );
 
   const runCounts = runs.length
     ? await db
@@ -320,6 +337,7 @@ export const getMonitorClientPayload = async (
       reportedAt: iso(r.reportedAt),
       includedCount: runCounts.find((c) => c.runId === r.id)?.n ?? 0,
       pending: Boolean(r.pendingHermesRunId),
+      failed: Boolean(r.lastError) && !runItemCounts.has(r.id),
     })),
     collectedToday: runs.some((r) => r.collectKey === kst().format("YYYY-MM-DD")),
   };
@@ -630,10 +648,15 @@ export const ingestAgentRun = async (input: AgentRunInput) => {
 
   if (appending) {
     await setRunPending(run.id, null, null);
-    if (input.stats)
+    // 소요 시간은 하치와레가 적어 보낸 값 대신 앱이 잰다. "더 찾기"는 본 수집 시간을 덮지 않는다.
+    const measured =
+      !flagNew && run.pendingSince
+        ? { measuredSec: Math.round((Date.now() - run.pendingSince.valueOf()) / 1000) }
+        : {};
+    if (input.stats || "measuredSec" in measured)
       await db
         .update(runsT)
-        .set({ stats: { ...(run.stats as object), ...input.stats } })
+        .set({ stats: { ...(run.stats as object), ...input.stats, ...measured } })
         .where(eq(runsT.id, run.id));
   }
 

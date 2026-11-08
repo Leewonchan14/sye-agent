@@ -90,7 +90,6 @@ Content-Type: application/json
       { "name": "구글 뉴스", "count": 22 },
     ],
     "blocked": ["뉴스1", "쿠키뉴스"],
-    "durationSec": 372,
   },
   "items": [/* 아래 item 형식 */],
 }
