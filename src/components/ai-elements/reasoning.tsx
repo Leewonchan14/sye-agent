@@ -172,7 +172,7 @@ const donePhrases = [
   "다시 생각해봤는데... 맞는 것 같아...!",
 ];
 
-const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
+const defaultGetThinkingMessage = (isStreaming: boolean) => {
   if (!isStreaming) {
     return <span>{sample(donePhrases) ?? ""}</span>;
   }

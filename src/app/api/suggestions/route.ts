@@ -1,6 +1,11 @@
 import { requireAuth } from "@/lib/auth";
 import { DEFAULT_SUGGESTIONS } from "@/lib/data/default-suggestions";
-import { deleteSuggestion, listSuggestions, resetSuggestions, saveSuggestion } from "@/lib/db/suggestions";
+import {
+  deleteSuggestion,
+  listSuggestions,
+  resetSuggestions,
+  saveSuggestion,
+} from "@/lib/db/suggestions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

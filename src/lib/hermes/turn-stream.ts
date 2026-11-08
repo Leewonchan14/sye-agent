@@ -258,7 +258,9 @@ class TurnStreamRelay {
          * (`GET /v1/runs/{id}`). 404를 그대로 실패로 마감하면 **완주한 턴이 failed로 기록**되므로,
          * 먼저 런 상태로 마감하고 진짜 running일 때만 실패로 닫는다.
          */
-        const status = await getHermesRunStatus(this.config, this.runId).catch(() => null);
+        const status = await getHermesRunStatus(this.config, this.runId).catch(
+          () => null
+        );
         if (status && status.status !== "running") {
           await this.finish(status.status, {
             output: status.output,
@@ -509,7 +511,10 @@ class TurnStreamRelay {
     //    재개(replayFromOffset > 0) 릴레이는 클라이언트가 이미 앞부분 프레임을 갖고 있으므로
     //    백필을 다시 내보내면 카드가 중복된다 — 새 턴(offset 0)일 때만 백필한다.
     if (this.replayFromOffset === 0) {
-      const transcript = await readHermesSessionMessages(this.config, this.hermesSessionId);
+      const transcript = await readHermesSessionMessages(
+        this.config,
+        this.hermesSessionId
+      );
       this.backfillFromTranscript(transcript);
     }
 

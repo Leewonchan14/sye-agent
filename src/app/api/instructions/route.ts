@@ -1,5 +1,10 @@
 import { requireAuth } from "@/lib/auth";
-import { deleteInstructions, listInstructions, saveInstructions, toggleInstructionsActive } from "@/lib/db/instructions";
+import {
+  deleteInstructions,
+  listInstructions,
+  saveInstructions,
+  toggleInstructionsActive,
+} from "@/lib/db/instructions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

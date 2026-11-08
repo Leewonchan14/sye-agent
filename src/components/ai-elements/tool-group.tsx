@@ -15,12 +15,7 @@
 
 import type { UIMessage } from "ai";
 import { isDynamicToolUIPart, isToolUIPart } from "ai";
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  XIcon,
-} from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
@@ -148,7 +143,8 @@ const reviveJsonStrings = (value: unknown, depth = 0): unknown => {
       return value;
     }
   }
-  if (Array.isArray(value)) return value.map((item) => reviveJsonStrings(item, depth + 1));
+  if (Array.isArray(value))
+    return value.map((item) => reviveJsonStrings(item, depth + 1));
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
