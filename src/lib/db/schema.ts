@@ -227,6 +227,8 @@ export const monitorClients = pgTable(
     reportTitle: text("report_title").notNull().default(""),
     greeting: text("greeting").notNull().default(""),
     closing: text("closing").notNull().default(""),
+    /** 매일 정해진 시각에 하치와레가 자동으로 수집할지 */
+    autoCollect: boolean("auto_collect").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -257,9 +259,17 @@ export const monitorRuns = pgTable(
       withTimezone: true,
     }),
     lastError: text("last_error"),
+    /** 매일 자동 수집의 날짜(YYYY-MM-DD, KST). 같은 날 두 번 시작하지 않게 막는다. 수동 수집은 null. */
+    collectKey: text("collect_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
-  (t) => ({ clientIdx: index("monitor_runs_client_idx").on(t.clientId, t.until) })
+  (t) => ({
+    clientIdx: index("monitor_runs_client_idx").on(t.clientId, t.until),
+    collectKeyUniq: uniqueIndex("monitor_runs_collect_key_uniq").on(
+      t.clientId,
+      t.collectKey
+    ),
+  })
 );
 
 /** 기사 원본 — URL 하나당 한 행. 여러 런에 걸쳐 재사용된다. */

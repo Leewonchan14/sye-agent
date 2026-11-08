@@ -120,6 +120,13 @@
       "when": 1794039162183,
       "tag": "0017_mushy_microbe",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794132955560,
+      "tag": "0018_condemned_bruce_banner",
+      "breakpoints": true
     }
   ]
 }
