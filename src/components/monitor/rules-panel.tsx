@@ -15,7 +15,8 @@ import { toast } from "sonner";
 
 import { CategoryEditor } from "@/components/monitor/category-editor";
 import { RuleDialog } from "@/components/monitor/rule-dialog";
-import { RuleSwitch, RuleValueEditor } from "@/components/monitor/rule-value-editors";
+import { RuleValueEditor } from "@/components/monitor/rule-value-editors";
+import { AutoCollectEditor, SaveBar } from "@/components/monitor/schedule-editors";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,21 +28,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { useMonitorMutations } from "@/lib/monitor/queries";
-import { newRuleId, ruleKindLabel } from "@/lib/monitor/rules";
-import { nextCollectLabel } from "@/lib/monitor/schedule";
+import { newRuleId, ruleKindLabel, ruleValueError } from "@/lib/monitor/rules";
+import { effectiveCollectTime } from "@/lib/monitor/schedule";
 import type {
   MonitorCategory,
   MonitorClientView,
   MonitorRule,
 } from "@/lib/monitor/types";
+import { cn } from "@/lib/utils";
 
 interface Props {
   client: MonitorClientView;
   mutations: ReturnType<typeof useMonitorMutations>;
+  collectedToday: boolean;
 }
 
 const RuleRow = ({
   rule,
+  dirty,
   index,
   count,
   onValue,
@@ -51,6 +55,7 @@ const RuleRow = ({
   onDelete,
 }: {
   rule: MonitorRule;
+  dirty: boolean;
   index: number;
   count: number;
   onValue: (value: MonitorRule["value"]) => void;
@@ -61,7 +66,10 @@ const RuleRow = ({
 }) => (
   <div
     data-rule-id={rule.id}
-    className="grid items-center gap-3 rounded-xl border border-hairline bg-surface py-3.5 pr-2 pl-4 sm:grid-cols-[minmax(180px,1fr)_auto_auto]"
+    className={cn(
+      "grid items-center gap-3 rounded-xl border border-hairline bg-surface py-3.5 pr-2 pl-4 sm:grid-cols-[minmax(180px,1fr)_auto_auto]",
+      dirty && "border-primary/50"
+    )}
   >
     <div className="flex min-w-0 items-start justify-between gap-2 pr-8 sm:pr-0">
       <div className="min-w-0">
@@ -80,11 +88,7 @@ const RuleRow = ({
       </div>
     </div>
     <div className="flex min-w-0 sm:max-w-[440px] sm:justify-end">
-      <RuleValueEditor
-        key={`${rule.kind}:${JSON.stringify(rule.value)}`}
-        rule={rule}
-        onChange={onValue}
-      />
+      <RuleValueEditor key={rule.kind} live rule={rule} onChange={onValue} />
     </div>
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -121,7 +125,7 @@ const RuleRow = ({
   </div>
 );
 
-export const RulesPanel = ({ client, mutations }: Props) => {
+export const RulesPanel = ({ client, mutations, collectedToday }: Props) => {
   const [dialog, setDialog] = useState<{
     open: boolean;
     rule: MonitorRule | null;
@@ -133,6 +137,7 @@ export const RulesPanel = ({ client, mutations }: Props) => {
     closing: client.closing,
   });
 
+  const [drafts, setDrafts] = useState<Record<string, MonitorRule["value"]>>({});
   const rules = client.rules;
   const saveRules = (next: MonitorRule[], message?: string, undo?: MonitorRule[]) =>
     mutations.updateClient.mutate(
@@ -148,17 +153,50 @@ export const RulesPanel = ({ client, mutations }: Props) => {
         },
       }
     );
+  // 목록에서 고친 값은 저장을 누를 때까지 여기에만 둔다.
+  const withDraft = (rule: MonitorRule): MonitorRule =>
+    rule.id in drafts ? { ...rule, value: drafts[rule.id] } : rule;
+  const dirtyRules = rules.filter((r) => r.id in drafts).map(withDraft);
+  const draftError = dirtyRules
+    .map((r) => {
+      const error = ruleValueError(r);
+      return error && `${r.title}: ${error}`;
+    })
+    .find(Boolean);
   const setValue = (id: string, value: MonitorRule["value"]) =>
-    saveRules(rules.map((r) => (r.id === id ? { ...r, value } : r)));
+    setDrafts((current) => {
+      const next = { ...current, [id]: value };
+      const saved = rules.find((r) => r.id === id);
+      if (JSON.stringify(saved?.value) === JSON.stringify(value)) delete next[id];
+      return next;
+    });
+  const clearDraft = (id: string) =>
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  const saveDrafts = () =>
+    mutations.updateClient.mutate(
+      { id: client.id, rules: rules.map(withDraft) },
+      {
+        onSuccess: () => {
+          setDrafts({});
+          toast.success("규칙을 저장했어요.");
+        },
+      }
+    );
   const saveCategories = (
     categories: MonitorCategory[],
     message?: string,
-    undo?: MonitorCategory[]
+    undo?: MonitorCategory[],
+    onSaved?: () => void
   ) =>
     mutations.updateClient.mutate(
       { id: client.id, categories },
       {
         onSuccess: () => {
+          onSaved?.();
           if (!message) return;
           if (undo)
             toast.success(message, {
@@ -172,6 +210,7 @@ export const RulesPanel = ({ client, mutations }: Props) => {
   const openDialog = (rule: MonitorRule | null) =>
     setDialog((d) => ({ open: true, rule, key: d.key + 1 }));
   const onSave = (rule: MonitorRule) => {
+    clearDraft(rule.id);
     const exists = rules.some((r) => r.id === rule.id);
     saveRules(
       exists ? rules.map((r) => (r.id === rule.id ? rule : r)) : [...rules, rule],
@@ -205,26 +244,18 @@ export const RulesPanel = ({ client, mutations }: Props) => {
 
   return (
     <div className="flex flex-col gap-8">
-      <section
-        aria-label="매일 자동 수집"
-        className="flex items-center justify-between gap-4 rounded-xl border border-hairline bg-surface px-4 py-3.5"
-      >
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-medium text-ink">매일 자동 수집</h2>
-          <p className="mt-0.5 text-[13px] text-muted">
-            {client.autoCollect
-              ? `다음 수집: ${nextCollectLabel(rules)} · 모니터링 기간이 끝나면 바로 모아요.`
-              : "꺼져 있어요. 켜면 다음 수집 시각부터 하치와레가 모아요."}
-          </p>
-        </div>
-        <RuleSwitch
-          checked={client.autoCollect}
-          label="매일 자동 수집"
-          onChange={(autoCollect) =>
-            mutations.updateClient.mutate({ id: client.id, autoCollect })
-          }
-        />
-      </section>
+      <AutoCollectEditor
+        key={`${client.autoCollect}-${effectiveCollectTime(client)}`}
+        client={client}
+        collectedToday={collectedToday}
+        saving={mutations.updateClient.isPending}
+        onSave={(patch) =>
+          mutations.updateClient.mutate(
+            { id: client.id, ...patch },
+            { onSuccess: () => toast.success("자동 수집 설정을 저장했어요.") }
+          )
+        }
+      />
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div className="min-w-0">
@@ -247,7 +278,8 @@ export const RulesPanel = ({ client, mutations }: Props) => {
         {rules.map((rule, i) => (
           <div key={rule.id} className="relative">
             <RuleRow
-              rule={rule}
+              rule={withDraft(rule)}
+              dirty={rule.id in drafts}
               index={i}
               count={rules.length}
               onValue={(value) => setValue(rule.id, value)}
@@ -265,9 +297,20 @@ export const RulesPanel = ({ client, mutations }: Props) => {
           onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
           onSave={onSave}
         />
+        <SaveBar
+          count={dirtyRules.length}
+          error={draftError}
+          saving={mutations.updateClient.isPending}
+          onCancel={() => setDrafts({})}
+          onSave={saveDrafts}
+        />
       </section>
 
-      <CategoryEditor categories={client.categories} onSave={saveCategories} />
+      <CategoryEditor
+        categories={client.categories}
+        onSave={saveCategories}
+        saving={mutations.updateClient.isPending}
+      />
 
       <section className="flex flex-col gap-3">
         <div>

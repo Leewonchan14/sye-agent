@@ -1,0 +1,1 @@
+ALTER TABLE "monitor_issues" ADD COLUMN "last_auto_slot" text;

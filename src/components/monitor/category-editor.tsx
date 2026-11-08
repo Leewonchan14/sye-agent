@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { RuleSwitch, TagsEditor } from "@/components/monitor/rule-value-editors";
+import { SaveBar } from "@/components/monitor/schedule-editors";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,36 +24,36 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type { MonitorCategory } from "@/lib/monitor/types";
+import { cn } from "@/lib/utils";
 
 const MAX_CATEGORIES = 12;
 const newCategoryKey = () => `cat-${Date.now().toString(36)}`;
 
+/** 빈칸이면 전수 집계(null) */
+const parseGoal = (raw: string) =>
+  raw.trim() === "" ? null : Math.min(100, Math.max(0, Math.round(Number(raw) || 0)));
+
 const GoalInput = ({
-  category,
+  name,
+  value,
   onChange,
 }: {
-  category: MonitorCategory;
-  onChange: (goal: number | null) => void;
+  name: string;
+  value: string;
+  onChange: (raw: string) => void;
 }) => (
   <span className="flex items-center gap-2 text-[13px] text-muted">
     최소
     <Input
-      key={String(category.goal)}
       type="number"
       inputMode="numeric"
       min={0}
       max={100}
-      defaultValue={category.goal ?? ""}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
       placeholder="전수"
-      aria-label={`${category.name} 최소 건수`}
+      aria-label={`${name} 최소 건수`}
       className="h-8 w-20"
-      onBlur={(e) => {
-        const raw = e.target.value.trim();
-        const goal =
-          raw === "" ? null : Math.min(100, Math.max(0, Math.round(Number(raw))));
-        if (Number.isNaN(goal) || goal === category.goal) return;
-        onChange(goal);
-      }}
     />
     건
   </span>
@@ -184,10 +185,32 @@ const CategoryDialog = ({
 export const CategoryEditor = ({
   categories,
   onSave,
+  saving,
 }: {
   categories: MonitorCategory[];
-  onSave: (next: MonitorCategory[], message?: string, undo?: MonitorCategory[]) => void;
+  onSave: (
+    next: MonitorCategory[],
+    message?: string,
+    undo?: MonitorCategory[],
+    onSaved?: () => void
+  ) => void;
+  saving: boolean;
 }) => {
+  // 목록에서 고친 최소 건수는 저장을 누를 때까지 여기에만 둔다.
+  const [goals, setGoals] = useState<Record<string, string>>({});
+  const dirty = categories.filter((c) => c.key in goals);
+  const setGoal = (category: MonitorCategory, raw: string) =>
+    setGoals((current) => {
+      const next = { ...current, [category.key]: raw };
+      if (parseGoal(raw) === category.goal) delete next[category.key];
+      return next;
+    });
+  const clearGoal = (key: string) =>
+    setGoals((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
   const [dialog, setDialog] = useState<{
     open: boolean;
     category: MonitorCategory | null;
@@ -197,6 +220,7 @@ export const CategoryEditor = ({
   const openDialog = (category: MonitorCategory | null) =>
     setDialog((d) => ({ open: true, category, key: d.key + 1 }));
   const save = (category: MonitorCategory) => {
+    clearGoal(category.key);
     const exists = categories.some((c) => c.key === category.key);
     onSave(
       exists
@@ -246,7 +270,10 @@ export const CategoryEditor = ({
           <div
             key={c.key}
             data-category-key={c.key}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-hairline/60 py-2.5 pr-2 pl-4 first:border-t-0 sm:gap-3"
+            className={cn(
+              "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-hairline/60 py-2.5 pr-2 pl-4 first:border-t-0 sm:gap-3",
+              c.key in goals && "bg-primary/5"
+            )}
           >
             <div className="min-w-0">
               <p className="text-sm text-ink">{c.name}</p>
@@ -255,10 +282,9 @@ export const CategoryEditor = ({
               ) : null}
             </div>
             <GoalInput
-              category={c}
-              onChange={(goal) =>
-                onSave(categories.map((x, j) => (j === i ? { ...x, goal } : x)))
-              }
+              name={c.name}
+              value={goals[c.key] ?? String(c.goal ?? "")}
+              onChange={(raw) => setGoal(c, raw)}
             />
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -295,6 +321,21 @@ export const CategoryEditor = ({
           </div>
         ))}
       </div>
+      <SaveBar
+        count={dirty.length}
+        saving={saving}
+        onCancel={() => setGoals({})}
+        onSave={() =>
+          onSave(
+            categories.map((c) =>
+              c.key in goals ? { ...c, goal: parseGoal(goals[c.key]) } : c
+            ),
+            "카테고리 목표를 저장했어요.",
+            undefined,
+            () => setGoals({})
+          )
+        }
+      />
       <CategoryDialog
         key={dialog.key}
         open={dialog.open}
