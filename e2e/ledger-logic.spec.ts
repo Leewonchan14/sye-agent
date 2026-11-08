@@ -226,9 +226,7 @@ test.describe("예상 지출", () => {
   });
 });
 
-test("항공·렌터카는 여행·항공으로 추측한다", () => {
-  expect(suggestLedgerCategoryName("이스타항공(주)", "expense")).toBe("여행·항공");
-  expect(suggestLedgerCategoryName("토스페이_렌터카_나이스", "expense")).toBe(
-    "여행·항공"
-  );
+test("항공과 렌터카는 각각의 분류로 추측한다", () => {
+  expect(suggestLedgerCategoryName("이스타항공(주)", "expense")).toBe("항공");
+  expect(suggestLedgerCategoryName("토스페이_렌터카_나이스", "expense")).toBe("렌트");
 });

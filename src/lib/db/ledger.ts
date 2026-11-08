@@ -32,6 +32,17 @@ export type LedgerEntryView = {
   categoryColor: LedgerCategoryColorKey | null;
   memo: string;
   tags: string;
+  tripId: number | null;
+  tripName: string | null;
+};
+
+export type LedgerTripView = {
+  id: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  entryCount: number;
+  expense: number;
 };
 
 export type LedgerAccountView = {
@@ -58,6 +69,7 @@ export type LedgerMonthPayload = {
     entryCount: number;
   }[];
   entries: LedgerEntryView[];
+  trips: LedgerTripView[];
   /** 이 달 이전 3개월 중 지출이 있던 달의 평균. 예산을 정할 때 참고한다. */
   expenseReference: {
     months: number;
@@ -96,6 +108,14 @@ export interface LedgerEntryInput {
   categoryId?: number | null;
   memo?: string;
   tags?: string;
+  /** 생략하면 날짜로 여행을 찾고, null이면 여행에 넣지 않는다. */
+  tripId?: number | null;
+}
+
+export interface LedgerTripInput {
+  name: string;
+  startDate: string;
+  endDate: string;
 }
 
 export interface LedgerBulkEntryInput extends Omit<LedgerEntryInput, "categoryId"> {
@@ -172,7 +192,8 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   ["의료", "💊"],
   ["주거", "🏠"],
   ["숙박", "🏨"],
-  ["여행·항공", "✈️"],
+  ["항공", "✈️"],
+  ["렌트", "🚗"],
   ["기타", "🧾"],
 ] as const;
 
@@ -346,7 +367,8 @@ const readEntryExtras = (entryTime: string | null, tags: string) => {
 
 export const toLedgerEntryView = (
   entry: EntryRow,
-  categoryById: Map<number, CategoryRef>
+  categoryById: Map<number, CategoryRef>,
+  tripById: Map<number, { name: string }>
 ): LedgerEntryView => {
   const category = entry.categoryId == null ? null : categoryById.get(entry.categoryId);
   return {
@@ -361,6 +383,8 @@ export const toLedgerEntryView = (
     categoryIcon: (category?.icon ?? null) as LedgerCategoryIconKey | null,
     categoryColor: (category?.color ?? null) as LedgerCategoryColorKey | null,
     memo: entry.memo,
+    tripId: entry.tripId,
+    tripName: entry.tripId == null ? null : (tripById.get(entry.tripId)?.name ?? null),
   };
 };
 
@@ -591,6 +615,29 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
       .groupBy(referenceMonth, schema.ledgerEntries.categoryId),
   ]);
 
+  const [tripRows, tripUsageRows] = await Promise.all([
+    getTripRows(),
+    db
+      .select({
+        tripId: schema.ledgerEntries.tripId,
+        entryCount: sql<number>`count(*)::int`,
+        expense: sql<number>`coalesce(sum(${schema.ledgerEntries.amount}), 0)::bigint`,
+      })
+      .from(schema.ledgerEntries)
+      .where(and(activeEntry, eq(schema.ledgerEntries.kind, "expense")))
+      .groupBy(schema.ledgerEntries.tripId),
+  ]);
+  const tripById = new Map(tripRows.map((trip) => [trip.id, trip]));
+  const tripUsage = new Map(tripUsageRows.map((row) => [row.tripId, row]));
+  const trips = tripRows.map((trip) => ({
+    id: trip.id,
+    name: trip.name,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    entryCount: tripUsage.get(trip.id)?.entryCount ?? 0,
+    expense: Number(tripUsage.get(trip.id)?.expense ?? 0),
+  }));
+
   const usageByCategory = new Map(usageRows.map((row) => [row.categoryId, row.value]));
   const categories = categoryRows.map((category) => ({
     id: category.id,
@@ -605,7 +652,7 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
 
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const entries = entryRows
-    .map((entry) => toLedgerEntryView(entry, categoryById))
+    .map((entry) => toLedgerEntryView(entry, categoryById, tripById))
     .sort(compareLedgerEntries);
 
   let income = 0;
@@ -681,6 +728,7 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     account,
     categories,
     entries,
+    trips,
     expenseReference,
     budget: {
       totalBudget,
@@ -750,10 +798,16 @@ export const createLedgerEntry = async (
 ) => {
   const values = normalizeEntryFields(input);
   await assertCategoryKind(values.categoryId, values.kind);
+  const tripId = resolveTripId(
+    input.tripId,
+    values.entryDate,
+    values.kind,
+    await getTripRows()
+  );
   const assetId = await ensureJointAssetId();
   const [entry] = await getDb()
     .insert(schema.ledgerEntries)
-    .values({ ...values, assetId, member: "joint" })
+    .values({ ...values, assetId, member: "joint", tripId })
     .returning();
   await logEntryHistory(entry.id, "create", source, null, entry);
   return entry;
@@ -776,7 +830,7 @@ export const createLedgerEntriesBulk = async (
 
   await ensureLedgerDefaults();
   const db = getDb();
-  const categories = await getCategoryRows();
+  const [categories, trips] = await Promise.all([getCategoryRows(), getTripRows()]);
   const categoryIdByKey = new Map(
     categories.map((category) => [`${category.kind}:${category.name}`, category.id])
   );
@@ -794,7 +848,11 @@ export const createLedgerEntriesBulk = async (
     const suggested = suggestedName
       ? categoryIdByKey.get(`${fields.kind}:${suggestedName}`)
       : undefined;
-    return { ...fields, categoryId: fields.categoryId ?? named ?? suggested ?? null };
+    return {
+      ...fields,
+      categoryId: fields.categoryId ?? named ?? suggested ?? null,
+      tripId: resolveTripId(input.tripId, fields.entryDate, fields.kind, trips),
+    };
   });
 
   for (const fields of normalized) {
@@ -882,10 +940,21 @@ export const updateLedgerEntry = async (
   const entryId = normalizeId(id, "기록");
   const values = normalizeEntryFields(input);
   await assertCategoryKind(values.categoryId, values.kind);
+  const tripPatch =
+    input.tripId === undefined
+      ? {}
+      : {
+          tripId: resolveTripId(
+            input.tripId,
+            values.entryDate,
+            values.kind,
+            await getTripRows()
+          ),
+        };
   const before = await findActiveEntry(entryId);
   const [entry] = await getDb()
     .update(schema.ledgerEntries)
-    .set({ ...values, updatedAt: new Date() })
+    .set({ ...values, ...tripPatch, updatedAt: new Date() })
     .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
     .returning();
   if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");
@@ -925,6 +994,140 @@ export const restoreLedgerEntry = async (id: number) => {
   return entry;
 };
 
+const getTripRows = () =>
+  getDb()
+    .select()
+    .from(schema.ledgerTrips)
+    .orderBy(desc(schema.ledgerTrips.startDate), desc(schema.ledgerTrips.id));
+
+const getTripMap = async () =>
+  new Map((await getTripRows()).map((trip) => [trip.id, trip]));
+
+type TripRow = typeof schema.ledgerTrips.$inferSelect;
+
+/** undefined면 지출 날짜가 정확히 한 여행 기간에 들 때만 그 여행으로 묶는다. */
+const resolveTripId = (
+  value: unknown,
+  entryDate: string,
+  kind: LedgerEntryKind,
+  trips: TripRow[]
+): number | null => {
+  if (value === undefined) {
+    if (kind !== "expense") return null;
+    const matches = trips.filter(
+      (trip) => trip.startDate <= entryDate && entryDate <= trip.endDate
+    );
+    return matches.length === 1 ? matches[0].id : null;
+  }
+  const tripId = normalizeOptionalId(value, "여행");
+  if (tripId != null && !trips.some((trip) => trip.id === tripId)) {
+    throw new LedgerError("여행을 찾을 수 없어요.");
+  }
+  return tripId;
+};
+
+const normalizeTripFields = (input: LedgerTripInput) => {
+  const name = normalizeName(input.name, "여행");
+  if (name.length > 30) throw new LedgerError("여행 이름은 30자 이하로 입력해 주세요.");
+  const startDate = normalizeDate(input.startDate);
+  const endDate = normalizeDate(input.endDate);
+  if (startDate > endDate) {
+    throw new LedgerError("시작일은 종료일보다 늦을 수 없어요.");
+  }
+  return { name, startDate, endDate };
+};
+
+export const createLedgerTrip = async (input: LedgerTripInput) => {
+  const [trip] = await getDb()
+    .insert(schema.ledgerTrips)
+    .values(normalizeTripFields(input))
+    .returning();
+  return trip;
+};
+
+export const updateLedgerTrip = async (id: unknown, input: LedgerTripInput) => {
+  const tripId = normalizeId(id, "여행");
+  const [trip] = await getDb()
+    .update(schema.ledgerTrips)
+    .set(normalizeTripFields(input))
+    .where(eq(schema.ledgerTrips.id, tripId))
+    .returning();
+  if (!trip) throw new LedgerError("여행을 찾을 수 없어요.");
+  return trip;
+};
+
+/** 여행만 지운다. 연결된 내역은 남고 여행 표시만 사라진다. */
+export const deleteLedgerTrip = async (id: unknown): Promise<void> => {
+  const tripId = normalizeId(id, "여행");
+  await getDb().delete(schema.ledgerTrips).where(eq(schema.ledgerTrips.id, tripId));
+};
+
+/** 여행 기간에 들어 있지만 아직 어떤 여행에도 연결되지 않은 지출. */
+export const listTripCandidates = async (id: unknown): Promise<LedgerEntryView[]> => {
+  const tripId = normalizeId(id, "여행");
+  const [[trip], categoryById, tripById] = await Promise.all([
+    getDb()
+      .select()
+      .from(schema.ledgerTrips)
+      .where(eq(schema.ledgerTrips.id, tripId))
+      .limit(1),
+    getCategoryMap(),
+    getTripMap(),
+  ]);
+  if (!trip) throw new LedgerError("여행을 찾을 수 없어요.");
+
+  const rows = await getDb()
+    .select()
+    .from(schema.ledgerEntries)
+    .where(
+      and(
+        activeEntry,
+        isNull(schema.ledgerEntries.tripId),
+        eq(schema.ledgerEntries.kind, "expense"),
+        gte(schema.ledgerEntries.entryDate, trip.startDate),
+        lte(schema.ledgerEntries.entryDate, trip.endDate)
+      )
+    );
+  return rows
+    .map((row) => toLedgerEntryView(row, categoryById, tripById))
+    .sort(compareLedgerEntries);
+};
+
+export const attachEntriesToTrip = async (
+  id: unknown,
+  entryIdsInput: unknown
+): Promise<number> => {
+  const tripId = normalizeId(id, "여행");
+  if (!Array.isArray(entryIdsInput) || !entryIdsInput.length) {
+    throw new LedgerError("연결할 내역을 골라 주세요.");
+  }
+  if (entryIdsInput.length > MAX_BULK_ENTRIES) {
+    throw new LedgerError(`한 번에 ${MAX_BULK_ENTRIES}건까지 연결할 수 있어요.`);
+  }
+  const entryIds = entryIdsInput.map((value) => normalizeId(value, "기록"));
+  const trips = await getTripRows();
+  if (!trips.some((trip) => trip.id === tripId)) {
+    throw new LedgerError("여행을 찾을 수 없어요.");
+  }
+
+  const db = getDb();
+  const targets = and(activeEntry, inArray(schema.ledgerEntries.id, entryIds));
+  const before = await db.select().from(schema.ledgerEntries).where(targets);
+  const updated = await db
+    .update(schema.ledgerEntries)
+    .set({ tripId, updatedAt: new Date() })
+    .where(targets)
+    .returning();
+
+  const beforeById = new Map(before.map((row) => [row.id, row]));
+  await Promise.all(
+    updated.map((row) =>
+      logEntryHistory(row.id, "update", "web", beforeById.get(row.id) ?? null, row)
+    )
+  );
+  return updated.length;
+};
+
 const getCategoryMap = async () =>
   new Map((await getCategoryRows()).map((category) => [category.id, category]));
 
@@ -934,8 +1137,9 @@ export const listAllLedgerEntries = async (): Promise<LedgerEntryView[]> => {
     getDb().select().from(schema.ledgerEntries).where(activeEntry),
     getCategoryMap(),
   ]);
+  const tripById = await getTripMap();
   return rows
-    .map((row) => toLedgerEntryView(row, categoryById))
+    .map((row) => toLedgerEntryView(row, categoryById, tripById))
     .sort(compareLedgerEntries);
 };
 
@@ -948,14 +1152,15 @@ export const searchLedgerEntries = async (query: string, limit = 200) => {
     getDb().select().from(schema.ledgerEntries).where(activeEntry),
     getCategoryMap(),
   ]);
+  const tripById = await getTripMap();
   const lowered = q.toLowerCase();
 
   // 화면에 보이는 값으로 찾는다. 숨긴 예전 태그(모임통장, 시각)는 찾지 않는다.
   const views = rows
-    .map((row) => toLedgerEntryView(row, categoryById))
+    .map((row) => toLedgerEntryView(row, categoryById, tripById))
     .filter((entry) =>
-      [entry.memo, entry.tags, entry.categoryName ?? ""].some((value) =>
-        value.toLowerCase().includes(lowered)
+      [entry.memo, entry.tags, entry.categoryName ?? "", entry.tripName ?? ""].some(
+        (value) => value.toLowerCase().includes(lowered)
       )
     )
     .sort(compareLedgerEntries);

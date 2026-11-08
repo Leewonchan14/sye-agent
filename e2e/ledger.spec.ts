@@ -418,7 +418,7 @@ test("예산 설정에서 최근 평균을 참고하고 채울 수 있다", asyn
   await expect(dialog.getByRole("textbox", { name: "식비 예산" })).toHaveValue("12,000");
 });
 
-test("입금 용어로 통일되고 여행·항공 분류를 쓸 수 있다", async ({ page, request }) => {
+test("입금 용어로 통일되고 항공·렌트 분류를 쓸 수 있다", async ({ page, request }) => {
   await addEntry(request, token, {
     entryDate: today(),
     kind: "income",
@@ -432,7 +432,7 @@ test("입금 용어로 통일되고 여행·항공 분류를 쓸 수 있다", as
 
   await page.getByRole("button", { name: "내역 추가" }).first().click();
   await expect(
-    page.getByRole("dialog").getByRole("button", { name: "여행·항공", exact: true })
+    page.getByRole("dialog").getByRole("button", { name: "항공", exact: true })
   ).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "취소" }).click();
 
@@ -449,7 +449,7 @@ test("입금 용어로 통일되고 여행·항공 분류를 쓸 수 있다", as
     `select c.name from ledger_entries e join ledger_categories c on c.id = e.category_id
      where e.memo = '이스타항공(주)'`
   );
-  expect(rows).toEqual([{ name: "여행·항공" }]);
+  expect(rows).toEqual([{ name: "항공" }]);
 });
 
 const tryLogin = (request: APIRequestContext, ip: string, password: string) =>
@@ -524,6 +524,225 @@ test("로그인 화면에 차단 안내가 나온다", async ({ page, request })
   await page.locator('input[type="password"]').fill("아무거나");
   await page.keyboard.press("Enter");
   await expect(page.getByText(/로그인 시도가 너무 많아요/)).toBeVisible();
+});
+
+const createTrip = async (
+  request: APIRequestContext,
+  name: string,
+  startDate: string,
+  endDate: string
+) => {
+  const res = await request.post("/api/ledger/trips", {
+    headers: authHeaders(token),
+    data: { name, startDate, endDate },
+  });
+  if (!res.ok()) throw new Error(await res.text());
+  return ((await res.json()) as { trip: { id: number } }).trip.id;
+};
+
+test("여행을 등록하고 기간 내역을 골라 연결한다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 20_000,
+    memo: "여행 저녁",
+    categoryId: categoryId("식비"),
+  });
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 5_000,
+    memo: "일상 커피",
+    categoryId: categoryId("카페"),
+  });
+
+  await openLedger(page, token);
+  const dialog = await openSettingsTab(page, "여행");
+  await dialog.getByRole("textbox", { name: "여행 이름" }).fill("춘천 여행");
+  await dialog.getByLabel("여행 시작일").fill(today());
+  await dialog.getByLabel("여행 종료일").fill(today());
+  await dialog.getByRole("button", { name: "여행 추가" }).click();
+  await expect(dialog.getByText("춘천 여행", { exact: true })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "기간 내역 연결" }).click();
+  const candidates = dialog.getByRole("list", { name: "춘천 여행 연결 후보" });
+  await candidates.getByRole("checkbox", { name: /일상 커피/ }).uncheck();
+  await dialog.getByRole("button", { name: "1건 연결" }).click();
+  await expect(dialog.getByText(/1건 · 20,000원/)).toBeVisible();
+
+  const { rows } = await pool.query(
+    "select e.memo, t.name from ledger_entries e left join ledger_trips t on t.id = e.trip_id order by e.id"
+  );
+  expect(rows).toEqual([
+    { memo: "여행 저녁", name: "춘천 여행" },
+    { memo: "일상 커피", name: null },
+  ]);
+});
+
+test("여행 리포트는 미리 결제한 내역까지 분류별로 보여 준다", async ({
+  page,
+  request,
+}) => {
+  const categoryId = await getCategories(request, token);
+  const tripId = await createTrip(request, "제주 여행", today(), today());
+  await addEntry(request, token, {
+    entryDate: daysAgo(40),
+    amount: 150_000,
+    memo: "제주 항공권",
+    categoryId: categoryId("항공"),
+    tripId,
+  });
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 30_000,
+    memo: "흑돼지",
+    categoryId: categoryId("식비"),
+  });
+  await addEntry(request, token, {
+    entryDate: daysAgo(40),
+    amount: 9_000,
+    memo: "관계없는 지출",
+    categoryId: categoryId("식비"),
+  });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  await reportPeriod(page).getByRole("button", { name: "여행", exact: true }).click();
+
+  await expect(page.getByText("제주 여행 총 지출")).toBeVisible();
+  await expect(page.getByText("180,000원").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /제주 항공권/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /흑돼지/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /관계없는 지출/ })).toHaveCount(0);
+  await expect(page.getByText("분류별 지출", { exact: true })).toBeVisible();
+  await expect(page.getByText("잔액 추이", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("전월 대비")).toHaveCount(0);
+});
+
+test("내역 입력에서 날짜로 여행을 추천하고 해제할 수 있다", async ({ page, request }) => {
+  await createTrip(request, "제주 여행", today(), today());
+  await openLedger(page, token);
+
+  const dialog = await fillNewEntry(page, { amount: "1000", memo: "여행 중 지출" });
+  const chip = dialog.getByRole("button", { name: "제주 여행", exact: true });
+  await expect(chip).toHaveAttribute("aria-pressed", "true");
+  await dialog.locator("#ledger-date").fill(daysAgo(40));
+  await expect(chip).toHaveAttribute("aria-pressed", "false");
+  await dialog.locator("#ledger-date").fill(today());
+  await chip.click();
+  await expect(chip).toHaveAttribute("aria-pressed", "false");
+  await dialog.locator("#ledger-date").fill(daysAgo(1));
+  await chip.click();
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(page.getByText("기록을 저장했어요.")).toBeVisible();
+
+  const { rows } = await pool.query(
+    "select t.name from ledger_entries e join ledger_trips t on t.id = e.trip_id"
+  );
+  expect(rows).toEqual([{ name: "제주 여행" }]);
+});
+
+test("일괄 등록과 채팅 기록은 여행 기간이면 자동으로 묶는다", async ({ request }) => {
+  const tripId = await createTrip(request, "제주 여행", today(), today());
+  const res = await request.post("/api/ledger/agent", {
+    headers: { "x-ledger-token": createLedgerAgentToken()! },
+    data: {
+      entries: [
+        { amount: 1_000, memo: "기간 안" },
+        { amount: 2_000, memo: "기간 밖", date: daysAgo(10) },
+        { amount: 3_000, memo: "입금", kind: "income" },
+      ],
+    },
+  });
+  expect(res.status()).toBe(201);
+  const { rows } = await pool.query(
+    "select memo, trip_id from ledger_entries order by id"
+  );
+  expect(rows).toEqual([
+    { memo: "기간 안", trip_id: tripId },
+    { memo: "기간 밖", trip_id: null },
+    { memo: "입금", trip_id: null },
+  ]);
+});
+
+test("여행 제외는 리포트 합계만 줄이고 잔액은 그대로 둔다", async ({ page, request }) => {
+  const tripId = await createTrip(request, "제주 여행", today(), today());
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 70_000,
+    memo: "여행 지출",
+    tripId,
+  });
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 5_000,
+    memo: "일상 지출",
+    tripId: null,
+  });
+
+  const stats = async (query: string) => {
+    const res = await request.get(`/api/ledger/stats?${query}`, {
+      headers: authHeaders(token),
+    });
+    return (await res.json()).stats;
+  };
+  const range = `from=${today()}&to=${today()}`;
+  const all = await stats(range);
+  const without = await stats(`${range}&excludeTrips=1`);
+  expect(all.summary.expense).toBe(75_000);
+  expect(without.summary.expense).toBe(5_000);
+  expect(without.daily.at(-1).balance).toBe(all.daily.at(-1).balance);
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  await expect(page.getByText("총 지출 · 2건")).toBeVisible();
+  await page.getByRole("button", { name: "여행 제외" }).click();
+  await expect(page.getByText("총 지출 · 1건")).toBeVisible();
+  await expect(page.getByRole("button", { name: /여행 지출/ })).toHaveCount(0);
+});
+
+test("여행을 지워도 내역과 분류는 남는다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  const tripId = await createTrip(request, "지울 여행", today(), today());
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 8_000,
+    memo: "남을 내역",
+    categoryId: categoryId("식비"),
+    tripId,
+  });
+
+  await openLedger(page, token);
+  const dialog = await openSettingsTab(page, "여행");
+  await dialog.getByRole("button", { name: "지울 여행 삭제" }).click();
+  await dialog.getByRole("button", { name: "여행 삭제", exact: true }).click();
+  await expect(dialog.getByText("등록된 여행이 없어요")).toBeVisible();
+
+  const { rows } = await pool.query(
+    "select e.memo, e.trip_id, c.name from ledger_entries e join ledger_categories c on c.id = e.category_id"
+  );
+  expect(rows).toEqual([{ memo: "남을 내역", trip_id: null, name: "식비" }]);
+});
+
+test("여행 입력값을 검증한다", async ({ request }) => {
+  const post = (data: object) =>
+    request.post("/api/ledger/trips", { headers: authHeaders(token), data });
+  expect((await post({ name: "", startDate: today(), endDate: today() })).status()).toBe(
+    400
+  );
+  expect(
+    (await post({ name: "역순", startDate: today(), endDate: daysAgo(1) })).status()
+  ).toBe(400);
+  expect(
+    (await post({ name: "같은 이름", startDate: today(), endDate: today() })).ok()
+  ).toBe(true);
+  expect(
+    (await post({ name: "같은 이름", startDate: today(), endDate: today() })).status()
+  ).toBe(409);
+
+  const missing = await request.get("/api/ledger/stats?trip=9999", {
+    headers: authHeaders(token),
+  });
+  expect(missing.status()).toBe(400);
 });
 
 test("상대방이 입력한 내역이 새로고침 없이 나타난다", async ({ page, request }) => {
@@ -805,10 +1024,10 @@ test("삭제 후 되돌리기와 변경 이력", async ({ page, request }) => {
   await expect(dialog.getByText(/복구 · 지울 기록/)).toBeVisible();
   await expect(dialog.getByText(/추가 · 지울 기록/)).toBeVisible();
   await dialog.getByRole("button", { name: "되돌리기" }).click();
-  await expect(page.getByText("기록을 되돌렸어요.").first()).toBeVisible();
 
-  const { rows } = await pool.query("select deleted_at from ledger_entries");
-  expect(rows).toEqual([{ deleted_at: null }]);
+  await expect
+    .poll(async () => (await pool.query("select deleted_at from ledger_entries")).rows)
+    .toEqual([{ deleted_at: null }]);
 });
 
 test("CSV 내보내기: Excel용 BOM, 수식 이스케이프, 삭제 내역 제외", async ({

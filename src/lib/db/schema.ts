@@ -163,6 +163,19 @@ export const ledgerAssets = pgTable(
   (t) => ({ nameUniq: uniqueIndex("ledger_assets_name_uniq").on(t.name) })
 );
 
+/** 여행. 분류(무엇에 썼나)와 별개로 어느 여행의 지출인지 묶는다. */
+export const ledgerTrips = pgTable(
+  "ledger_trips",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    startDate: text("start_date").notNull(), // YYYY-MM-DD (KST)
+    endDate: text("end_date").notNull(), // YYYY-MM-DD (KST)
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({ nameUniq: uniqueIndex("ledger_trips_name_uniq").on(t.name) })
+);
+
 export const ledgerEntries = pgTable(
   "ledger_entries",
   {
@@ -177,6 +190,9 @@ export const ledgerEntries = pgTable(
     assetId: integer("asset_id").references(() => ledgerAssets.id, {
       onDelete: "set null",
     }),
+    tripId: integer("trip_id").references(() => ledgerTrips.id, {
+      onDelete: "set null",
+    }),
     memo: text("memo").notNull().default(""),
     tags: text("tags").notNull().default(""),
     member: text("member").notNull().default("wonchan"), // wonchan | yeeun
@@ -187,6 +203,7 @@ export const ledgerEntries = pgTable(
   (t) => ({
     dateIdx: index("ledger_entries_date_idx").on(t.entryDate),
     memberIdx: index("ledger_entries_member_idx").on(t.member),
+    tripIdx: index("ledger_entries_trip_idx").on(t.tripId),
   })
 );
 

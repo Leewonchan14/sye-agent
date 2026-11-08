@@ -2,8 +2,9 @@
 export const ledgerKeys = {
   all: ["ledger"] as const,
   month: (month: string) => ["ledger", "month", month] as const,
-  stats: (from?: string, to?: string) =>
-    ["ledger", "stats", from ?? "all", to ?? "today"] as const,
+  stats: (from?: string, to?: string, scope?: string) =>
+    ["ledger", "stats", from ?? "all", to ?? "today", scope ?? "all-entries"] as const,
+  tripCandidates: (tripId: number) => ["ledger", "trip-candidates", tripId] as const,
   search: (query: string) => ["ledger", "search", query] as const,
   history: ["ledger", "history"] as const,
 };

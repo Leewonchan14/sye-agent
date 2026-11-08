@@ -35,10 +35,12 @@ interface Props {
   expenseReference: LedgerMonthPayload["expenseReference"];
   totalBudget: number | null;
   onEdit: (entry: LedgerEntryView) => void;
+  trips: LedgerMonthPayload["trips"];
 }
 
 const RANGES = [
   { id: "month", label: "월별" },
+  { id: "trip", label: "여행" },
   { id: "all", label: "전체" },
   { id: "3m", label: "최근 3개월" },
   { id: "30", label: "최근 30일" },
@@ -51,11 +53,14 @@ type RangeId = (typeof RANGES)[number]["id"];
 const fetchStats = async (
   token: string,
   from?: string,
-  to?: string
+  to?: string,
+  scope: { tripId?: number; excludeTrips?: boolean } = {}
 ): Promise<LedgerStats> => {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (scope.tripId != null) params.set("trip", String(scope.tripId));
+  if (scope.excludeTrips) params.set("excludeTrips", "1");
   const query = params.toString();
   const { stats } = await ledgerRequest<{ stats: LedgerStats }>(
     token,
@@ -999,8 +1004,28 @@ const MonthForecastCard = ({
   );
 };
 
+const TripSummaryCard = ({ stats, name }: { stats: LedgerStats; name: string }) => (
+  <StatCard className="md:col-span-2">
+    <p className="text-[12px] font-medium text-muted">{name} 총 지출</p>
+    <p className="mt-1 text-2xl font-semibold text-primary tabular-nums">
+      {formatWon(stats.summary.expense)}
+    </p>
+    <p className="mt-0.5 text-[11px] text-muted-soft tabular-nums">
+      {stats.summary.expenseCount}건 · 여행 {stats.days}일 기준 하루{" "}
+      {formatWon(stats.summary.avgDailyExpense)}
+    </p>
+  </StatCard>
+);
+
+const NO_REFERENCE: LedgerMonthPayload["expenseReference"] = {
+  months: 0,
+  average: null,
+  byCategory: [],
+};
+
 export const StatsView = ({
   categories,
+  trips,
   month,
   onMonthChange,
   expenseReference,
@@ -1014,13 +1039,19 @@ export const StatsView = ({
   const [customError, setCustomError] = useState<string | null>(null);
   const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
   const applied = range === "month" ? monthRange(month) : appliedRange;
+  const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
+  const [excludeTrips, setExcludeTrips] = useState(false);
+  const isTripReport = range === "trip";
+  const activeTrip = trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null;
+  const shouldExclude = !isTripReport && excludeTrips;
+  const statsScope = shouldExclude ? "without-trips" : undefined;
   const thisMonth = currentMonthKst();
 
   const selectRange = (id: RangeId) => {
     setRange(id);
     setCustomError(null);
 
-    if (id === "month") return;
+    if (id === "month" || id === "trip") return;
 
     if (id === "custom") {
       const from = customFrom || kst(todayKst()).subtract(30, "day").format("YYYY-MM-DD");
@@ -1048,9 +1079,14 @@ export const StatsView = ({
   };
 
   const statsQuery = useQuery({
-    queryKey: ledgerKeys.stats(applied.from, applied.to),
-    queryFn: () => fetchStats(token, applied.from, applied.to),
-    enabled: Boolean(token),
+    queryKey: isTripReport
+      ? ledgerKeys.stats(undefined, undefined, `trip-${activeTrip?.id ?? "none"}`)
+      : ledgerKeys.stats(applied.from, applied.to, statsScope),
+    queryFn: () =>
+      isTripReport
+        ? fetchStats(token, undefined, undefined, { tripId: activeTrip?.id })
+        : fetchStats(token, applied.from, applied.to, { excludeTrips: shouldExclude }),
+    enabled: Boolean(token) && (!isTripReport || Boolean(activeTrip)),
     placeholderData: keepPreviousData,
     ...LEDGER_LIVE_QUERY,
   });
@@ -1059,8 +1095,11 @@ export const StatsView = ({
   const previousRange =
     range === "month" ? comparableMonthRange(month, todayKst()) : null;
   const previousQuery = useQuery({
-    queryKey: ledgerKeys.stats(previousRange?.from, previousRange?.to),
-    queryFn: () => fetchStats(token, previousRange?.from, previousRange?.to),
+    queryKey: ledgerKeys.stats(previousRange?.from, previousRange?.to, statsScope),
+    queryFn: () =>
+      fetchStats(token, previousRange?.from, previousRange?.to, {
+        excludeTrips: shouldExclude,
+      }),
     enabled: Boolean(token && previousRange),
     placeholderData: keepPreviousData,
     ...LEDGER_LIVE_QUERY,
@@ -1102,6 +1141,36 @@ export const StatsView = ({
               );
             })}
           </div>
+
+          {isTripReport && trips.length > 0 && (
+            <div role="group" aria-label="여행 선택" className="flex flex-wrap gap-1.5">
+              {trips.map((trip) => {
+                const active = trip.id === activeTrip?.id;
+                return (
+                  <button
+                    key={trip.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSelectedTripId(trip.id)}
+                    className={categoryChipClass(active)}
+                  >
+                    {trip.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {!isTripReport && trips.length > 0 && (
+            <button
+              type="button"
+              aria-pressed={excludeTrips}
+              onClick={() => setExcludeTrips((value) => !value)}
+              className={categoryChipClass(excludeTrips)}
+            >
+              여행 제외
+            </button>
+          )}
 
           {range === "month" && (
             <div className="flex items-center gap-1">
@@ -1186,7 +1255,13 @@ export const StatsView = ({
         </div>
       </div>
 
-      {statsQuery.isPending ? (
+      {isTripReport && !activeTrip ? (
+        <StatCard className="md:col-span-2">
+          <p className="py-8 text-center text-[12px] text-muted">
+            등록된 여행이 없어요. 예산·설정의 여행 탭에서 추가해 주세요.
+          </p>
+        </StatCard>
+      ) : statsQuery.isPending ? (
         <StatCard className="md:col-span-2">
           <p className="py-8 text-center text-[12px] text-muted">불러오는 중…</p>
         </StatCard>
@@ -1205,7 +1280,10 @@ export const StatsView = ({
         </StatCard>
       ) : stats ? (
         <>
-          {hasActivity && <KpiCards stats={stats} />}
+          {isTripReport && activeTrip && (
+            <TripSummaryCard stats={stats} name={activeTrip.name} />
+          )}
+          {hasActivity && !isTripReport && <KpiCards stats={stats} />}
           {hasActivity && previousRange && previousQuery.data && (
             <MonthCompareCard
               current={stats}
@@ -1219,21 +1297,23 @@ export const StatsView = ({
             <MonthForecastCard
               month={month}
               spent={stats.summary.expense}
-              reference={expenseReference}
-              totalBudget={totalBudget}
+              reference={shouldExclude ? NO_REFERENCE : expenseReference}
+              totalBudget={shouldExclude ? null : totalBudget}
             />
           )}
-          <AllTimeCard allTime={stats.allTime} />
+          {!isTripReport && <AllTimeCard allTime={stats.allTime} />}
           {hasActivity ? (
             <>
-              <BalanceCard daily={stats.daily} />
+              {!isTripReport && <BalanceCard daily={stats.daily} />}
               <CategoryCard stats={stats} />
               <PeriodEntriesCard
                 entries={stats.entries}
                 categories={categories}
                 onEdit={onEdit}
               />
-              {stats.monthly.length > 1 && <MonthlyCard monthly={stats.monthly} />}
+              {!isTripReport && stats.monthly.length > 1 && (
+                <MonthlyCard monthly={stats.monthly} />
+              )}
               <TopExpensesCard entries={stats.entries} categories={categories} />
             </>
           ) : (

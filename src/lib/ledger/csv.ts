@@ -13,6 +13,7 @@ export const ledgerEntriesToCsv = (entries: LedgerEntryView[]): string =>
       분류: entry.categoryName ?? "분류 없음",
       내용: entry.memo,
       태그: entry.tags,
+      여행: entry.tripName ?? "",
     })),
     { escapeFormulae: true }
   )}`;

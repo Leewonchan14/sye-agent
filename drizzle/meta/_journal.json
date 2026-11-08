@@ -176,6 +176,13 @@
       "when": 1794148262534,
       "tag": "0025_left_power_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794151457038,
+      "tag": "0026_remarkable_sersi",
+      "breakpoints": true
     }
   ]
 }

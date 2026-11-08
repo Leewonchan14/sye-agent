@@ -13,7 +13,11 @@ export const GET = async (req: Request) => {
   const params = new URL(req.url).searchParams;
 
   try {
-    const stats = await getLedgerStats(params.get("from"), params.get("to"));
+    const trip = params.get("trip");
+    const stats = await getLedgerStats(params.get("from"), params.get("to"), {
+      tripId: trip === null ? null : Number(trip),
+      excludeTrips: params.get("excludeTrips") === "1",
+    });
     return Response.json({ stats });
   } catch (error) {
     return ledgerErrorResponse(error, { fallback: "통계를 불러오지 못했어요." });
