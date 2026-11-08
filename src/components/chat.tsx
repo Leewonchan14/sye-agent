@@ -567,11 +567,10 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const [debounceLoading, setDebounceLoading] = useState(false);
   const showLoading = messagesLoading || debounceLoading;
 
+  if (messagesLoading && !debounceLoading) setDebounceLoading(true);
+
   useEffect(() => {
-    if (messagesLoading) {
-      setDebounceLoading(true);
-      return;
-    }
+    if (messagesLoading) return;
     const timer = setTimeout(() => setDebounceLoading(false), 300);
     return () => clearTimeout(timer);
   }, [messagesLoading]);
