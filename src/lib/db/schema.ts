@@ -168,6 +168,7 @@ export const ledgerEntries = pgTable(
   {
     id: serial("id").primaryKey(),
     entryDate: text("entry_date").notNull(), // YYYY-MM-DD (KST)
+    entryTime: text("entry_time"), // HH:mm (KST), 모르면 null
     kind: text("kind").notNull().default("expense"), // expense | income
     amount: integer("amount").notNull(),
     categoryId: integer("category_id").references(() => ledgerCategories.id, {
@@ -181,10 +182,37 @@ export const ledgerEntries = pgTable(
     member: text("member").notNull().default("wonchan"), // wonchan | yeeun
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }), // null이면 살아 있는 기록
   },
   (t) => ({
     dateIdx: index("ledger_entries_date_idx").on(t.entryDate),
     memberIdx: index("ledger_entries_member_idx").on(t.member),
+  })
+);
+
+/** 모임통장 한 개의 잔액 기준점. id=1 한 줄만 쓴다. */
+export const ledgerAccount = pgTable("ledger_account", {
+  id: integer("id").primaryKey().default(1),
+  openingBalance: integer("opening_balance").notNull().default(0),
+  checkedBalance: integer("checked_balance"),
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+/** 내역 변경 이력. 원본이 지워져도 남도록 FK를 걸지 않는다. */
+export const ledgerEntryHistory = pgTable(
+  "ledger_entry_history",
+  {
+    id: serial("id").primaryKey(),
+    entryId: integer("entry_id").notNull(),
+    action: text("action").notNull(), // create | update | delete | restore
+    source: text("source").notNull().default("web"), // web | agent
+    before: jsonb("before"),
+    after: jsonb("after"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    createdIdx: index("ledger_entry_history_created_idx").on(t.createdAt),
   })
 );
 

@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
-import { dayjs } from "@/lib/kst";
+import { dayjs, kst } from "@/lib/kst";
 import {
   DEFAULT_CATEGORY_COLOR,
   DEFAULT_CATEGORY_ICON,
@@ -13,15 +14,39 @@ import {
   type LedgerCategoryColorKey,
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
-import type { LedgerMember } from "@/lib/ledger/members";
+import { suggestLedgerCategoryName } from "@/lib/ledger/notification";
 
 export type LedgerEntryKind = "expense" | "income";
-export type LedgerAssetKind = "cash" | "bank" | "card";
+export type LedgerEntrySource = "web" | "agent";
+
+export type LedgerEntryView = {
+  id: number;
+  entryDate: string;
+  entryTime: string | null;
+  kind: LedgerEntryKind;
+  amount: number;
+  categoryId: number | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  categoryIcon: LedgerCategoryIconKey | null;
+  categoryColor: LedgerCategoryColorKey | null;
+  memo: string;
+  tags: string;
+};
+
+export type LedgerAccountView = {
+  openingBalance: number;
+  /** 시작 잔액 + 오늘까지의 수입 - 지출 */
+  currentBalance: number;
+  checkedBalance: number | null;
+  checkedAt: string | null;
+};
 
 export type LedgerMonthPayload = {
   month: string;
   prevMonth: string;
   nextMonth: string;
+  account: LedgerAccountView;
   categories: {
     id: number;
     name: string;
@@ -30,24 +55,9 @@ export type LedgerMonthPayload = {
     icon: LedgerCategoryIconKey;
     color: LedgerCategoryColorKey;
     sortOrder: number;
+    entryCount: number;
   }[];
-  assets: { id: number; name: string; kind: LedgerAssetKind; sortOrder: number }[];
-  entries: {
-    id: number;
-    entryDate: string;
-    kind: LedgerEntryKind;
-    amount: number;
-    categoryId: number | null;
-    categoryName: string | null;
-    categoryEmoji: string | null;
-    categoryIcon: LedgerCategoryIconKey | null;
-    categoryColor: LedgerCategoryColorKey | null;
-    assetId: number | null;
-    assetName: string | null;
-    memo: string;
-    tags: string;
-    member: LedgerMember;
-  }[];
+  entries: LedgerEntryView[];
   budget: {
     totalBudget: number | null;
     note: string;
@@ -57,12 +67,6 @@ export type LedgerMonthPayload = {
     income: number;
     expense: number;
     balance: number;
-    byMember: { wonchan: number; yeeun: number; joint: number };
-    settlement: {
-      from: LedgerMember | null;
-      to: LedgerMember | null;
-      amount: number;
-    };
     budgetRemaining: number | null;
     budgetUsedPct: number | null;
   };
@@ -75,19 +79,22 @@ export type LedgerMonthPayload = {
     amount: number;
     pct: number;
   }[];
-  byAsset: { assetId: number | null; name: string; amount: number }[];
   calendar: { date: string; expense: number; income: number }[];
 };
 
 export interface LedgerEntryInput {
   entryDate: string;
+  entryTime?: string | null;
   kind: LedgerEntryKind;
   amount: number;
   categoryId?: number | null;
-  assetId?: number | null;
   memo?: string;
   tags?: string;
-  member: LedgerMember;
+}
+
+export interface LedgerBulkEntryInput extends Omit<LedgerEntryInput, "categoryId"> {
+  categoryId?: number | null;
+  categoryName?: string | null;
 }
 
 export interface LedgerBudgetInput {
@@ -113,16 +120,23 @@ export interface LedgerCategoryUpdate {
   color?: LedgerCategoryColorKey;
 }
 
-export interface LedgerAssetInput {
-  name: string;
-  kind: LedgerAssetKind;
+export interface LedgerAccountInput {
+  openingBalance?: number;
+  actualBalance?: number;
 }
 
-export interface LedgerAssetUpdate {
+export type LedgerHistoryItem = {
   id: number;
-  name?: string;
-  kind?: LedgerAssetKind;
-}
+  entryId: number;
+  action: "create" | "update" | "delete" | "restore";
+  source: LedgerEntrySource;
+  createdAt: string;
+  entryDate: string;
+  kind: LedgerEntryKind;
+  amount: number;
+  memo: string;
+  canRestore: boolean;
+};
 
 /** API 밖으로 나가면 400으로 변환되는 검증 오류. */
 export class LedgerError extends Error {
@@ -133,8 +147,14 @@ export class LedgerError extends Error {
 }
 
 const MAX_AMOUNT = 1_000_000_000;
+const MAX_BALANCE = 2_000_000_000;
+const MAX_BULK_ENTRIES = 100;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH_RE = /^\d{4}-\d{2}$/;
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const ACCOUNT_ID = 1;
+const JOINT_ASSET_NAME = "모임 통장";
+const LEGACY_ACCOUNT_TAGS = new Set(["모임통장", JOINT_ASSET_NAME]);
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   ["식비", "🍚"],
@@ -156,13 +176,6 @@ const DEFAULT_INCOME_CATEGORIES = [
   ["기타", "➕"],
 ] as const;
 
-const DEFAULT_ASSETS: { name: string; kind: LedgerAssetKind }[] = [
-  { name: "현금", kind: "cash" },
-  { name: "체크카드", kind: "card" },
-  { name: "신용카드", kind: "card" },
-  { name: "계좌", kind: "bank" },
-];
-
 const normalizeId = (value: unknown, label: string): number => {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new LedgerError(`${label}가 올바르지 않아요.`);
@@ -178,20 +191,6 @@ const normalizeOptionalId = (value: unknown, label: string): number | null => {
 const normalizeEntryKind = (value: unknown): LedgerEntryKind => {
   if (value !== "expense" && value !== "income") {
     throw new LedgerError("수입/지출 구분을 확인해 주세요.");
-  }
-  return value;
-};
-
-const normalizeAssetKind = (value: unknown): LedgerAssetKind => {
-  if (value !== "cash" && value !== "bank" && value !== "card") {
-    throw new LedgerError("결제수단 종류를 확인해 주세요.");
-  }
-  return value;
-};
-
-const normalizeMember = (value: unknown): LedgerMember => {
-  if (value !== "wonchan" && value !== "yeeun" && value !== "joint") {
-    throw new LedgerError("기록자를 확인해 주세요.");
   }
   return value;
 };
@@ -260,6 +259,17 @@ const normalizeTotalBudget = (value: unknown): number | null => {
   return value;
 };
 
+const normalizeBalance = (value: unknown): number => {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    Math.abs(value) > MAX_BALANCE
+  ) {
+    throw new LedgerError("잔액을 확인해 주세요.");
+  }
+  return value;
+};
+
 const normalizeMonth = (value: unknown): string => {
   if (typeof value !== "string" || !MONTH_RE.test(value)) {
     throw new LedgerError("월 형식이 올바르지 않아요.");
@@ -268,8 +278,22 @@ const normalizeMonth = (value: unknown): string => {
 };
 
 const normalizeDate = (value: unknown): string => {
-  if (typeof value !== "string" || !DATE_RE.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !DATE_RE.test(value) ||
+    kst(value).format("YYYY-MM-DD") !== value ||
+    value < "2000-01-01" ||
+    value > "2100-12-31"
+  ) {
     throw new LedgerError("날짜 형식이 올바르지 않아요.");
+  }
+  return value;
+};
+
+const normalizeTime = (value: unknown): string | null => {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || !TIME_RE.test(value)) {
+    throw new LedgerError("시각 형식이 올바르지 않아요.");
   }
   return value;
 };
@@ -283,14 +307,84 @@ const normalizeNote = (value: unknown): string => {
 const toEntryKind = (kind: string): LedgerEntryKind =>
   kind === "income" ? "income" : "expense";
 
-const toAssetKind = (kind: string): LedgerAssetKind =>
-  kind === "cash" ? "cash" : kind === "bank" ? "bank" : "card";
+/** neon-http와 node-postgres 양쪽에서 쓰는 단일 SQL 실행. 한 문장이라 원자적이다. */
+const executeStatement = async (statement: SQL): Promise<void> => {
+  const db = getDb() as unknown as { execute: (query: SQL) => Promise<unknown> };
+  await db.execute(statement);
+};
 
-const toMember = (member: string): LedgerMember =>
-  member === "yeeun" ? "yeeun" : member === "joint" ? "joint" : "wonchan";
+const activeEntry = isNull(schema.ledgerEntries.deletedAt);
+
+type EntryRow = typeof schema.ledgerEntries.$inferSelect;
+type CategoryRef = { name: string; emoji: string; icon: string; color: string };
 
 /**
- * 분류/자산 테이블이 비어 있을 때만 기본값을 넣는다.
+ * 예전 가져오기 데이터는 태그 칸에 시각(15:52)과 "모임통장"을 넣었다.
+ * 읽을 때 시각 칸으로 옮기고, 이제 뜻이 없는 통장 태그는 뺀다.
+ */
+const readEntryExtras = (entryTime: string | null, tags: string) => {
+  let time = entryTime;
+  const kept: string[] = [];
+  for (const raw of tags.split(",")) {
+    const tag = raw.trim();
+    if (!tag || LEGACY_ACCOUNT_TAGS.has(tag)) continue;
+    if (TIME_RE.test(tag)) {
+      time ??= tag;
+      continue;
+    }
+    kept.push(tag);
+  }
+  return { entryTime: time, tags: kept.join(", ") };
+};
+
+export const toLedgerEntryView = (
+  entry: EntryRow,
+  categoryById: Map<number, CategoryRef>
+): LedgerEntryView => {
+  const category = entry.categoryId == null ? null : categoryById.get(entry.categoryId);
+  return {
+    id: entry.id,
+    entryDate: entry.entryDate,
+    ...readEntryExtras(entry.entryTime, entry.tags),
+    kind: toEntryKind(entry.kind),
+    amount: entry.amount,
+    categoryId: entry.categoryId,
+    categoryName: category?.name ?? null,
+    categoryEmoji: category?.emoji ?? null,
+    categoryIcon: (category?.icon ?? null) as LedgerCategoryIconKey | null,
+    categoryColor: (category?.color ?? null) as LedgerCategoryColorKey | null,
+    memo: entry.memo,
+  };
+};
+
+/** 최신순: 날짜, 시각(없으면 뒤로), id */
+export const compareLedgerEntries = (
+  a: Pick<LedgerEntryView, "id" | "entryDate" | "entryTime">,
+  b: Pick<LedgerEntryView, "id" | "entryDate" | "entryTime">
+): number =>
+  b.entryDate.localeCompare(a.entryDate) ||
+  (b.entryTime ?? "").localeCompare(a.entryTime ?? "") ||
+  b.id - a.id;
+
+const logEntryHistory = async (
+  entryId: number,
+  action: LedgerHistoryItem["action"],
+  source: LedgerEntrySource,
+  before: EntryRow | null,
+  after: EntryRow | null
+): Promise<void> => {
+  try {
+    await getDb()
+      .insert(schema.ledgerEntryHistory)
+      .values({ entryId, action, source, before, after });
+  } catch (error) {
+    // 이력 기록 실패가 사용자의 저장을 되돌리면 안 된다.
+    console.error("[ledger] failed to write history:", error);
+  }
+};
+
+/**
+ * 분류 테이블이 비어 있을 때만 기본값을 넣는다.
  * 여러 요청이 동시에 들어와도 unique 인덱스 덕분에 안전하다.
  */
 export const ensureLedgerDefaults = async (): Promise<void> => {
@@ -300,56 +394,128 @@ export const ensureLedgerDefaults = async (): Promise<void> => {
     .select({ value: sql<number>`count(*)::int` })
     .from(schema.ledgerCategories);
 
-  if (!categoryCount?.value) {
-    await db
-      .insert(schema.ledgerCategories)
-      .values([
-        ...DEFAULT_EXPENSE_CATEGORIES.map(([name, emoji], index) => {
-          const style = DEFAULT_CATEGORY_STYLES[name] ?? {
-            icon: suggestCategoryIcon(name),
-            color: defaultCategoryColor(suggestCategoryIcon(name)),
-          };
-          return {
-            name,
-            emoji,
-            kind: "expense" as const,
-            icon: style.icon,
-            color: style.color,
-            sortOrder: index,
-          };
-        }),
-        ...DEFAULT_INCOME_CATEGORIES.map(([name, emoji], index) => {
-          const style =
-            name === "기타"
-              ? { icon: "plus" as const, color: "neutral" as const }
-              : (DEFAULT_CATEGORY_STYLES[name] ?? {
-                  icon: suggestCategoryIcon(name),
-                  color: defaultCategoryColor(suggestCategoryIcon(name)),
-                });
-          return {
-            name,
-            emoji,
-            kind: "income" as const,
-            icon: style.icon,
-            color: style.color,
-            sortOrder: index,
-          };
-        }),
-      ])
-      .onConflictDoNothing();
-  }
+  if (categoryCount?.value) return;
 
-  const [assetCount] = await db
-    .select({ value: sql<number>`count(*)::int` })
-    .from(schema.ledgerAssets);
-
-  if (!assetCount?.value) {
-    await db
-      .insert(schema.ledgerAssets)
-      .values(DEFAULT_ASSETS.map((asset, index) => ({ ...asset, sortOrder: index })))
-      .onConflictDoNothing();
-  }
+  await db
+    .insert(schema.ledgerCategories)
+    .values([
+      ...DEFAULT_EXPENSE_CATEGORIES.map(([name, emoji], index) => {
+        const style = DEFAULT_CATEGORY_STYLES[name] ?? {
+          icon: suggestCategoryIcon(name),
+          color: defaultCategoryColor(suggestCategoryIcon(name)),
+        };
+        return {
+          name,
+          emoji,
+          kind: "expense" as const,
+          icon: style.icon,
+          color: style.color,
+          sortOrder: index,
+        };
+      }),
+      ...DEFAULT_INCOME_CATEGORIES.map(([name, emoji], index) => {
+        const style =
+          name === "기타"
+            ? { icon: "plus" as const, color: "neutral" as const }
+            : (DEFAULT_CATEGORY_STYLES[name] ?? {
+                icon: suggestCategoryIcon(name),
+                color: defaultCategoryColor(suggestCategoryIcon(name)),
+              });
+        return {
+          name,
+          emoji,
+          kind: "income" as const,
+          icon: style.icon,
+          color: style.color,
+          sortOrder: index,
+        };
+      }),
+    ])
+    .onConflictDoNothing();
 };
+
+/** 오늘까지 기록의 순증감(수입 - 지출). */
+const getNetThroughToday = async (): Promise<number> => {
+  const [row] = await getDb()
+    .select({
+      value: sql<number>`coalesce(sum(case when ${schema.ledgerEntries.kind} = 'income' then ${schema.ledgerEntries.amount} else -${schema.ledgerEntries.amount} end), 0)::bigint`,
+    })
+    .from(schema.ledgerEntries)
+    .where(
+      and(activeEntry, lte(schema.ledgerEntries.entryDate, kst().format("YYYY-MM-DD")))
+    );
+  return Number(row?.value ?? 0);
+};
+
+export const getLedgerOpeningBalance = async (): Promise<number> => {
+  const [row] = await getDb()
+    .select({ openingBalance: schema.ledgerAccount.openingBalance })
+    .from(schema.ledgerAccount)
+    .where(eq(schema.ledgerAccount.id, ACCOUNT_ID))
+    .limit(1);
+  return row?.openingBalance ?? 0;
+};
+
+export const getLedgerAccount = async (): Promise<LedgerAccountView> => {
+  const [[row], net] = await Promise.all([
+    getDb()
+      .select()
+      .from(schema.ledgerAccount)
+      .where(eq(schema.ledgerAccount.id, ACCOUNT_ID))
+      .limit(1),
+    getNetThroughToday(),
+  ]);
+  const openingBalance = row?.openingBalance ?? 0;
+  return {
+    openingBalance,
+    currentBalance: openingBalance + net,
+    checkedBalance: row?.checkedBalance ?? null,
+    checkedAt: row?.checkedAt?.toISOString() ?? null,
+  };
+};
+
+/** 시작 잔액을 직접 정하거나, 실제 통장 잔액에 맞도록 시작 잔액을 조정한다. */
+export const saveLedgerAccount = async (
+  input: LedgerAccountInput
+): Promise<LedgerAccountView> => {
+  const db = getDb();
+  const now = new Date();
+
+  if (input.actualBalance !== undefined) {
+    const actualBalance = normalizeBalance(input.actualBalance);
+    const openingBalance = normalizeBalance(actualBalance - (await getNetThroughToday()));
+    const values = {
+      openingBalance,
+      checkedBalance: actualBalance,
+      checkedAt: now,
+      updatedAt: now,
+    };
+    await db
+      .insert(schema.ledgerAccount)
+      .values({ id: ACCOUNT_ID, ...values })
+      .onConflictDoUpdate({ target: schema.ledgerAccount.id, set: values });
+    return getLedgerAccount();
+  }
+
+  if (input.openingBalance === undefined) {
+    throw new LedgerError("잔액을 입력해 주세요.");
+  }
+  const openingBalance = normalizeBalance(input.openingBalance);
+  await db
+    .insert(schema.ledgerAccount)
+    .values({ id: ACCOUNT_ID, openingBalance, updatedAt: now })
+    .onConflictDoUpdate({
+      target: schema.ledgerAccount.id,
+      set: { openingBalance, updatedAt: now },
+    });
+  return getLedgerAccount();
+};
+
+const getCategoryRows = () =>
+  getDb()
+    .select()
+    .from(schema.ledgerCategories)
+    .orderBy(asc(schema.ledgerCategories.sortOrder), asc(schema.ledgerCategories.id));
 
 export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload> => {
   const validMonth = normalizeMonth(month);
@@ -359,36 +525,40 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
   const monthStart = `${validMonth}-01`;
   const monthEnd = `${validMonth}-31`;
 
-  const [categoryRows, assetRows, entryRows, monthRows, budgetRows] = await Promise.all([
-    db
-      .select()
-      .from(schema.ledgerCategories)
-      .orderBy(asc(schema.ledgerCategories.sortOrder), asc(schema.ledgerCategories.id)),
-    db
-      .select()
-      .from(schema.ledgerAssets)
-      .orderBy(asc(schema.ledgerAssets.sortOrder), asc(schema.ledgerAssets.id)),
-    db
-      .select()
-      .from(schema.ledgerEntries)
-      .where(
-        and(
-          gte(schema.ledgerEntries.entryDate, monthStart),
-          lte(schema.ledgerEntries.entryDate, monthEnd)
+  const [categoryRows, entryRows, monthRows, budgetRows, usageRows, account] =
+    await Promise.all([
+      getCategoryRows(),
+      db
+        .select()
+        .from(schema.ledgerEntries)
+        .where(
+          and(
+            activeEntry,
+            gte(schema.ledgerEntries.entryDate, monthStart),
+            lte(schema.ledgerEntries.entryDate, monthEnd)
+          )
         )
-      )
-      .orderBy(desc(schema.ledgerEntries.entryDate), desc(schema.ledgerEntries.id)),
-    db
-      .select()
-      .from(schema.ledgerMonths)
-      .where(eq(schema.ledgerMonths.month, validMonth))
-      .limit(1),
-    db
-      .select()
-      .from(schema.ledgerBudgets)
-      .where(eq(schema.ledgerBudgets.month, validMonth)),
-  ]);
+        .orderBy(desc(schema.ledgerEntries.entryDate), desc(schema.ledgerEntries.id)),
+      db
+        .select()
+        .from(schema.ledgerMonths)
+        .where(eq(schema.ledgerMonths.month, validMonth))
+        .limit(1),
+      db
+        .select()
+        .from(schema.ledgerBudgets)
+        .where(eq(schema.ledgerBudgets.month, validMonth)),
+      db
+        .select({
+          categoryId: schema.ledgerEntries.categoryId,
+          value: sql<number>`count(*)::int`,
+        })
+        .from(schema.ledgerEntries)
+        .groupBy(schema.ledgerEntries.categoryId),
+      getLedgerAccount(),
+    ]);
 
+  const usageByCategory = new Map(usageRows.map((row) => [row.categoryId, row.value]));
   const categories = categoryRows.map((category) => ({
     id: category.id,
     name: category.name,
@@ -397,43 +567,17 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     icon: category.icon as LedgerCategoryIconKey,
     color: category.color as LedgerCategoryColorKey,
     sortOrder: category.sortOrder,
-  }));
-  const assets = assetRows.map((asset) => ({
-    id: asset.id,
-    name: asset.name,
-    kind: toAssetKind(asset.kind),
-    sortOrder: asset.sortOrder,
+    entryCount: usageByCategory.get(category.id) ?? 0,
   }));
 
   const categoryById = new Map(categories.map((category) => [category.id, category]));
-  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
-
-  const entries = entryRows.map((entry) => {
-    const category = entry.categoryId == null ? null : categoryById.get(entry.categoryId);
-    const asset = entry.assetId == null ? null : assetById.get(entry.assetId);
-    return {
-      id: entry.id,
-      entryDate: entry.entryDate,
-      kind: toEntryKind(entry.kind),
-      amount: entry.amount,
-      categoryId: entry.categoryId,
-      categoryName: category?.name ?? null,
-      categoryEmoji: category?.emoji ?? null,
-      categoryIcon: category?.icon ?? null,
-      categoryColor: category?.color ?? null,
-      assetId: entry.assetId,
-      assetName: asset?.name ?? null,
-      memo: entry.memo,
-      tags: entry.tags,
-      member: toMember(entry.member),
-    };
-  });
+  const entries = entryRows
+    .map((entry) => toLedgerEntryView(entry, categoryById))
+    .sort(compareLedgerEntries);
 
   let income = 0;
   let expense = 0;
-  const byMember = { wonchan: 0, yeeun: 0, joint: 0 };
   const categoryTotals = new Map<number | null, number>();
-  const assetTotals = new Map<number | null, number>();
   const calendarTotals = new Map<string, { expense: number; income: number }>();
 
   for (const entry of entries) {
@@ -444,30 +588,15 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
       day.income += entry.amount;
     } else {
       expense += entry.amount;
-      byMember[entry.member] += entry.amount;
       day.expense += entry.amount;
       categoryTotals.set(
         entry.categoryId,
         (categoryTotals.get(entry.categoryId) ?? 0) + entry.amount
       );
-      assetTotals.set(
-        entry.assetId,
-        (assetTotals.get(entry.assetId) ?? 0) + entry.amount
-      );
     }
 
     calendarTotals.set(entry.entryDate, day);
   }
-
-  const diff = Math.abs(byMember.wonchan - byMember.yeeun);
-  const settlement =
-    diff < 2
-      ? { from: null, to: null, amount: 0 }
-      : {
-          from: byMember.wonchan > byMember.yeeun ? "yeeun" : "wonchan",
-          to: byMember.wonchan > byMember.yeeun ? "wonchan" : "yeeun",
-          amount: Math.round(diff / 2),
-        };
 
   const totalBudget = monthRows[0]?.totalBudget ?? null;
 
@@ -486,13 +615,6 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     })
     .sort((a, b) => b.amount - a.amount);
 
-  const byAsset = [...assetTotals.entries()]
-    .map(([assetId, amount]) => {
-      const asset = assetId == null ? null : assetById.get(assetId);
-      return { assetId, name: asset?.name ?? "결제수단 없음", amount };
-    })
-    .sort((a, b) => b.amount - a.amount);
-
   const calendar = [...calendarTotals.entries()]
     .map(([date, totals]) => ({ date, ...totals }))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -501,8 +623,8 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     month: validMonth,
     prevMonth: dayjs(`${validMonth}-01`).subtract(1, "month").format("YYYY-MM"),
     nextMonth: dayjs(`${validMonth}-01`).add(1, "month").format("YYYY-MM"),
+    account,
     categories,
-    assets,
     entries,
     budget: {
       totalBudget,
@@ -516,12 +638,6 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
       income,
       expense,
       balance: income - expense,
-      byMember,
-      settlement: {
-        from: settlement.from as LedgerMember | null,
-        to: settlement.to as LedgerMember | null,
-        amount: settlement.amount,
-      },
       budgetRemaining: totalBudget == null ? null : totalBudget - expense,
       budgetUsedPct:
         totalBudget == null || totalBudget === 0
@@ -529,71 +645,325 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
           : Math.round((expense / totalBudget) * 100),
     },
     byCategory,
-    byAsset,
     calendar,
   };
 };
 
-const validateEntryInput = async (input: LedgerEntryInput) => {
-  const entryDate = normalizeDate(input.entryDate);
-  const kind = normalizeEntryKind(input.kind);
-  const amount = normalizeAmount(input.amount);
-  const member = normalizeMember(input.member);
-  const categoryId = normalizeOptionalId(input.categoryId, "분류");
-  const assetId = normalizeOptionalId(input.assetId, "결제수단");
-  const memo = normalizeMemo(input.memo);
-  const tags = normalizeTags(input.tags);
+const normalizeEntryFields = (input: LedgerEntryInput) => ({
+  entryDate: normalizeDate(input.entryDate),
+  entryTime: normalizeTime(input.entryTime),
+  kind: normalizeEntryKind(input.kind),
+  amount: normalizeAmount(input.amount),
+  categoryId: normalizeOptionalId(input.categoryId, "분류"),
+  memo: normalizeMemo(input.memo),
+  tags: normalizeTags(input.tags),
+});
 
+const assertCategoryKind = async (categoryId: number | null, kind: LedgerEntryKind) => {
+  if (categoryId == null) return;
+  const [category] = await getDb()
+    .select({ kind: schema.ledgerCategories.kind })
+    .from(schema.ledgerCategories)
+    .where(eq(schema.ledgerCategories.id, categoryId))
+    .limit(1);
+  if (!category) throw new LedgerError("분류를 찾을 수 없어요.");
+  if (toEntryKind(category.kind) !== kind) {
+    throw new LedgerError("분류의 수입/지출 구분이 맞지 않아요.");
+  }
+};
+
+/** 새 기록을 모임통장에 묶기 위한 자산 id. 없으면 만든다. */
+const ensureJointAssetId = async (): Promise<number> => {
   const db = getDb();
+  await db
+    .insert(schema.ledgerAssets)
+    .values({ name: JOINT_ASSET_NAME, kind: "bank" })
+    .onConflictDoNothing();
+  const [asset] = await db
+    .select({ id: schema.ledgerAssets.id })
+    .from(schema.ledgerAssets)
+    .where(eq(schema.ledgerAssets.name, JOINT_ASSET_NAME))
+    .limit(1);
+  if (!asset) throw new Error("모임 통장 자산을 만들지 못했습니다.");
+  return asset.id;
+};
 
-  if (categoryId != null) {
-    const [category] = await db
-      .select({ kind: schema.ledgerCategories.kind })
-      .from(schema.ledgerCategories)
-      .where(eq(schema.ledgerCategories.id, categoryId))
-      .limit(1);
-    if (!category) throw new LedgerError("분류를 찾을 수 없어요.");
-    if (toEntryKind(category.kind) !== kind) {
+export const createLedgerEntry = async (
+  input: LedgerEntryInput,
+  source: LedgerEntrySource = "web"
+) => {
+  const values = normalizeEntryFields(input);
+  await assertCategoryKind(values.categoryId, values.kind);
+  const assetId = await ensureJointAssetId();
+  const [entry] = await getDb()
+    .insert(schema.ledgerEntries)
+    .values({ ...values, assetId, member: "joint" })
+    .returning();
+  await logEntryHistory(entry.id, "create", source, null, entry);
+  return entry;
+};
+
+/**
+ * 여러 건을 한 번에 등록한다. 같은 날짜·금액·구분·내용의 기록은 이미 있다고 보고 건너뛴다.
+ * 시각이 양쪽 모두 있고 서로 다르면 다른 기록으로 본다.
+ */
+export const createLedgerEntriesBulk = async (
+  inputs: LedgerBulkEntryInput[],
+  options: { source: LedgerEntrySource; allowDuplicates?: boolean }
+) => {
+  if (!Array.isArray(inputs) || !inputs.length) {
+    throw new LedgerError("등록할 내역이 없어요.");
+  }
+  if (inputs.length > MAX_BULK_ENTRIES) {
+    throw new LedgerError(`한 번에 ${MAX_BULK_ENTRIES}건까지 등록할 수 있어요.`);
+  }
+
+  await ensureLedgerDefaults();
+  const db = getDb();
+  const categories = await getCategoryRows();
+  const categoryIdByKey = new Map(
+    categories.map((category) => [`${category.kind}:${category.name}`, category.id])
+  );
+
+  const normalized = inputs.map((input) => {
+    if (typeof input !== "object" || input === null) {
+      throw new LedgerError("내역 형식을 확인해 주세요.");
+    }
+    const fields = normalizeEntryFields(input);
+    const named =
+      typeof input.categoryName === "string"
+        ? categoryIdByKey.get(`${fields.kind}:${input.categoryName.trim()}`)
+        : undefined;
+    const suggestedName = suggestLedgerCategoryName(fields.memo, fields.kind);
+    const suggested = suggestedName
+      ? categoryIdByKey.get(`${fields.kind}:${suggestedName}`)
+      : undefined;
+    return { ...fields, categoryId: fields.categoryId ?? named ?? suggested ?? null };
+  });
+
+  for (const fields of normalized) {
+    if (
+      fields.categoryId != null &&
+      !categories.some(
+        (category) =>
+          category.id === fields.categoryId && toEntryKind(category.kind) === fields.kind
+      )
+    ) {
       throw new LedgerError("분류의 수입/지출 구분이 맞지 않아요.");
     }
   }
 
-  if (assetId != null) {
-    const [asset] = await db
-      .select({ id: schema.ledgerAssets.id })
-      .from(schema.ledgerAssets)
-      .where(eq(schema.ledgerAssets.id, assetId))
-      .limit(1);
-    if (!asset) throw new LedgerError("결제수단을 찾을 수 없어요.");
+  const existing = await db
+    .select()
+    .from(schema.ledgerEntries)
+    .where(
+      and(
+        activeEntry,
+        inArray(schema.ledgerEntries.entryDate, [
+          ...new Set(normalized.map((fields) => fields.entryDate)),
+        ])
+      )
+    );
+  const seen = existing.map((entry) => {
+    const extras = readEntryExtras(entry.entryTime, entry.tags);
+    return { ...entry, entryTime: extras.entryTime };
+  });
+
+  type Candidate = (typeof normalized)[number];
+  const isDuplicate = (fields: Candidate) =>
+    seen.some(
+      (row) =>
+        row.entryDate === fields.entryDate &&
+        row.amount === fields.amount &&
+        row.kind === fields.kind &&
+        row.memo === fields.memo &&
+        (row.entryTime == null ||
+          fields.entryTime == null ||
+          row.entryTime === fields.entryTime)
+    );
+
+  const toInsert: Candidate[] = [];
+  let skipped = 0;
+  for (const fields of normalized) {
+    if (!options.allowDuplicates && isDuplicate(fields)) {
+      skipped += 1;
+      continue;
+    }
+    toInsert.push(fields);
+    seen.push({ ...(fields as unknown as EntryRow) });
   }
 
-  return { entryDate, kind, amount, categoryId, assetId, memo, tags, member };
-};
+  if (!toInsert.length) return { created: [] as EntryRow[], skipped };
 
-export const createLedgerEntry = async (input: LedgerEntryInput) => {
-  const values = await validateEntryInput(input);
-  const db = getDb();
-  const [entry] = await db.insert(schema.ledgerEntries).values(values).returning();
-  return entry;
-};
-
-export const updateLedgerEntry = async (id: number, input: LedgerEntryInput) => {
-  const entryId = normalizeId(id, "기록");
-  const values = await validateEntryInput(input);
-  const db = getDb();
-  const [entry] = await db
-    .update(schema.ledgerEntries)
-    .set({ ...values, updatedAt: new Date() })
-    .where(eq(schema.ledgerEntries.id, entryId))
+  const assetId = await ensureJointAssetId();
+  const created = await db
+    .insert(schema.ledgerEntries)
+    .values(toInsert.map((fields) => ({ ...fields, assetId, member: "joint" })))
     .returning();
+  await Promise.all(
+    created.map((entry) =>
+      logEntryHistory(entry.id, "create", options.source, null, entry)
+    )
+  );
+  return { created, skipped };
+};
+
+const findActiveEntry = async (entryId: number): Promise<EntryRow> => {
+  const [entry] = await getDb()
+    .select()
+    .from(schema.ledgerEntries)
+    .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
+    .limit(1);
   if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");
   return entry;
 };
 
-export const deleteLedgerEntry = async (id: number): Promise<void> => {
+export const updateLedgerEntry = async (
+  id: number,
+  input: LedgerEntryInput,
+  source: LedgerEntrySource = "web"
+) => {
   const entryId = normalizeId(id, "기록");
+  const values = normalizeEntryFields(input);
+  await assertCategoryKind(values.categoryId, values.kind);
+  const before = await findActiveEntry(entryId);
+  const [entry] = await getDb()
+    .update(schema.ledgerEntries)
+    .set({ ...values, updatedAt: new Date() })
+    .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
+    .returning();
+  if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");
+  await logEntryHistory(entryId, "update", source, before, entry);
+  return entry;
+};
+
+/** 복구할 수 있게 표시만 지운다. */
+export const deleteLedgerEntry = async (
+  id: number,
+  source: LedgerEntrySource = "web"
+): Promise<void> => {
+  const entryId = normalizeId(id, "기록");
+  const [entry] = await getDb()
+    .update(schema.ledgerEntries)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
+    .returning();
+  if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");
+  await logEntryHistory(entryId, "delete", source, entry, null);
+};
+
+export const restoreLedgerEntry = async (id: number) => {
+  const entryId = normalizeId(id, "기록");
+  const [entry] = await getDb()
+    .update(schema.ledgerEntries)
+    .set({ deletedAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.ledgerEntries.id, entryId),
+        sql`${schema.ledgerEntries.deletedAt} is not null`
+      )
+    )
+    .returning();
+  if (!entry) throw new LedgerError("되돌릴 기록을 찾을 수 없어요.");
+  await logEntryHistory(entryId, "restore", "web", null, entry);
+  return entry;
+};
+
+const getCategoryMap = async () =>
+  new Map((await getCategoryRows()).map((category) => [category.id, category]));
+
+/** 삭제되지 않은 모든 기록. CSV 내보내기용. */
+export const listAllLedgerEntries = async (): Promise<LedgerEntryView[]> => {
+  const [rows, categoryById] = await Promise.all([
+    getDb().select().from(schema.ledgerEntries).where(activeEntry),
+    getCategoryMap(),
+  ]);
+  return rows
+    .map((row) => toLedgerEntryView(row, categoryById))
+    .sort(compareLedgerEntries);
+};
+
+/** 내용·태그·분류 이름으로 전 기간을 검색한다. */
+export const searchLedgerEntries = async (query: string, limit = 200) => {
+  const q = query.trim();
+  if (!q) return { entries: [] as LedgerEntryView[], income: 0, expense: 0, count: 0 };
+
+  const categoryById = await getCategoryMap();
+  const lowered = q.toLowerCase();
+  const categoryIds = [...categoryById.values()]
+    .filter((category) => category.name.toLowerCase().includes(lowered))
+    .map((category) => category.id);
+
+  const textMatch = or(
+    sql`strpos(lower(${schema.ledgerEntries.memo}), ${lowered}) > 0`,
+    sql`strpos(lower(${schema.ledgerEntries.tags}), ${lowered}) > 0`,
+    ...(categoryIds.length ? [inArray(schema.ledgerEntries.categoryId, categoryIds)] : [])
+  );
+
+  const rows = await getDb()
+    .select()
+    .from(schema.ledgerEntries)
+    .where(and(activeEntry, textMatch));
+  const views = rows
+    .map((row) => toLedgerEntryView(row, categoryById))
+    .sort(compareLedgerEntries);
+
+  return {
+    entries: views.slice(0, limit),
+    income: views
+      .filter((e) => e.kind === "income")
+      .reduce((sum, e) => sum + e.amount, 0),
+    expense: views
+      .filter((e) => e.kind === "expense")
+      .reduce((sum, e) => sum + e.amount, 0),
+    count: views.length,
+  };
+};
+
+export const listLedgerHistory = async (limit = 50): Promise<LedgerHistoryItem[]> => {
   const db = getDb();
-  await db.delete(schema.ledgerEntries).where(eq(schema.ledgerEntries.id, entryId));
+  const rows = await db
+    .select()
+    .from(schema.ledgerEntryHistory)
+    .orderBy(
+      desc(schema.ledgerEntryHistory.createdAt),
+      desc(schema.ledgerEntryHistory.id)
+    )
+    .limit(limit);
+
+  const deleted = rows.length
+    ? await db
+        .select({ id: schema.ledgerEntries.id })
+        .from(schema.ledgerEntries)
+        .where(
+          and(
+            inArray(schema.ledgerEntries.id, [
+              ...new Set(rows.map((row) => row.entryId)),
+            ]),
+            sql`${schema.ledgerEntries.deletedAt} is not null`
+          )
+        )
+    : [];
+  const deletedIds = new Set(deleted.map((row) => row.id));
+  const seenDelete = new Set<number>();
+
+  return rows.map((row) => {
+    const snapshot = (row.after ?? row.before ?? {}) as Partial<EntryRow>;
+    const latestDelete = row.action === "delete" && !seenDelete.has(row.entryId);
+    if (row.action === "delete") seenDelete.add(row.entryId);
+    return {
+      id: row.id,
+      entryId: row.entryId,
+      action: row.action as LedgerHistoryItem["action"],
+      source: row.source === "agent" ? "agent" : "web",
+      createdAt: row.createdAt.toISOString(),
+      entryDate: snapshot.entryDate ?? "",
+      kind: toEntryKind(snapshot.kind ?? "expense"),
+      amount: snapshot.amount ?? 0,
+      memo: snapshot.memo ?? "",
+      canRestore: latestDelete && deletedIds.has(row.entryId),
+    };
+  });
 };
 
 export const saveLedgerBudget = async (input: LedgerBudgetInput): Promise<void> => {
@@ -615,11 +985,9 @@ export const saveLedgerBudget = async (input: LedgerBudgetInput): Promise<void> 
     budgetByCategory.set(categoryId, amount);
   }
 
-  const db = getDb();
-
   if (budgetByCategory.size) {
     const ids = [...budgetByCategory.keys()];
-    const existing = await db
+    const existing = await getDb()
       .select({ id: schema.ledgerCategories.id })
       .from(schema.ledgerCategories)
       .where(inArray(schema.ledgerCategories.id, ids));
@@ -628,23 +996,35 @@ export const saveLedgerBudget = async (input: LedgerBudgetInput): Promise<void> 
     }
   }
 
-  await db
-    .insert(schema.ledgerMonths)
-    .values({ month, totalBudget, note })
-    .onConflictDoUpdate({
-      target: schema.ledgerMonths.month,
-      set: { totalBudget, note, updatedAt: new Date() },
-    });
+  const rows = JSON.stringify(
+    [...budgetByCategory.entries()]
+      .filter(([, amount]) => amount > 0)
+      .map(([category_id, amount]) => ({ category_id, amount }))
+  );
 
-  await db.delete(schema.ledgerBudgets).where(eq(schema.ledgerBudgets.month, month));
-
-  const rows = [...budgetByCategory.entries()]
-    .filter(([, amount]) => amount > 0)
-    .map(([categoryId, amount]) => ({ month, categoryId, amount }));
-
-  if (rows.length) {
-    await db.insert(schema.ledgerBudgets).values(rows);
-  }
+  // 드라이버와 상관없이 원자적으로 저장되도록 한 문장으로 처리한다.
+  await executeStatement(sql`
+    with new_rows as (
+      select category_id, amount
+      from jsonb_to_recordset(${rows}::jsonb) as r(category_id int, amount int)
+    ),
+    saved_month as (
+      insert into ledger_months (month, total_budget, note, updated_at)
+      values (${month}, ${totalBudget}, ${note}, now())
+      on conflict (month) do update
+        set total_budget = excluded.total_budget,
+            note = excluded.note,
+            updated_at = now()
+    ),
+    removed as (
+      delete from ledger_budgets
+      where month = ${month}
+        and category_id not in (select category_id from new_rows)
+    )
+    insert into ledger_budgets (month, category_id, amount)
+    select ${month}, category_id, amount from new_rows
+    on conflict (month, category_id) do update set amount = excluded.amount
+  `);
 };
 
 export const createLedgerCategory = async (input: LedgerCategoryInput) => {
@@ -707,50 +1087,52 @@ export const updateLedgerCategory = async (input: LedgerCategoryUpdate) => {
   return category;
 };
 
-export const deleteLedgerCategory = async (id: number): Promise<void> => {
+/**
+ * 분류를 지운다. 쓰인 분류라면 내역이 "분류 없음"이 되지 않도록 옮길 분류가 필요하다.
+ * 옮기기와 삭제는 한 SQL 문장으로 함께 처리한다.
+ */
+export const deleteLedgerCategory = async (
+  id: number,
+  moveToIdInput?: unknown
+): Promise<void> => {
   const categoryId = normalizeId(id, "분류");
-  const db = getDb();
-  await db
-    .delete(schema.ledgerCategories)
-    .where(eq(schema.ledgerCategories.id, categoryId));
-};
-
-export const createLedgerAsset = async (input: LedgerAssetInput) => {
-  const name = normalizeName(input.name, "결제수단");
-  const kind = normalizeAssetKind(input.kind);
+  const moveToId = normalizeOptionalId(moveToIdInput, "옮길 분류");
   const db = getDb();
 
-  const [maxRow] = await db
-    .select({ value: sql<number>`coalesce(max(${schema.ledgerAssets.sortOrder}), -1)` })
-    .from(schema.ledgerAssets);
+  const [category] = await db
+    .select({ kind: schema.ledgerCategories.kind })
+    .from(schema.ledgerCategories)
+    .where(eq(schema.ledgerCategories.id, categoryId))
+    .limit(1);
+  if (!category) throw new LedgerError("분류를 찾을 수 없어요.");
 
-  const [asset] = await db
-    .insert(schema.ledgerAssets)
-    .values({ name, kind, sortOrder: Number(maxRow?.value ?? -1) + 1 })
-    .returning();
-  return asset;
-};
+  const [[siblings], [usage]] = await Promise.all([
+    db
+      .select({ value: sql<number>`count(*)::int` })
+      .from(schema.ledgerCategories)
+      .where(eq(schema.ledgerCategories.kind, category.kind)),
+    db
+      .select({ value: sql<number>`count(*)::int` })
+      .from(schema.ledgerEntries)
+      .where(eq(schema.ledgerEntries.categoryId, categoryId)),
+  ]);
+  if ((siblings?.value ?? 0) <= 1) throw new LedgerError("분류는 최소 하나 필요해요.");
 
-export const updateLedgerAsset = async (input: LedgerAssetUpdate) => {
-  const id = normalizeId(input.id, "결제수단 정보");
-  const patch: { name?: string; kind?: LedgerAssetKind } = {};
+  if (!usage?.value) {
+    await db
+      .delete(schema.ledgerCategories)
+      .where(eq(schema.ledgerCategories.id, categoryId));
+    return;
+  }
 
-  if (input.name !== undefined) patch.name = normalizeName(input.name, "결제수단");
-  if (input.kind !== undefined) patch.kind = normalizeAssetKind(input.kind);
-  if (!Object.keys(patch).length) throw new LedgerError("변경할 내용이 없어요.");
+  if (moveToId == null) throw new LedgerError("내역을 옮길 분류를 선택해 주세요.");
+  if (moveToId === categoryId) throw new LedgerError("다른 분류를 선택해 주세요.");
+  await assertCategoryKind(moveToId, toEntryKind(category.kind));
 
-  const db = getDb();
-  const [asset] = await db
-    .update(schema.ledgerAssets)
-    .set(patch)
-    .where(eq(schema.ledgerAssets.id, id))
-    .returning();
-  if (!asset) throw new LedgerError("결제수단을 찾을 수 없어요.");
-  return asset;
-};
-
-export const deleteLedgerAsset = async (id: number): Promise<void> => {
-  const assetId = normalizeId(id, "결제수단 정보");
-  const db = getDb();
-  await db.delete(schema.ledgerAssets).where(eq(schema.ledgerAssets.id, assetId));
+  await executeStatement(sql`
+    with moved as (
+      update ledger_entries set category_id = ${moveToId} where category_id = ${categoryId}
+    )
+    delete from ledger_categories where id = ${categoryId}
+  `);
 };

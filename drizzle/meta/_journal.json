@@ -127,6 +127,13 @@
       "when": 1794132955560,
       "tag": "0018_condemned_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794139991189,
+      "tag": "0019_clear_vargas",
+      "breakpoints": true
     }
   ]
 }

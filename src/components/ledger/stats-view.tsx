@@ -10,36 +10,34 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/lib/auth-store";
-import type { LedgerMonthPayload } from "@/lib/db/ledger";
+import type { LedgerEntryView, LedgerMonthPayload } from "@/lib/db/ledger";
 import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
+import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
 import {
   formatCompactWon,
+  formatMonthKo,
   formatWon,
-  LEDGER_MEMBERS,
-  memberBar,
-  memberName,
   todayKst,
-} from "@/lib/ledger/members";
+} from "@/lib/ledger/format";
 
 interface Props {
   ledger: LedgerMonthPayload;
   onOpenSettings: () => void;
+  onEdit: (entry: LedgerEntryView) => void;
 }
 
 const RANGES = [
-  { id: "all", label: "전체", days: 0 },
-  { id: "30", label: "최근 30일", days: 30 },
-  { id: "7", label: "최근 7일", days: 7 },
-  { id: "custom", label: "직접 설정", days: 0 },
+  { id: "all", label: "전체" },
+  { id: "thisMonth", label: "이번 달" },
+  { id: "lastMonth", label: "지난달" },
+  { id: "3m", label: "최근 3개월" },
+  { id: "30", label: "최근 30일" },
+  { id: "7", label: "최근 7일" },
+  { id: "custom", label: "직접 설정" },
 ] as const;
 
 type RangeId = (typeof RANGES)[number]["id"];
-
-const readError = async (res: Response) => {
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
-  return data?.error ?? "요청을 처리하지 못했어요.";
-};
 
 const fetchStats = async (
   token: string,
@@ -50,14 +48,11 @@ const fetchStats = async (
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   const query = params.toString();
-  const res = await fetch(`/api/ledger/stats${query ? `?${query}` : ""}`, {
-    headers: { "x-auth-token": token },
-  });
-  if (!res.ok) throw new Error(await readError(res));
-
-  const data = (await res.json().catch(() => null)) as { stats?: LedgerStats } | null;
-  if (!data?.stats) throw new Error("통계를 불러오지 못했어요.");
-  return data.stats;
+  const { stats } = await ledgerRequest<{ stats: LedgerStats }>(
+    token,
+    `/api/ledger/stats${query ? `?${query}` : ""}`
+  );
+  return stats;
 };
 
 /** 22,000 → 2.2만, 음수는 -2.2만 */
@@ -231,7 +226,7 @@ const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
     <StatCard className="md:col-span-2">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[12px] font-medium text-muted">잔액 추이</p>
-        <p className="text-[10px] text-muted-soft">가계부 누적 잔액</p>
+        <p className="text-[10px] text-muted-soft">시작 잔액부터 누적</p>
       </div>
 
       <svg
@@ -317,96 +312,8 @@ const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
       </svg>
 
       <p className="mt-1 text-[10px] text-muted-soft">
-        기록된 내역 기준 · 실제 통장 잔액과 다를 수 있어요
+        기록된 내역 기준 · 설정의 통장 탭에서 실제 잔액과 맞출 수 있어요
       </p>
-    </StatCard>
-  );
-};
-
-const DepositsCard = ({ stats }: { stats: LedgerStats }) => {
-  const total = LEDGER_MEMBERS.reduce(
-    (sum, member) => sum + stats.byMember[member.id].income,
-    0
-  );
-
-  return (
-    <StatCard>
-      <p className="text-[12px] font-medium text-muted">입금자별</p>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {LEDGER_MEMBERS.map((member) => {
-          const { income, count } = stats.byMember[member.id];
-          const share = total ? (income / total) * 100 : 0;
-          return (
-            <div key={member.id} className="min-w-0 rounded-xl bg-canvas-soft/70 p-2.5">
-              <p className="text-[11px] text-muted">{member.name}</p>
-              <p className="mt-0.5 truncate text-[13px] font-semibold text-ink tabular-nums">
-                {formatWon(income)}
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted-soft tabular-nums">{count}건</p>
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-canvas-strong/60">
-                <div
-                  className={`h-full rounded-full ${memberBar(member.id)}`}
-                  style={{ width: `${Math.max(0, Math.min(share, 100))}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </StatCard>
-  );
-};
-
-const TogetherCard = ({ ledger }: { ledger: LedgerMonthPayload }) => {
-  const { byMember, settlement } = ledger.summary;
-  const totalPaid = byMember.wonchan + byMember.yeeun + byMember.joint;
-
-  return (
-    <StatCard>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">함께 쓰는 돈</p>
-        <span className="rounded-full bg-canvas-soft px-2 py-0.5 text-[10px] text-muted">
-          이번 달
-        </span>
-      </div>
-      <div className="mt-2 space-y-2.5">
-        {LEDGER_MEMBERS.map((member) => {
-          const paid = byMember[member.id];
-          const share = totalPaid ? (paid / totalPaid) * 100 : 0;
-          return (
-            <div key={member.id}>
-              <div className="flex items-center justify-between text-[12px]">
-                <span className="text-body">{member.name}</span>
-                <span className="font-medium text-ink tabular-nums">
-                  {formatWon(paid)}
-                </span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-canvas-soft">
-                <div
-                  className={`h-full rounded-full ${memberBar(member.id)}`}
-                  style={{ width: `${Math.max(0, Math.min(share, 100))}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {settlement.amount > 0 && settlement.from && settlement.to ? (
-        <div className="mt-3 border-t border-hairline-soft pt-2">
-          <p className="text-[13px] font-medium text-ink">
-            {memberName(settlement.from)} → {memberName(settlement.to)}{" "}
-            {formatWon(settlement.amount)}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted">
-            이번 달 지출을 반씩 나누면 이렇게 정산해요
-          </p>
-        </div>
-      ) : (
-        <p className="mt-3 border-t border-hairline-soft pt-2 text-[13px] text-muted">
-          정산할 금액이 없어요
-        </p>
-      )}
     </StatCard>
   );
 };
@@ -553,81 +460,26 @@ const KIND_FILTERS = [
 
 type EntryKindFilter = (typeof KIND_FILTERS)[number]["id"];
 
-const PERIOD_FILTERS = [
-  { id: "all", label: "전체" },
-  { id: "thisMonth", label: "이번 달" },
-  { id: "lastMonth", label: "지난달" },
-  { id: "3m", label: "최근 3개월" },
-  { id: "custom", label: "직접 설정" },
-] as const;
-
-type EntryPeriodFilter = (typeof PERIOD_FILTERS)[number]["id"];
-
 const PeriodEntriesCard = ({
   entries,
   categories,
+  onEdit,
 }: {
-  entries: LedgerStats["allEntries"];
+  entries: LedgerEntryView[];
   categories: LedgerMonthPayload["categories"];
+  onEdit: (entry: LedgerEntryView) => void;
 }) => {
-  const [period, setPeriod] = useState<EntryPeriodFilter>("all");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
   const [kind, setKind] = useState<EntryKindFilter>("all");
   const [selected, setSelected] = useState<number | "all">("all");
-  const today = todayKst();
-
-  const periodRange = (() => {
-    if (period === "thisMonth") {
-      return { from: `${today.slice(0, 7)}-01`, to: today };
-    }
-    if (period === "lastMonth") {
-      const lastMonth = kst(today).subtract(1, "month");
-      return {
-        from: lastMonth.startOf("month").format("YYYY-MM-DD"),
-        to: lastMonth.endOf("month").format("YYYY-MM-DD"),
-      };
-    }
-    if (period === "3m") {
-      return {
-        from: kst(today).subtract(2, "month").startOf("month").format("YYYY-MM-DD"),
-        to: today,
-      };
-    }
-    if (period === "custom") {
-      return { from: customFrom, to: customTo };
-    }
-    return {};
-  })();
-
-  const periodError =
-    period === "custom" && (!customFrom || !customTo)
-      ? "시작일과 종료일을 모두 선택해 주세요."
-      : period === "custom" && customFrom > customTo
-        ? "시작일은 종료일보다 늦을 수 없어요."
-        : null;
 
   const categoryOptions = categories.filter((category) => category.kind === kind);
   const rows = entries
-    .filter((entry) => {
-      if (periodError) return false;
-      if (periodRange.from && entry.entryDate < periodRange.from) return false;
-      if (periodRange.to && entry.entryDate > periodRange.to) return false;
-      return (
+    .filter(
+      (entry) =>
         (kind === "all" || entry.kind === kind) &&
         (selected === "all" || entry.categoryId === selected)
-      );
-    })
+    )
     .reverse();
-
-  const selectPeriod = (next: EntryPeriodFilter) => {
-    setPeriod(next);
-    setSelected("all");
-    if (next === "custom" && (!customFrom || !customTo)) {
-      setCustomFrom(kst(today).subtract(30, "day").format("YYYY-MM-DD"));
-      setCustomTo(today);
-    }
-  };
 
   const expenseTotal = rows
     .filter((entry) => entry.kind === "expense")
@@ -648,60 +500,6 @@ const PeriodEntriesCard = ({
             : `${rows.length}건 · ${formatWon(singleTotal)}`}
         </span>
       </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] text-muted-soft">기간</span>
-        {PERIOD_FILTERS.map((option) => {
-          const active = period === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => selectPeriod(option.id)}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                active
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-hairline bg-surface text-muted hover:text-ink"
-              }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {period === "custom" ? (
-        <div className="mt-1.5">
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:items-end">
-            <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
-              <span className="text-[10px] text-muted">시작</span>
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(event) => setCustomFrom(event.target.value)}
-                aria-invalid={Boolean(periodError)}
-                className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              />
-            </label>
-            <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
-              <span className="text-[10px] text-muted">종료</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(event) => setCustomTo(event.target.value)}
-                aria-invalid={Boolean(periodError)}
-                className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              />
-            </label>
-          </div>
-          {periodError ? (
-            <p className="mt-1 text-[11px] text-[color:var(--color-error)]">
-              {periodError}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         {KIND_FILTERS.map((option) => {
@@ -769,26 +567,32 @@ const PeriodEntriesCard = ({
           {rows.map((entry) => {
             const isIncome = entry.kind === "income";
             return (
-              <li key={entry.id} className="flex items-center gap-2 py-2">
-                <CategoryIcon
-                  icon={entry.categoryIcon}
-                  color={entry.categoryColor}
-                  size={20}
-                />
-                <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
-                  {entry.entryDate.slice(5).replace("-", ".")}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-body">
-                  {entry.memo.trim() || (isIncome ? "입금" : "지출")}
-                </span>
-                <span
-                  className={`shrink-0 text-[12px] font-medium tabular-nums ${
-                    isIncome ? "text-[color:var(--color-success)]" : "text-primary"
-                  }`}
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => onEdit(entry)}
+                  className="flex w-full items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  {isIncome ? "+" : "-"}
-                  {formatWon(entry.amount)}
-                </span>
+                  <CategoryIcon
+                    icon={entry.categoryIcon}
+                    color={entry.categoryColor}
+                    size={20}
+                  />
+                  <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
+                    {entry.entryDate.slice(5).replace("-", ".")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-body">
+                    {entry.memo.trim() || (isIncome ? "입금" : "지출")}
+                  </span>
+                  <span
+                    className={`shrink-0 text-[12px] font-medium tabular-nums ${
+                      isIncome ? "text-[color:var(--color-success)]" : "text-primary"
+                    }`}
+                  >
+                    {isIncome ? "+" : "-"}
+                    {formatWon(entry.amount)}
+                  </span>
+                </button>
               </li>
             );
           })}
@@ -915,12 +719,12 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
   );
 };
 
-const TopMerchantsCard = ({ merchants }: { merchants: LedgerStats["topMerchants"] }) => {
+const TopExpensesCard = ({ merchants }: { merchants: LedgerStats["topExpenses"] }) => {
   const max = Math.max(1, ...merchants.map((merchant) => merchant.amount));
 
   return (
     <StatCard>
-      <p className="text-[12px] font-medium text-muted">지출 TOP 8</p>
+      <p className="text-[12px] font-medium text-muted">큰 지출 TOP 8</p>
       {merchants.length ? (
         <ul className="mt-2 space-y-2.5">
           {merchants.map((merchant) => (
@@ -952,27 +756,79 @@ const TopMerchantsCard = ({ merchants }: { merchants: LedgerStats["topMerchants"
   );
 };
 
-export const StatsView = ({ ledger, onOpenSettings }: Props) => {
+const presetRange = (id: RangeId): { from?: string; to?: string } => {
+  const today = todayKst();
+  const base = kst(today);
+  const day = (value: typeof base) => value.format("YYYY-MM-DD");
+
+  if (id === "thisMonth") return { from: day(base.startOf("month")), to: today };
+  if (id === "lastMonth") {
+    const last = base.subtract(1, "month");
+    return { from: day(last.startOf("month")), to: day(last.endOf("month")) };
+  }
+  if (id === "3m") {
+    return { from: day(base.subtract(2, "month").startOf("month")), to: today };
+  }
+  if (id === "30") return { from: day(base.subtract(29, "day")), to: today };
+  if (id === "7") return { from: day(base.subtract(6, "day")), to: today };
+  return {};
+};
+
+const MonthNoteCard = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
+  const [note, setNote] = useState(ledger.budget.note);
+  const { totalBudget, byCategory } = ledger.budget;
+
+  const saveNote = useMutation({
+    mutationFn: () =>
+      ledgerRequest(token, "/api/ledger/budget", {
+        method: "PUT",
+        body: { month: ledger.month, totalBudget, note, categories: byCategory },
+      }),
+    onSuccess: () => {
+      toast.success("메모를 저장했어요.");
+      queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  return (
+    <StatCard className="md:col-span-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] font-medium text-muted">
+          {formatMonthKo(ledger.month)} 메모
+        </p>
+        <span className="text-[11px] text-muted-soft tabular-nums">
+          입금 {formatWon(ledger.summary.income)}
+        </span>
+      </div>
+      <Textarea
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder="이 달에 기억해 둘 것"
+        className="mt-2 min-h-20"
+      />
+      <div className="mt-2 flex justify-end">
+        <Button
+          size="sm"
+          onClick={() => saveNote.mutate()}
+          disabled={saveNote.isPending || note.trim() === ledger.budget.note}
+        >
+          메모 저장
+        </Button>
+      </div>
+    </StatCard>
+  );
+};
+
+export const StatsView = ({ ledger, onOpenSettings, onEdit }: Props) => {
+  const token = useAuthStore((s) => s.token);
   const [range, setRange] = useState<RangeId>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const [applied, setApplied] = useState<{ from?: string; to?: string }>({});
-  const [note, setNote] = useState(ledger.budget.note);
-
-  const presetRange = (id: RangeId) => {
-    const preset = RANGES.find((option) => option.id === id);
-    if (!preset || !preset.days) return { from: undefined, to: undefined };
-    const today = todayKst();
-    return {
-      from: kst(today)
-        .subtract(preset.days - 1, "day")
-        .format("YYYY-MM-DD"),
-      to: today,
-    };
-  };
 
   const selectRange = (id: RangeId) => {
     setRange(id);
@@ -1004,35 +860,15 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
   };
 
   const statsQuery = useQuery({
-    queryKey: ["ledger-stats", applied.from ?? "all", applied.to ?? "today"],
+    queryKey: ledgerKeys.stats(applied.from, applied.to),
     queryFn: () => fetchStats(token, applied.from, applied.to),
     enabled: Boolean(token),
+    ...LEDGER_LIVE_QUERY,
   });
   const stats = statsQuery.data;
 
-  const { totalBudget, byCategory: categoryBudgets } = ledger.budget;
-  const { income, expense, budgetRemaining, budgetUsedPct } = ledger.summary;
-
-  const saveNote = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ledger/budget", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify({
-          month: ledger.month,
-          totalBudget,
-          note,
-          categories: categoryBudgets,
-        }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-    },
-    onSuccess: () => {
-      toast.success("메모를 저장했어요.");
-      queryClient.invalidateQueries({ queryKey: ["ledger"] });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
+  const { totalBudget } = ledger.budget;
+  const { expense, budgetRemaining, budgetUsedPct } = ledger.summary;
 
   const hasActivity = stats
     ? stats.summary.income !== 0 || stats.summary.expense !== 0
@@ -1140,15 +976,14 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
             <>
               <KpiCards stats={stats} />
               <BalanceCard daily={stats.daily} />
-              <DepositsCard stats={stats} />
-              <TogetherCard ledger={ledger} />
               <CategoryCard stats={stats} />
               <PeriodEntriesCard
-                entries={stats.allEntries}
+                entries={stats.entries}
                 categories={ledger.categories}
+                onEdit={onEdit}
               />
               <MonthlyCard monthly={stats.monthly} />
-              <TopMerchantsCard merchants={stats.topMerchants} />
+              <TopExpensesCard merchants={stats.topExpenses} />
             </>
           ) : (
             <StatCard className="md:col-span-2">
@@ -1162,83 +997,59 @@ export const StatsView = ({ ledger, onOpenSettings }: Props) => {
               </div>
             </StatCard>
           )}
-
-          <StatCard className="md:col-span-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[12px] font-medium text-muted">이번 달 예산</p>
-              <span className="text-[11px] text-muted-soft tabular-nums">
-                {totalBudget == null
-                  ? ""
-                  : `지출 ${formatWon(expense)} / ${formatWon(totalBudget)}`}
-              </span>
-            </div>
-
-            {totalBudget == null ? (
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[13px] text-muted">
-                  예산을 정하면 진행률을 보여줄게요
-                </p>
-                <Button variant="outline" size="sm" onClick={onOpenSettings}>
-                  예산 정하기
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="mt-2 flex items-baseline justify-between gap-2">
-                  <span
-                    className={`text-lg font-semibold tabular-nums ${
-                      budgetRemaining != null && budgetRemaining < 0
-                        ? "text-[color:var(--color-error)]"
-                        : "text-ink"
-                    }`}
-                  >
-                    {formatWon(budgetRemaining ?? 0)}
-                    <span className="ml-1 text-[12px] font-normal">
-                      {budgetRemaining != null && budgetRemaining >= 0
-                        ? "남은 돈"
-                        : "초과"}
-                    </span>
-                  </span>
-                  <span
-                    className={`text-[12px] font-medium tabular-nums ${
-                      budgetRemaining != null && budgetRemaining < 0
-                        ? "text-[color:var(--color-error)]"
-                        : "text-muted"
-                    }`}
-                  >
-                    {budgetUsedPct ?? 0}% 사용
-                  </span>
-                </div>
-                <ProgressBar pct={budgetUsedPct ?? 0} className="mt-2" />
-              </>
-            )}
-          </StatCard>
-
-          <StatCard className="md:col-span-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[12px] font-medium text-muted">이번 달 메모</p>
-              <span className="text-[11px] text-muted-soft tabular-nums">
-                수입 {formatWon(income)}
-              </span>
-            </div>
-            <Textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="이번 달에 기억해 둘 것"
-              className="mt-2 min-h-20"
-            />
-            <div className="mt-2 flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => saveNote.mutate()}
-                disabled={saveNote.isPending || note.trim() === ledger.budget.note}
-              >
-                메모 저장
-              </Button>
-            </div>
-          </StatCard>
         </>
       ) : null}
+
+      <StatCard className="md:col-span-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[12px] font-medium text-muted">
+            {formatMonthKo(ledger.month)} 예산
+          </p>
+          <span className="text-[11px] text-muted-soft tabular-nums">
+            {totalBudget == null
+              ? ""
+              : `지출 ${formatWon(expense)} / ${formatWon(totalBudget)}`}
+          </span>
+        </div>
+
+        {totalBudget == null ? (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[13px] text-muted">예산을 정하면 진행률을 보여줄게요</p>
+            <Button variant="outline" size="sm" onClick={onOpenSettings}>
+              예산 정하기
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-2 flex items-baseline justify-between gap-2">
+              <span
+                className={`text-lg font-semibold tabular-nums ${
+                  budgetRemaining != null && budgetRemaining < 0
+                    ? "text-[color:var(--color-error)]"
+                    : "text-ink"
+                }`}
+              >
+                {formatWon(budgetRemaining ?? 0)}
+                <span className="ml-1 text-[12px] font-normal">
+                  {budgetRemaining != null && budgetRemaining >= 0 ? "남은 돈" : "초과"}
+                </span>
+              </span>
+              <span
+                className={`text-[12px] font-medium tabular-nums ${
+                  budgetRemaining != null && budgetRemaining < 0
+                    ? "text-[color:var(--color-error)]"
+                    : "text-muted"
+                }`}
+              >
+                {budgetUsedPct ?? 0}% 사용
+              </span>
+            </div>
+            <ProgressBar pct={budgetUsedPct ?? 0} className="mt-2" />
+          </>
+        )}
+      </StatCard>
+
+      <MonthNoteCard key={`${ledger.month}:${ledger.budget.note}`} ledger={ledger} />
     </div>
   );
 };

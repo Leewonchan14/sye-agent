@@ -13,6 +13,8 @@ import {
 } from "@/lib/hermes/config";
 import { startHermesRun } from "@/lib/hermes/run-client";
 import { runTurnStream } from "@/lib/hermes/turn-stream";
+import { buildLedgerAgentInstructions } from "@/lib/ledger/agent";
+import { publicOrigin } from "@/lib/monitor/origin";
 import { extractMessageText } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -29,7 +31,7 @@ const softDeadlineMs = Number(process.env.CHAT_SOFT_DEADLINE_MS ?? 240_000);
  * DB의 활성 사용자 지시 사항(+선택 env 문구)을 `instructions`로 만든다.
  * Hermes는 이 값을 프로필 기본 프롬프트(SOUL) 위에 덧입힌다.
  */
-const buildInstructions = async (): Promise<string | undefined> => {
+const buildInstructions = async (req: Request): Promise<string | undefined> => {
   const sections: string[] = [];
 
   try {
@@ -45,6 +47,9 @@ const buildInstructions = async (): Promise<string | undefined> => {
 
   const extra = (process.env.HERMES_SYSTEM_MESSAGE ?? "").trim();
   if (extra) sections.push(extra);
+
+  const ledger = buildLedgerAgentInstructions(publicOrigin(req));
+  if (ledger) sections.push(ledger);
 
   return sections.length > 0 ? sections.join("\n\n") : undefined;
 };
@@ -104,7 +109,7 @@ export const POST = async (req: Request) => {
   const stream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      const instructions = await buildInstructions();
+      const instructions = await buildInstructions(req);
       await ensureHermesSession(config, hermesSessionId, userText);
 
       const hermesRunId = await startHermesRun(config, {

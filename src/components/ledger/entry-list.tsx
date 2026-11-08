@@ -1,10 +1,10 @@
 "use client";
 
 import { CategoryIcon } from "@/components/ledger/category-icon";
-import type { LedgerMonthPayload } from "@/lib/db/ledger";
-import { formatWon, memberName } from "@/lib/ledger/members";
+import type { LedgerEntryView } from "@/lib/db/ledger";
+import { formatWon } from "@/lib/ledger/format";
 
-export type LedgerEntryView = LedgerMonthPayload["entries"][number];
+export type { LedgerEntryView };
 
 interface RowProps {
   entry: LedgerEntryView;
@@ -14,11 +14,7 @@ interface RowProps {
 export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
   const title =
     entry.memo || entry.categoryName || (entry.kind === "income" ? "수입" : "지출");
-  const meta = [
-    entry.categoryName ?? "분류 없음",
-    entry.assetName,
-    memberName(entry.member),
-  ]
+  const meta = [entry.entryTime, entry.categoryName ?? "분류 없음", entry.tags]
     .filter(Boolean)
     .join(" · ");
 
