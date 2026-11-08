@@ -58,6 +58,12 @@ export const useMonitorOverview = () => {
   return useQuery({
     queryKey: monitorKeys.overview(),
     queryFn: () => api<MonitorOverview>("/api/monitor"),
+    // 수집·집계가 돌고 있으면 첫 화면 요약도 따라 바뀌게 한다.
+    refetchInterval: (query) =>
+      query.state.data?.clients.some((c) => c.latestRun?.pending) ||
+      query.state.data?.issues.some((i) => i.pending)
+        ? 15_000
+        : false,
   });
 };
 
@@ -169,6 +175,14 @@ export const useMonitorMutations = (clientId?: number) => {
     onSettled: refreshClient,
   });
 
+  const unmarkReported = useMutation({
+    mutationFn: (runId: number) =>
+      api(`/api/monitor/runs/${runId}/report`, { method: "DELETE" }),
+    onSuccess: () => toast.success("보고 전으로 되돌렸어요. 다음 수집에서 다시 모아요."),
+    onError,
+    onSettled: refreshClient,
+  });
+
   const askMore = useMutation({
     mutationFn: (v: { runId: number; category?: string; request: string }) =>
       api(`/api/monitor/runs/${v.runId}/more`, {
@@ -190,6 +204,7 @@ export const useMonitorMutations = (clientId?: number) => {
       closing?: string;
       autoCollect?: boolean;
       collectTime?: string | null;
+      weekdaysOnly?: boolean;
     }) => {
       const { id, ...body } = v;
       return api(`/api/monitor/clients/${id}`, { method: "PATCH", body });
@@ -219,7 +234,7 @@ export const useMonitorMutations = (clientId?: number) => {
     onSettled: refreshClient,
   });
 
-  return { updateItem, banMedia, markReported, askMore, updateClient };
+  return { updateItem, banMedia, markReported, unmarkReported, askMore, updateClient };
 };
 
 export const useIssueMutations = (issueId: number) => {
@@ -250,6 +265,8 @@ export const useIssueMutations = (issueId: number) => {
       isActive?: boolean;
       collectStart?: string;
       collectGapMinutes?: number;
+      reportRecipient?: string;
+      reportTemplate?: string;
     }) => api(`/api/monitor/issues/${issueId}`, { method: "PATCH", body }),
     onError,
     onSettled: refresh,

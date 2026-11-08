@@ -16,7 +16,11 @@ import { getDb, schema } from "@/lib/db/db";
 import { kst } from "@/lib/kst";
 import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
-import { DAILY_COLLECT_REQUEST } from "@/lib/monitor/schedule";
+import {
+  DAILY_COLLECT_REQUEST,
+  issueCollectSlot,
+  nextCollectAt,
+} from "@/lib/monitor/schedule";
 import type {
   AgentRunInput,
   AgentSnapshotInput,
@@ -30,6 +34,7 @@ import type {
   MonitorRule,
   MonitorRunStats,
   MonitorRunView,
+  MonitorUsage,
 } from "@/lib/monitor/types";
 
 const {
@@ -80,6 +85,9 @@ export const getMonitorOverview = async (): Promise<MonitorOverview> => {
           clientId: runsT.clientId,
           until: runsT.until,
           reportedAt: runsT.reportedAt,
+          pendingHermesRunId: runsT.pendingHermesRunId,
+          lastError: runsT.lastError,
+          collectKey: runsT.collectKey,
         })
         .from(runsT)
         .where(
@@ -114,6 +122,9 @@ export const getMonitorOverview = async (): Promise<MonitorOverview> => {
       id: issuesT.id,
       title: issuesT.title,
       isActive: issuesT.isActive,
+      collectStart: issuesT.collectStart,
+      collectGapMinutes: issuesT.collectGapMinutes,
+      pendingHermesRunId: issuesT.pendingHermesRunId,
       clientName: clientsT.name,
       totalAdded: sql<number>`coalesce((select sum(${snapsT.added}) from ${snapsT} where ${snapsT.issueId} = ${issuesT.id} and ${snapsT.isReport}), 0)::int`,
       brandMentions: sql<number>`coalesce((select sum(${snapsT.brandMentions}) from ${snapsT} where ${snapsT.issueId} = ${issuesT.id} and ${snapsT.isReport}), 0)::int`,
@@ -125,7 +136,16 @@ export const getMonitorOverview = async (): Promise<MonitorOverview> => {
   return {
     clients: clients.map((c) => {
       const run = latestRuns.find((r) => r.clientId === c.id);
+      const view = toClientView(c);
+      const includedCount = run ? (counts.find((x) => x.runId === run.id)?.n ?? 0) : 0;
       return {
+        autoCollect: c.autoCollect,
+        nextCollectAt: c.autoCollect
+          ? nextCollectAt(
+              view,
+              run?.collectKey === kst().format("YYYY-MM-DD")
+            ).toISOString()
+          : null,
         id: c.id,
         slug: c.slug,
         name: c.name,
@@ -133,13 +153,23 @@ export const getMonitorOverview = async (): Promise<MonitorOverview> => {
           ? {
               id: run.id,
               until: run.until.toISOString(),
-              includedCount: counts.find((x) => x.runId === run.id)?.n ?? 0,
+              includedCount,
               reportedAt: iso(run.reportedAt),
+              pending: Boolean(run.pendingHermesRunId),
+              failed: Boolean(run.lastError) && includedCount === 0,
             }
           : null,
       };
     }),
-    issues,
+    issues: issues.map(
+      ({ collectStart, collectGapMinutes, pendingHermesRunId, ...issue }) => ({
+        ...issue,
+        pending: Boolean(pendingHermesRunId),
+        nextCollectAt: issue.isActive
+          ? issueCollectSlot({ collectStart, collectGapMinutes }).next.toISOString()
+          : null,
+      })
+    ),
   };
 };
 
@@ -156,6 +186,7 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   closing: row.closing,
   autoCollect: row.autoCollect,
   collectTime: row.collectTime,
+  weekdaysOnly: row.weekdaysOnly,
 });
 
 /** 기본 고객사(홍콩관광청·파나소닉코리아)를 만든다. 이미 있는 slug는 건너뛴다. */
@@ -196,6 +227,7 @@ export const updateMonitorClient = async (
       | "closing"
       | "autoCollect"
       | "collectTime"
+      | "weekdaysOnly"
     >
   >
 ) => {
@@ -373,10 +405,75 @@ export const claimDailyRun = async (input: {
   const db = getDb();
   const [row] = await db
     .insert(runsT)
-    .values(input)
+    .values({ ...input, autoState: "running" })
     .onConflictDoNothing({ target: [runsT.clientId, runsT.collectKey] })
     .returning();
   return row?.id ?? null;
+};
+
+/** 아직 끝나지 않았다고 기록된 자동 수집과 그 고객사 */
+export const listActiveAutoRuns = async () => {
+  const db = getDb();
+  const rows = await db
+    .select({ run: runsT, client: clientsT })
+    .from(runsT)
+    .innerJoin(clientsT, eq(runsT.clientId, clientsT.id))
+    .where(inArray(runsT.autoState, ["running", "retried"]))
+    .orderBy(asc(runsT.id));
+  return rows.map((r) => ({ run: r.run, client: toClientView(r.client) }));
+};
+
+/** 자동 수집 상태를 넘긴다. 다른 쪽이 먼저 넘겼으면 false — 재시도·알림이 한 번만 일어난다. */
+export const advanceRunAutoState = async (runId: number, from: string, to: string) => {
+  const db = getDb();
+  const rows = await db
+    .update(runsT)
+    .set({ autoState: to })
+    .where(and(eq(runsT.id, runId), eq(runsT.autoState, from)))
+    .returning();
+  return rows.length > 0;
+};
+
+export const advanceIssueAutoState = async (
+  issueId: number,
+  from: string,
+  to: string | null
+) => {
+  const db = getDb();
+  const rows = await db
+    .update(issuesT)
+    .set({ autoState: to })
+    .where(and(eq(issuesT.id, issueId), eq(issuesT.autoState, from)))
+    .returning();
+  return rows.length > 0;
+};
+
+/** 리포트에 담기는 대표 기사 수 */
+export const countRunLeads = async (runId: number) => {
+  const db = getDb();
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(itemsT)
+    .where(
+      and(
+        eq(itemsT.runId, runId),
+        eq(itemsT.included, true),
+        isNotNull(itemsT.category),
+        or(eq(itemsT.isLead, true), isNull(itemsT.dupGroup))
+      )
+    );
+  return row.n;
+};
+
+export const getLatestSnapshot = async (issueId: number) => {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(snapsT)
+    .where(eq(snapsT.issueId, issueId))
+    .orderBy(desc(snapsT.at), desc(snapsT.id))
+    .limit(1);
+  return row ?? null;
 };
 
 /** 하치와레에게 넘기지 못한 빈 수집을 지워서 다음 확인 때 다시 시도하게 한다. */
@@ -442,6 +539,64 @@ export const markRunReported = async (runId: number, reportText: string) => {
     .update(runsT)
     .set({ reportText, reportedAt: new Date() })
     .where(eq(runsT.id, runId));
+};
+
+/**
+ * 보고 완료를 되돌린다. 이 수집의 기사는 다음 수집에서 다시 집계되고,
+ * 이미 들어온 다른 수집에서 "이전에 보고함"으로 빠져 있던 같은 기사도 되살린다.
+ */
+export const unmarkRunReported = async (runId: number) => {
+  const db = getDb();
+  const run = await getRunRow(runId);
+  if (!run) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
+
+  await db
+    .update(runsT)
+    .set({ reportText: null, reportedAt: null })
+    .where(eq(runsT.id, runId));
+
+  const articles = await db
+    .selectDistinct({ id: itemsT.articleId })
+    .from(itemsT)
+    .where(and(eq(itemsT.runId, runId), eq(itemsT.included, true)));
+  if (!articles.length) return;
+
+  // 같은 기사를 다른 수집에서도 보고했다면 그대로 둔다.
+  const stillReported = await db
+    .selectDistinct({ id: itemsT.articleId })
+    .from(itemsT)
+    .innerJoin(runsT, eq(itemsT.runId, runsT.id))
+    .where(
+      and(
+        eq(runsT.clientId, run.clientId),
+        isNotNull(runsT.reportedAt),
+        eq(itemsT.included, true),
+        inArray(
+          itemsT.articleId,
+          articles.map((a) => a.id)
+        )
+      )
+    );
+  const keep = new Set(stillReported.map((a) => a.id));
+  const restore = articles.map((a) => a.id).filter((id) => !keep.has(id));
+  if (!restore.length) return;
+
+  await db
+    .update(itemsT)
+    .set({
+      flags: sql`${itemsT.flags} - 'reported'`,
+      included: isNotNull(itemsT.category),
+    })
+    .where(
+      and(
+        inArray(itemsT.articleId, restore),
+        sql`${itemsT.flags} @> '["reported"]'::jsonb`,
+        inArray(
+          itemsT.runId,
+          db.select({ id: runsT.id }).from(runsT).where(eq(runsT.clientId, run.clientId))
+        )
+      )
+    );
 };
 
 export const setRunPending = async (
@@ -547,7 +702,44 @@ const reportedUrlSet = async (clientId: number, excludeRunId?: number) => {
  * - 없으면 client·since·until로 새 런을 만든다.
  * 이미 보고한 기사는 reported 표시 후 기본 제외한다.
  */
-export const ingestAgentRun = async (input: AgentRunInput) => {
+/** 카테고리 최대 건수를 넘는 기사를 점수 낮은 순으로 리포트에서 뺀다. 사람이 다시 체크할 수 있다. */
+const applyCategoryLimits = async (runId: number, categories: MonitorCategory[]) => {
+  const db = getDb();
+  for (const { key, maxItems } of categories) {
+    if (!maxItems) continue;
+    const leads = await db
+      .select({ id: itemsT.id })
+      .from(itemsT)
+      .where(
+        and(
+          eq(itemsT.runId, runId),
+          eq(itemsT.category, key),
+          eq(itemsT.included, true),
+          or(eq(itemsT.isLead, true), isNull(itemsT.dupGroup))
+        )
+      )
+      .orderBy(desc(itemsT.score), asc(itemsT.sortOrder));
+    const overflow = leads.slice(maxItems).map((i) => i.id);
+    if (!overflow.length) continue;
+    await db
+      .update(itemsT)
+      .set({
+        included: false,
+        flags: sql`${itemsT.flags} || '["over-limit"]'::jsonb`,
+      })
+      .where(inArray(itemsT.id, overflow));
+  }
+};
+
+const addUsage = (a: MonitorUsage | undefined, b: MonitorUsage): MonitorUsage => ({
+  tokens: (a?.tokens ?? 0) + b.tokens,
+  tools: (a?.tools ?? 0) + b.tools,
+});
+
+export const ingestAgentRun = async (
+  input: AgentRunInput,
+  usage?: MonitorUsage | null
+) => {
   const db = getDb();
   let run: typeof runsT.$inferSelect | null;
   const appending = Boolean(input.runId);
@@ -646,6 +838,8 @@ export const ingestAgentRun = async (input: AgentRunInput) => {
     inserted += rows.length;
   }
 
+  if (!flagNew) await applyCategoryLimits(run.id, client.categories as MonitorCategory[]);
+
   if (appending) {
     await setRunPending(run.id, null, null);
     // 소요 시간은 하치와레가 적어 보낸 값 대신 앱이 잰다. "더 찾기"는 본 수집 시간을 덮지 않는다.
@@ -653,11 +847,20 @@ export const ingestAgentRun = async (input: AgentRunInput) => {
       !flagNew && run.pendingSince
         ? { measuredSec: Math.round((Date.now() - run.pendingSince.valueOf()) / 1000) }
         : {};
-    if (input.stats || "measuredSec" in measured)
+    if (input.stats || usage || "measuredSec" in measured) {
+      const stats = run.stats as MonitorRunStats;
       await db
         .update(runsT)
-        .set({ stats: { ...(run.stats as object), ...input.stats, ...measured } })
+        .set({
+          stats: {
+            ...stats,
+            ...input.stats,
+            ...measured,
+            ...(usage && { usage: addUsage(stats.usage, usage) }),
+          },
+        })
         .where(eq(runsT.id, run.id));
+    }
   }
 
   return { runId: run.id, inserted };
@@ -687,6 +890,8 @@ export const updateMonitorIssue = async (
     collectStart: string;
     collectGapMinutes: number;
     lastAutoSlot: string;
+    reportRecipient: string;
+    reportTemplate: string;
   }>
 ) => {
   const db = getDb();
@@ -736,7 +941,7 @@ export const claimIssueSlot = async (issueId: number, slot: string) => {
   const db = getDb();
   const rows = await db
     .update(issuesT)
-    .set({ lastAutoSlot: slot })
+    .set({ lastAutoSlot: slot, autoState: "running" })
     .where(
       and(
         eq(issuesT.id, issueId),
@@ -750,7 +955,10 @@ export const claimIssueSlot = async (issueId: number, slot: string) => {
 /** 하치와레에게 넘기지 못했으면 선점을 되돌려 다음 확인 때 다시 시도하게 한다. */
 export const releaseIssueSlot = async (issueId: number, previous: string | null) => {
   const db = getDb();
-  await db.update(issuesT).set({ lastAutoSlot: previous }).where(eq(issuesT.id, issueId));
+  await db
+    .update(issuesT)
+    .set({ lastAutoSlot: previous, autoState: null })
+    .where(eq(issuesT.id, issueId));
 };
 
 export const getMonitorIssuePayload = async (
@@ -784,6 +992,8 @@ export const getMonitorIssuePayload = async (
       isActive: issue.isActive,
       collectStart: issue.collectStart,
       collectGapMinutes: issue.collectGapMinutes,
+      reportRecipient: issue.reportRecipient,
+      reportTemplate: issue.reportTemplate,
       pendingSince: issue.pendingHermesRunId ? iso(issue.pendingSince) : null,
       lastError: issue.lastError,
     },
@@ -798,6 +1008,7 @@ export const getMonitorIssuePayload = async (
         s.lastArticle as MonitorIssuePayload["snapshots"][number]["lastArticle"],
       reportText: s.reportText,
       isReport: s.isReport,
+      usage: (s.usage as MonitorUsage | null) ?? null,
     })),
   };
 };
@@ -818,7 +1029,11 @@ export const setIssuePending = async (
     .where(eq(issuesT.id, id));
 };
 
-export const addIssueSnapshot = async (issueId: number, input: AgentSnapshotInput) => {
+export const addIssueSnapshot = async (
+  issueId: number,
+  input: AgentSnapshotInput,
+  usage?: MonitorUsage | null
+) => {
   const db = getDb();
   const issue = await getIssueRow(issueId);
   if (!issue) throw new MonitorError("이슈를 찾을 수 없어요.", 404);
@@ -835,6 +1050,7 @@ export const addIssueSnapshot = async (issueId: number, input: AgentSnapshotInpu
       lastArticle: input.lastArticle ?? null,
       reportText: input.reportText ?? null,
       isReport: input.isReport,
+      usage: usage ?? null,
     })
     .returning();
 

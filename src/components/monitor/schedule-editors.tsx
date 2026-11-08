@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { TIME } from "@/lib/monitor/period";
 import {
   clientPeriod,
@@ -76,17 +77,24 @@ export const AutoCollectEditor = ({
   client: MonitorClientView;
   collectedToday: boolean;
   saving: boolean;
-  onSave: (patch: { autoCollect: boolean; collectTime?: string | null }) => void;
+  onSave: (patch: {
+    autoCollect: boolean;
+    collectTime?: string | null;
+    weekdaysOnly?: boolean;
+  }) => void;
 }) => {
   const period = clientPeriod(client.rules);
   const earliest = earliestCollectTime(period);
   const saved = effectiveCollectTime(client);
   const [auto, setAuto] = useState(client.autoCollect);
   const [time, setTime] = useState(saved);
+  const [weekdays, setWeekdays] = useState(client.weekdaysOnly);
 
   const tooEarly = Boolean(earliest && TIME.test(time) && time < earliest);
   const validTime = TIME.test(time) && !tooEarly;
-  const dirty = auto !== client.autoCollect || (auto && time !== saved);
+  const dirty =
+    auto !== client.autoCollect ||
+    (auto && (time !== saved || weekdays !== client.weekdaysOnly));
   const canSave = dirty && (!auto || validTime) && !saving;
   const collectTime = time === defaultCollectTime(period) ? null : time;
 
@@ -95,7 +103,7 @@ export const AutoCollectEditor = ({
       ? "저장하면 자동 수집이 꺼져요."
       : "꺼져 있어요. 켜면 다음 수집 시각부터 하치와레가 모아요."
     : dirty && validTime
-      ? `저장하면 다음 수집: ${nextCollectLabel({ ...client, collectTime }, collectedToday)}`
+      ? `저장하면 다음 수집: ${nextCollectLabel({ ...client, collectTime, weekdaysOnly: weekdays }, collectedToday)}`
       : `다음 수집: ${nextCollectLabel(client, collectedToday)}`;
 
   return (
@@ -104,7 +112,12 @@ export const AutoCollectEditor = ({
       className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface px-4 py-3.5"
       onSubmit={(e) => {
         e.preventDefault();
-        if (canSave) onSave({ autoCollect: auto, ...(auto && { collectTime }) });
+        if (canSave) {
+          onSave({
+            autoCollect: auto,
+            ...(auto && { collectTime, weekdaysOnly: weekdays }),
+          });
+        }
       }}
     >
       <div className="flex items-center justify-between gap-4">
@@ -114,6 +127,17 @@ export const AutoCollectEditor = ({
         </div>
         <RuleSwitch checked={auto} label="매일 자동 수집" onChange={setAuto} />
       </div>
+      {auto && (
+        <div className="flex items-center justify-between gap-4 border-t border-hairline/60 pt-3">
+          <p className="min-w-0 text-[13px] text-muted">
+            평일만 수집
+            <span className="block text-xs text-muted-soft">
+              토·일은 쉬고, 월요일에 금요일부터 모아요.
+            </span>
+          </p>
+          <RuleSwitch checked={weekdays} label="평일만 수집" onChange={setWeekdays} />
+        </div>
+      )}
       {(auto || dirty) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline/60 pt-3">
           <div className="min-w-0 text-[13px] text-muted">
@@ -148,6 +172,7 @@ export const AutoCollectEditor = ({
                   onClick={() => {
                     setAuto(client.autoCollect);
                     setTime(saved);
+                    setWeekdays(client.weekdaysOnly);
                   }}
                 >
                   취소
@@ -294,6 +319,79 @@ export const IssueScheduleEditor = ({
             저장
           </Button>
         </div>
+      </div>
+    </form>
+  );
+};
+
+/** 이슈 보고 초안의 받는 사람과 서식 — 하치와레가 보고 초안을 쓸 때 그대로 따른다. */
+export const IssueReportEditor = ({
+  recipient,
+  template,
+  saving,
+  onSave,
+}: {
+  recipient: string;
+  template: string;
+  saving: boolean;
+  onSave: (report: { reportRecipient: string; reportTemplate: string }) => void;
+}) => {
+  const [name, setName] = useState(recipient);
+  const [body, setBody] = useState(template);
+  const dirty = name !== recipient || body !== template;
+
+  return (
+    <form
+      aria-label="보고 서식"
+      className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface px-4 py-3.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (dirty && !saving)
+          onSave({ reportRecipient: name.trim(), reportTemplate: body });
+      }}
+    >
+      <div>
+        <h2 className="text-[15px] font-medium text-ink">보고 서식</h2>
+        <p className="mt-0.5 text-[13px] text-muted">
+          보고 초안을 만들 때 하치와레가 이 내용을 따라 써요.
+        </p>
+      </div>
+      <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+        받는 사람
+        <Input
+          value={name}
+          maxLength={40}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="예: 김슬기 매니저님 (비우면 담당 매니저님)"
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+        서식 (선택)
+        <Textarea
+          rows={4}
+          maxLength={4000}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="예: 11/3(화) 15시 기준, 현재까지 파나소닉 언급 관련 추가 게재 기사는… 처럼 실제로 보내던 보고문을 붙여 넣어 주세요."
+        />
+      </label>
+      <div className="flex justify-end gap-2">
+        {dirty && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setName(recipient);
+              setBody(template);
+            }}
+          >
+            취소
+          </Button>
+        )}
+        <Button type="submit" size="sm" disabled={!dirty || saving}>
+          저장
+        </Button>
       </div>
     </form>
   );

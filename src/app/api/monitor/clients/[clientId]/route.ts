@@ -65,6 +65,7 @@ const patchSchema = z.object({
   greeting: z.string().max(1000).optional(),
   closing: z.string().max(500).optional(),
   autoCollect: z.boolean().optional(),
+  weekdaysOnly: z.boolean().optional(),
   collectTime: z
     .string()
     .regex(TIME, "시각 형식이 올바르지 않아요.")

@@ -12,10 +12,14 @@ import {
 import { toast } from "sonner";
 
 import { HermesProgress } from "@/components/monitor/hermes-progress";
-import { IssueScheduleEditor } from "@/components/monitor/schedule-editors";
+import {
+  IssueReportEditor,
+  IssueScheduleEditor,
+} from "@/components/monitor/schedule-editors";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
+import { formatUsage } from "@/lib/monitor/progress-stages";
 import { useIssueMutations, useMonitorIssue } from "@/lib/monitor/queries";
 import type { MonitorIssueSnapshotView } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
@@ -197,7 +201,7 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
               disabled={pending}
               onClick={() => recount.mutate(false)}
             >
-              <Sparkles /> 건수만 확인
+              <Sparkles /> 늘어난 기사 수 확인
             </Button>
             <Button size="lg" disabled={pending} onClick={() => recount.mutate(true)}>
               <FileText /> 보고 초안 만들기
@@ -205,8 +209,8 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
           </div>
           <div className="text-xs text-muted md:text-right">
             <p>
-              <b className="font-medium text-body">건수만 확인</b>: 하치와레가 직전 보고
-              이후 새 기사 수를 세서 아래에 +N건으로 알려 줘요. 몇 분 걸려요.
+              <b className="font-medium text-body">늘어난 기사 수 확인</b>: 하치와레가
+              직전 보고 이후 새 기사 수를 세서 아래에 +N건으로 알려 줘요. 몇 분 걸려요.
             </p>
             <p>
               <b className="font-medium text-body">보고 초안 만들기</b>: 같은 건수를
@@ -248,6 +252,11 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
             {latest.lastArticle.time}
           </span>
         )}
+        {latest?.usage && (
+          <span className="text-muted" title="캐시를 뺀 입력·출력 토큰">
+            {formatUsage(latest.usage)}
+          </span>
+        )}
         {latest && !latest.isReport && (
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-medium text-primary">
             직전 보고 이후 +{latest.added}건
@@ -285,6 +294,18 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
           }
         />
       )}
+
+      <IssueReportEditor
+        key={`${issue.reportRecipient}-${issue.reportTemplate}`}
+        recipient={issue.reportRecipient}
+        template={issue.reportTemplate}
+        saving={updateIssue.isPending}
+        onSave={(report) =>
+          updateIssue.mutate(report, {
+            onSuccess: () => toast.success("보고 서식을 저장했어요."),
+          })
+        }
+      />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-hairline bg-surface p-5">

@@ -3,6 +3,7 @@ import { getHermesConfig, missingHermesEnv } from "@/lib/hermes/config";
 import { getHermesRunStatus } from "@/lib/hermes/run-client";
 
 import type { MonitorProgress } from "@/lib/monitor/progress-stages";
+import type { MonitorUsage } from "@/lib/monitor/types";
 
 const parseArgs = (raw: string | undefined): Record<string, unknown> => {
   try {
@@ -75,4 +76,18 @@ export const readRunProgress = async (
   if (hermesRunId === "starting" || missingHermesEnv().length) return null;
   const status = await getHermesRunStatus(getHermesConfig(), hermesRunId);
   return status?.session_id ? readSessionProgress(status.session_id) : null;
+};
+
+/** 이 Hermes 런에 쓴 작업량. 못 읽으면 null — 결과 저장은 막지 않는다. */
+export const readRunUsage = async (hermesRunId: string): Promise<MonitorUsage | null> => {
+  if (hermesRunId === "starting" || missingHermesEnv().length) return null;
+  const config = getHermesConfig();
+  const status = await getHermesRunStatus(config, hermesRunId);
+  if (!status?.session_id) return null;
+  const summary = await readHermesSessionSummary(config, status.session_id);
+  if (!summary) return null;
+  return {
+    tokens: (summary.input_tokens ?? 0) + (summary.output_tokens ?? 0),
+    tools: summary.tool_call_count ?? 0,
+  };
 };

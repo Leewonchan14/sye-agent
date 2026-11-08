@@ -18,6 +18,7 @@ import { RunHistory } from "@/components/monitor/run-history";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
+import { formatUsage } from "@/lib/monitor/progress-stages";
 import { useMonitorClient, useMonitorMutations } from "@/lib/monitor/queries";
 import { DAILY_COLLECT_REQUEST, nextCollectLabel } from "@/lib/monitor/schedule";
 import type { MonitorCategory } from "@/lib/monitor/types";
@@ -203,6 +204,11 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             ))}
             {run.stats.measuredSec !== undefined && (
               <span className="text-muted">{formatMeasured(run.stats.measuredSec)}</span>
+            )}
+            {run.stats.usage && (
+              <span className="text-muted" title="캐시를 뺀 입력·출력 토큰">
+                {formatUsage(run.stats.usage)}
+              </span>
             )}
             {run.stats.blocked?.length ? (
               <span className="inline-flex items-center gap-1.5">

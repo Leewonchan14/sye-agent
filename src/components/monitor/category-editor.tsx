@@ -156,6 +156,32 @@ const CategoryDialog = ({
               </label>
             )}
           </div>
+          <label className="flex items-center justify-between gap-3 text-[13px] text-muted">
+            <span>
+              리포트 최대 건수 (선택)
+              <span className="block text-xs text-muted-soft">
+                넘는 기사는 관련도 낮은 순으로 체크가 해제돼요. 비우면 제한이 없어요.
+              </span>
+            </span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={100}
+              value={draft.maxItems ?? ""}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  maxItems: e.target.value
+                    ? Math.min(100, Math.max(1, Math.round(Number(e.target.value) || 1)))
+                    : null,
+                }))
+              }
+              placeholder="제한 없음"
+              aria-label="리포트 최대 건수"
+              className="h-8 w-24"
+            />
+          </label>
           <div className="flex flex-col gap-1.5 text-[13px] text-muted">
             세부 분류 (선택)
             <TagsEditor
@@ -277,8 +303,12 @@ export const CategoryEditor = ({
           >
             <div className="min-w-0">
               <p className="text-sm text-ink">{c.name}</p>
-              {c.subs?.length ? (
-                <p className="mt-0.5 truncate text-xs text-muted">{c.subs.join(" · ")}</p>
+              {c.subs?.length || c.maxItems ? (
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {[c.maxItems && `최대 ${c.maxItems}건`, ...(c.subs ?? [])]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
               ) : null}
             </div>
             <GoalInput

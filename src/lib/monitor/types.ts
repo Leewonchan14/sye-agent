@@ -10,6 +10,8 @@ export const monitorCategorySchema = z.object({
   name: z.string().min(1).max(60),
   /** 최소 건수. null이면 "전수 집계" 섹션(자사 보도 등) */
   goal: z.number().int().min(0).max(100).nullable(),
+  /** 리포트에 담을 최대 건수(점수 순). 비우면 제한 없음 */
+  maxItems: z.number().int().min(1).max(100).nullable().optional(),
   subs: z.array(z.string().min(1).max(40)).max(12).optional(),
 });
 export type MonitorCategory = z.infer<typeof monitorCategorySchema>;
@@ -34,6 +36,12 @@ export const monitorRuleSchema = z.object({
 export type MonitorRule = z.infer<typeof monitorRuleSchema>;
 export type MonitorRuleKind = MonitorRule["kind"];
 
+/** 하치와레 작업량 — tokens는 캐시를 뺀 입력 + 출력 */
+export interface MonitorUsage {
+  tokens: number;
+  tools: number;
+}
+
 export interface MonitorRunStats {
   sources?: { name: string; count: number }[];
   blocked?: string[];
@@ -41,6 +49,7 @@ export interface MonitorRunStats {
   durationSec?: number;
   /** 앱이 잰 수집 소요 시간(시작 ~ 결과 수신) */
   measuredSec?: number;
+  usage?: MonitorUsage;
   note?: string;
 }
 
@@ -53,7 +62,12 @@ export interface MonitorClientSummary {
     until: string;
     includedCount: number;
     reportedAt: string | null;
+    pending: boolean;
+    failed: boolean;
   } | null;
+  autoCollect: boolean;
+  /** 다음 자동 수집 시각. 꺼져 있으면 null */
+  nextCollectAt: string | null;
 }
 
 export interface MonitorIssueSummary {
@@ -63,6 +77,9 @@ export interface MonitorIssueSummary {
   isActive: boolean;
   totalAdded: number;
   brandMentions: number;
+  pending: boolean;
+  /** 다음 자동 집계 시각. 감시를 끝냈으면 null */
+  nextCollectAt: string | null;
 }
 
 export interface MonitorOverview {
@@ -82,6 +99,7 @@ export interface MonitorClientView {
   autoCollect: boolean;
   /** 수집 시작 시각(HH:mm). null이면 모니터링 기간이 끝나는 시각 */
   collectTime: string | null;
+  weekdaysOnly: boolean;
 }
 
 export interface MonitorItemView {
@@ -157,6 +175,7 @@ export interface MonitorIssueSnapshotView {
   lastArticle: { media?: string; time?: string; title?: string; url?: string } | null;
   reportText: string | null;
   isReport: boolean;
+  usage: MonitorUsage | null;
 }
 
 export interface MonitorIssuePayload {
@@ -171,6 +190,8 @@ export interface MonitorIssuePayload {
     isActive: boolean;
     collectStart: string;
     collectGapMinutes: number;
+    reportRecipient: string;
+    reportTemplate: string;
     pendingSince: string | null;
     lastError: string | null;
   };
