@@ -9,6 +9,7 @@ import {
   CategoryIcon,
   EntryIcon,
 } from "@/components/ledger/category-icon";
+import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuthStore } from "@/lib/auth-store";
@@ -19,7 +20,6 @@ import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/clien
 import { comparableMonthRange, compareLedgerPeriods } from "@/lib/ledger/compare";
 import {
   currentMonthKst,
-  formatCompactWon,
   formatMonthKo,
   formatWon,
   shiftMonth,
@@ -67,14 +67,6 @@ const fetchStats = async (
     `/api/ledger/stats${query ? `?${query}` : ""}`
   );
   return stats;
-};
-
-/** 22,000 → 2.2만, 음수는 -2.2만 */
-const compactWon = (value: number): string => {
-  const rounded = Math.round(value);
-  return rounded < 0
-    ? `-${formatCompactWon(Math.abs(rounded))}`
-    : formatCompactWon(rounded);
 };
 
 const StatCard = ({
@@ -181,144 +173,115 @@ const AllTimeCard = ({ allTime }: { allTime: LedgerStats["allTime"] }) => {
   );
 };
 
-const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
-  const width = 640;
-  const height = 220;
-  const left = 48;
-  const right = 10;
-  const top = 14;
-  const bottom = 26;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
+const BalanceCard = ({ daily }: { daily: LedgerStats["daily"] }) => (
+  <StatCard className="md:col-span-2">
+    <TrendChart
+      title="잔액 추이"
+      ariaLabel="기간 잔액 추이"
+      points={daily.map((day) => ({ date: day.date, value: day.balance }))}
+      dots={daily.flatMap((day, index) =>
+        day.income > 0
+          ? [
+              {
+                index,
+                title: `${day.date} · 입금 ${formatWon(day.income)} · 잔액 ${formatWon(day.balance)}`,
+              },
+            ]
+          : []
+      )}
+      idleText="시작 잔액부터 누적"
+      formatPoint={(point) => `${shortDate(point.date)} · ${formatWon(point.value)}`}
+    />
 
-  const balances = daily.map((day) => day.balance);
-  const rawMin = Math.min(...balances, 0);
-  const rawMax = Math.max(...balances, 0);
-  const span = Math.max(rawMax - rawMin, 1);
-  const roughStep = span / 4;
-  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
-  const normalized = roughStep / magnitude;
-  const step =
-    (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
-  const yMin = Math.floor(rawMin / step) * step;
-  const yMax = Math.max(Math.ceil(rawMax / step) * step, yMin + step);
-  const yRange = yMax - yMin;
+    <p className="mt-1 text-[10px] text-muted-soft">
+      기록된 내역 기준 · 설정의 통장 탭에서 실제 잔액과 맞출 수 있어요
+    </p>
+  </StatCard>
+);
 
-  const xAt = (index: number) =>
-    daily.length <= 1
-      ? left + plotWidth / 2
-      : left + (index / (daily.length - 1)) * plotWidth;
-  const yAt = (value: number) => top + ((yMax - value) / yRange) * plotHeight;
-  const baseline = top + plotHeight;
-  const points = daily.map((day, index) => `${xAt(index)},${yAt(day.balance)}`);
-  const firstBalance = daily[0]?.balance ?? 0;
-  const linePath =
-    daily.length <= 1
-      ? `M ${left} ${yAt(firstBalance)} L ${left + plotWidth} ${yAt(firstBalance)}`
-      : `M ${points.join(" L ")}`;
-  const areaPath =
-    daily.length <= 1
-      ? `M ${left} ${yAt(firstBalance)} L ${left + plotWidth} ${yAt(
-          firstBalance
-        )} L ${left + plotWidth} ${baseline} L ${left} ${baseline} Z`
-      : `M ${points.join(" L ")} L ${left + plotWidth} ${baseline} L ${left} ${baseline} Z`;
+const SPEND_VIEWS = [
+  { id: "daily", label: "일별" },
+  { id: "total", label: "누적" },
+] as const;
 
-  const labelIndices = Array.from(
-    new Set([0, Math.floor((daily.length - 1) / 2), daily.length - 1])
+type SpendView = (typeof SPEND_VIEWS)[number]["id"];
+
+const toRunningTotals = (daily: LedgerStats["daily"]) => {
+  let running = 0;
+  return daily.map((day) => {
+    running += day.spent;
+    return { date: day.date, value: running };
+  });
+};
+
+const SpendCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
+  const [view, setView] = useState<SpendView>("daily");
+
+  const total = daily.reduce((sum, day) => sum + day.spent, 0);
+  const peakIndex = daily.reduce(
+    (best, day, index) => (day.spent > (daily[best]?.spent ?? 0) ? index : best),
+    0
   );
+  const peak = daily[peakIndex];
+  const isDaily = view === "daily";
+
+  const points = isDaily
+    ? daily.map((day) => ({ date: day.date, value: day.spent }))
+    : toRunningTotals(daily);
+
+  const toggle = (
+    <div
+      role="group"
+      aria-label="사용 금액 보기"
+      className="flex rounded-full bg-canvas-soft p-0.5"
+    >
+      {SPEND_VIEWS.map((option) => {
+        const active = option.id === view;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => setView(option.id)}
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+              active && "bg-surface text-ink shadow-sm",
+              !active && "text-muted hover:text-ink"
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (total === 0) {
+    return (
+      <StatCard className="md:col-span-2">
+        <p className="text-[12px] font-medium text-muted">사용 금액 추이</p>
+        <p className="py-8 text-center text-[12px] text-muted">
+          이 기간에는 사용 금액이 없어요
+        </p>
+      </StatCard>
+    );
+  }
+
+  const peakLabel = peak ? `최고 ${shortDate(peak.date)} · ${formatWon(peak.spent)}` : "";
 
   return (
     <StatCard className="md:col-span-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">잔액 추이</p>
-        <p className="text-[10px] text-muted-soft">시작 잔액부터 누적</p>
-      </div>
-
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="mt-2 w-full"
-        role="img"
-        aria-label="기간 잔액 추이"
-      >
-        <title>기간 잔액 추이</title>
-        {[0, 1, 2, 3, 4].map((index) => {
-          const y = top + (index / 4) * plotHeight;
-          const value = yMax - (index / 4) * yRange;
-          return (
-            <g key={index}>
-              <line
-                x1={left}
-                x2={left + plotWidth}
-                y1={y}
-                y2={y}
-                stroke="var(--color-hairline-soft)"
-                strokeWidth={1}
-              />
-              <text
-                x={left - 6}
-                y={y}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fontSize={9}
-                fill="var(--color-muted-soft)"
-              >
-                {compactWon(value)}
-              </text>
-            </g>
-          );
-        })}
-
-        <path d={areaPath} fill="var(--color-primary)" opacity={0.12} />
-        <path
-          d={linePath}
-          fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        {daily.map((day, index) =>
-          day.income > 0 ? (
-            <circle
-              key={day.date}
-              cx={xAt(index)}
-              cy={yAt(day.balance)}
-              r={3}
-              fill="var(--color-primary)"
-              stroke="var(--color-surface)"
-              strokeWidth={1.5}
-            >
-              <title>
-                {day.date} · 입금 {formatWon(day.income)} · 잔액 {formatWon(day.balance)}
-              </title>
-            </circle>
-          ) : null
-        )}
-
-        {labelIndices.map((index) => {
-          const day = daily[index];
-          if (!day) return null;
-          return (
-            <text
-              key={`label-${day.date}`}
-              x={xAt(index)}
-              y={height - 8}
-              textAnchor={
-                index === 0 ? "start" : index === daily.length - 1 ? "end" : "middle"
-              }
-              fontSize={9}
-              fill="var(--color-muted-soft)"
-            >
-              {day.date.slice(5).replace("-", ".")}
-            </text>
-          );
-        })}
-      </svg>
-
-      <p className="mt-1 text-[10px] text-muted-soft">
-        기록된 내역 기준 · 설정의 통장 탭에서 실제 잔액과 맞출 수 있어요
-      </p>
+      <TrendChart
+        title="사용 금액 추이"
+        ariaLabel={`사용 금액 추이, ${isDaily ? "일별" : "누적"}, 합계 ${formatWon(total)}`}
+        points={points}
+        dots={isDaily && peak ? [{ index: peakIndex, title: peakLabel }] : []}
+        controls={toggle}
+        idleText={isDaily ? peakLabel : `합계 ${formatWon(total)}`}
+        formatPoint={(point) =>
+          `${shortDate(point.date)}${isDaily ? "" : "까지"} · ${formatWon(point.value)}`
+        }
+      />
     </StatCard>
   );
 };
@@ -1305,6 +1268,7 @@ export const StatsView = ({
           {hasActivity ? (
             <>
               {!isTripReport && <BalanceCard daily={stats.daily} />}
+              {!isTripReport && <SpendCard daily={stats.daily} />}
               <CategoryCard stats={stats} />
               <PeriodEntriesCard
                 entries={stats.entries}

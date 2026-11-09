@@ -43,8 +43,17 @@ export type LedgerStats = {
     pct: number;
   }[];
   monthly: { month: string; income: number; expense: number }[];
-  /** balance는 시작 잔액부터 그날까지 누적한 통장 잔액이다. */
-  daily: { date: string; income: number; expense: number; balance: number }[];
+  /**
+   * balance는 시작 잔액부터 그날까지 누적한 통장 잔액이다.
+   * expense는 잔액 계산용 실제 지출이고, spent는 여행 제외 필터를 반영한 리포트 지출이다.
+   */
+  daily: {
+    date: string;
+    income: number;
+    expense: number;
+    spent: number;
+    balance: number;
+  }[];
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -132,12 +141,15 @@ export const getLedgerStats = async (
   const entries: LedgerEntryView[] = [];
   const categoryTotals = new Map<number | null, number>();
   const monthlyTotals = new Map<string, { income: number; expense: number }>();
-  const dailyTotals = new Map<string, { income: number; expense: number }>();
+  const dailyTotals = new Map<
+    string,
+    { income: number; expense: number; spent: number }
+  >();
 
   const start = kst(from);
   for (let index = 0; !trip && index < days; index += 1) {
     const date = start.add(index, "day").format("YYYY-MM-DD");
-    dailyTotals.set(date, { income: 0, expense: 0 });
+    dailyTotals.set(date, { income: 0, expense: 0, spent: 0 });
   }
 
   for (const entry of entryRows) {
@@ -169,6 +181,7 @@ export const getLedgerStats = async (
         else dayTotals.expense += entry.amount;
       }
       if (options.excludeTrips && entry.tripId != null) continue;
+      if (dayTotals && !isIncome) dayTotals.spent += entry.amount;
     }
 
     entries.push(view);
@@ -227,7 +240,7 @@ export const getLedgerStats = async (
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, totals]) => {
       balance += totals.income - totals.expense;
-      return { date, income: totals.income, expense: totals.expense, balance };
+      return { date, ...totals, balance };
     });
 
   return {
