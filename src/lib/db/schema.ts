@@ -445,3 +445,27 @@ export const monitorIssueSnapshots = pgTable(
   },
   (t) => ({ issueIdx: index("monitor_issue_snapshots_issue_idx").on(t.issueId, t.at) })
 );
+
+/** 이슈 집계 한 번에 센 기사 목록 */
+export const monitorIssueArticles = pgTable(
+  "monitor_issue_articles",
+  {
+    id: serial("id").primaryKey(),
+    snapshotId: integer("snapshot_id")
+      .notNull()
+      .references(() => monitorIssueSnapshots.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    /** 매체 이름. 모르면 비워 두고 화면에서 주소로 대신한다. */
+    media: text("media").notNull().default(""),
+    title: text("title").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    /** 감시어가 제목·본문에 나온 기사 */
+    brandMention: boolean("brand_mention").notNull().default(false),
+  },
+  (t) => ({
+    snapshotIdx: index("monitor_issue_articles_snapshot_idx").on(
+      t.snapshotId,
+      t.publishedAt
+    ),
+  })
+);

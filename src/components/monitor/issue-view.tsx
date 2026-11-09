@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { HermesProgress } from "@/components/monitor/hermes-progress";
+import { IssueArticles } from "@/components/monitor/issue-articles";
 import {
   IssueReportEditor,
   IssueScheduleEditor,
@@ -262,6 +263,19 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
             직전 보고 이후 +{latest.added}건
           </span>
         )}
+        {latest && (
+          <button
+            type="button"
+            onClick={() =>
+              document
+                .getElementById("issue-articles")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+            className="text-[13px] font-medium text-primary underline-offset-4 hover:underline"
+          >
+            기사 보기
+          </button>
+        )}
         <span className="flex-1" />
         <button
           type="button"
@@ -359,6 +373,12 @@ export const IssueView = ({ issueId }: { issueId: number }) => {
           )}
         </section>
       </div>
+
+      <IssueArticles
+        issueId={issue.id}
+        keywords={issue.keywords.length ? issue.keywords : [issue.title]}
+        snapshots={snapshots}
+      />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface p-5">

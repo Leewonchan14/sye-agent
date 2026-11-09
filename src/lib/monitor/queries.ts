@@ -15,6 +15,7 @@ import type {
   MonitorCategory,
   MonitorClientPayload,
   MonitorClientView,
+  MonitorIssueArticleView,
   MonitorIssuePayload,
   MonitorOverview,
   MonitorRule,
@@ -89,6 +90,24 @@ export const useMonitorIssue = (issueId: number) => {
     queryKey: monitorKeys.issue(issueId),
     queryFn: () => api<MonitorIssuePayload>(`/api/monitor/issues/${issueId}`),
     refetchInterval: (query) => (query.state.data?.issue.pendingSince ? 10_000 : false),
+  });
+};
+
+/** 집계 한 번의 기사 목록. 집계가 끝나면 바뀌지 않으므로 한 번만 읽는다. */
+export const useIssueArticles = (
+  issueId: number,
+  snapshotId: number,
+  enabled: boolean
+) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...monitorKeys.issue(issueId), "articles", snapshotId],
+    queryFn: () =>
+      api<{ articles: MonitorIssueArticleView[] }>(
+        `/api/monitor/issues/${issueId}/snapshots/${snapshotId}/articles`
+      ),
+    enabled,
+    staleTime: Infinity,
   });
 };
 

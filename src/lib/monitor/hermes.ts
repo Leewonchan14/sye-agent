@@ -14,7 +14,11 @@ import {
 } from "@/lib/hermes/config";
 import { getHermesRunStatus, startHermesRun } from "@/lib/hermes/run-client";
 import { kst } from "@/lib/kst";
-import type { MonitorCategory, MonitorRule } from "@/lib/monitor/types";
+import {
+  MAX_ISSUE_ARTICLES,
+  type MonitorCategory,
+  type MonitorRule,
+} from "@/lib/monitor/types";
 
 /**
  * 대시보드 버튼("더 찾기", "지금 다시 집계")을 Hermes 디태치 런으로 넘긴다.
@@ -182,6 +186,7 @@ export const startIssueRecount = async (options: {
     "",
     "added = 구간 안에 새로 게재된 관련 기사 수, mediaCount = 매체 수, brandMentions = 감시어가 본문·제목에 나온 기사 수.",
     "lastArticle = 가장 최근 기사. events = 이번 구간에 새로 생긴 중요한 흐름(없으면 빈 배열).",
+    `articles = added로 센 기사 전부. 담당자가 화면에서 기사를 직접 확인하는 목록이라 빠뜨리면 안 돼. 손으로 옮겨 적지 말고 스윕 결과 파일에서 코드로 만들어. url은 네이버 링크가 있으면 네이버 링크, media는 매체 이름(모르면 비워), publishedAt은 'YYYY-MM-DD HH:mm'(KST), brandMention은 감시어가 제목·본문에 나왔는지. ${MAX_ISSUE_ARTICLES}건이 넘으면 최신순으로 ${MAX_ISSUE_ARTICLES}건만 보내.`,
     "at(집계 시각)은 보내지 마. 서버가 받은 시각으로 기록해. 기사 시각(lastArticle.time, events.at)은 KST로 써.",
     "결과는 채팅으로 길게 답하지 말고 아래 API로 보내. 보낸 뒤 채팅에는 숫자만 한 줄로 말해.",
     curlExample(
@@ -198,6 +203,15 @@ export const startIssueRecount = async (options: {
         isReport: options.isReport,
         reportText: options.isReport ? "..." : null,
         events: [{ at: "MM.DD HH:mm", text: "", key: false }],
+        articles: [
+          {
+            url: "https://...",
+            media: "",
+            title: "",
+            publishedAt: "YYYY-MM-DD HH:mm",
+            brandMention: false,
+          },
+        ],
       })
     ),
   ].join("\n");

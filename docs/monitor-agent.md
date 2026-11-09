@@ -148,6 +148,16 @@ POST /api/monitor/agent/issues/{issueId}/snapshots
   "isReport": true, // 정기 보고면 true, "지금 몇 건?" 중간 확인이면 false
   "reportText": "담당 매니저님, 안녕하세요. ...", // 정기 보고일 때 초안
   "events": [{ "at": "11.06 14:08", "text": "소속사 2차 입장 발표", "key": true }],
+  // added로 센 기사 전부(최대 2000건). 이슈 화면의 "집계된 기사" 목록이 된다.
+  "articles": [
+    {
+      "url": "https://n.news.naver.com/...",
+      "media": "JTBC", // 모르면 비워도 된다
+      "title": "...",
+      "publishedAt": "2026-11-06 14:42", // KST
+      "brandMention": false,
+    },
+  ],
 }
 ```
 
