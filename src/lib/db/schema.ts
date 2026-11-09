@@ -265,6 +265,14 @@ export const ledgerBudgets = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.month, t.categoryId] }) })
 );
 
+/** 주간 리캡의 하치와레 코멘트. expense는 코멘트를 쓸 때의 지출 합계다. */
+export const ledgerWeeklyComments = pgTable("ledger_weekly_comments", {
+  weekStart: text("week_start").primaryKey(), // YYYY-MM-DD, 월요일
+  expense: integer("expense").notNull(),
+  comment: text("comment"),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /* ───────────────────────── 언론 모니터링 대시보드 ───────────────────────── */
 
 /**

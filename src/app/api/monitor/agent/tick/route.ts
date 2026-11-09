@@ -1,3 +1,6 @@
+import { after } from "next/server";
+
+import { writeWeeklyRecapComment } from "@/lib/ledger/recap-comment";
 import { monitorErrorResponse, requireAgentKey } from "@/lib/monitor/api";
 import { runDailyCollectTick } from "@/lib/monitor/daily-collect";
 import { publicOrigin } from "@/lib/monitor/origin";
@@ -13,6 +16,8 @@ export const maxDuration = 120;
 export const POST = async (req: Request) => {
   const authError = requireAgentKey(req);
   if (authError) return authError;
+  // 응답을 돌려준 뒤에 돌아서 수집 시계를 늦추지 않는다.
+  after(writeWeeklyRecapComment);
   try {
     return Response.json(
       await runDailyCollectTick(publicOrigin(req), undefined, new URL(req.url).origin)

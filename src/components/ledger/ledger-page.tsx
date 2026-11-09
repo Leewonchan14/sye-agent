@@ -23,6 +23,7 @@ import {
   type LedgerSettingsTab,
 } from "@/components/ledger/settings-dialog";
 import { StatsView } from "@/components/ledger/stats-view";
+import { WeeklyRecapCard } from "@/components/ledger/weekly-recap-card";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -436,6 +437,7 @@ export const LedgerPage = () => {
         </div>
 
         <div className={cn("mt-4", tab === "stats" && "hidden")}>
+          <WeeklyRecapCard />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
               Array.from({ length: 4 }, (_, index) => (
