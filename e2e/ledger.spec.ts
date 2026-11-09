@@ -147,6 +147,69 @@ test("통계 탭에서 내역을 추가하면 통계가 바로 갱신된다", as
   await expect(page.getByText("총 지출 · 2건")).toBeVisible({ timeout: 5_000 });
 });
 
+test("사용 금액 추이: 일별과 누적을 선 그래프로 보고 지점을 고를 수 있다", async ({
+  page,
+  request,
+}) => {
+  await addEntry(request, token, {
+    entryDate: daysAgo(2),
+    amount: 30_000,
+    memo: "그저께",
+  });
+  await addEntry(request, token, { entryDate: daysAgo(1), amount: 10_000, memo: "어제" });
+  await addEntry(request, token, {
+    entryDate: daysAgo(1),
+    kind: "income",
+    amount: 99_000,
+    memo: "입금",
+  });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  await reportPeriod(page).getByRole("button", { name: "최근 7일", exact: true }).click();
+
+  const peakDate = daysAgo(2).slice(5).replace("-", ".");
+  const peakReadout = page.locator("p", {
+    hasText: `최고 ${peakDate} · 30,000원`,
+  });
+  await expect(page.getByText("사용 금액 추이", { exact: true })).toBeVisible();
+  await expect(peakReadout).toBeVisible();
+
+  const chart = page.getByRole("img", { name: /^사용 금액 추이, 일별/ });
+  await chart.scrollIntoViewIfNeeded();
+  const box = await chart.boundingBox();
+  if (!box) throw new Error("사용 금액 그래프를 찾지 못했어요.");
+  await page.mouse.move(box.x + box.width - 11, box.y + box.height / 2);
+  await expect(
+    page.getByText(`${today().slice(5).replace("-", ".")} · 0원`)
+  ).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(peakReadout).toBeVisible();
+
+  await page
+    .getByRole("group", { name: "사용 금액 보기" })
+    .getByRole("button", { name: "누적" })
+    .click();
+  await expect(page.getByText("합계 40,000원", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^사용 금액 추이, 누적/ })).toBeVisible();
+});
+
+test("사용 금액 추이: 지출이 없는 기간은 빈 안내를 보여 준다", async ({
+  page,
+  request,
+}) => {
+  await addEntry(request, token, {
+    entryDate: today(),
+    kind: "income",
+    amount: 5_000,
+    memo: "입금만",
+  });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  await expect(page.getByText("이 기간에는 사용 금액이 없어요")).toBeVisible();
+});
+
 const reportPeriod = (page: Page) => page.getByRole("group", { name: "리포트 기간" });
 
 test("통계 탭의 기간 설정은 기간별 리포트 안에 하나만 있다", async ({
@@ -615,6 +678,7 @@ test("여행 리포트는 미리 결제한 내역까지 분류별로 보여 준�
   await expect(page.getByRole("button", { name: /관계없는 지출/ })).toHaveCount(0);
   await expect(page.getByText("분류별 지출", { exact: true })).toBeVisible();
   await expect(page.getByText("잔액 추이", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("사용 금액 추이", { exact: true })).toHaveCount(0);
   await expect(page.getByText("전월 대비")).toHaveCount(0);
 });
 
@@ -691,6 +755,8 @@ test("여행 제외는 리포트 합계만 줄이고 잔액은 그대로 둔다"
   expect(all.summary.expense).toBe(75_000);
   expect(without.summary.expense).toBe(5_000);
   expect(without.daily.at(-1).balance).toBe(all.daily.at(-1).balance);
+  expect(all.daily.at(-1).spent).toBe(75_000);
+  expect(without.daily.at(-1).spent).toBe(5_000);
 
   await openLedger(page, token);
   await page.getByRole("tab", { name: "통계" }).click();
