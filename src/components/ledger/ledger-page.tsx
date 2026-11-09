@@ -13,6 +13,10 @@ import {
 import { useDeferredValue, useMemo, useState } from "react";
 
 import { CalendarView } from "@/components/ledger/calendar-view";
+import {
+  ExpenseCategoryChips,
+  type CategoryFilter,
+} from "@/components/ledger/category-chips";
 import { CategoryIcon } from "@/components/ledger/category-icon";
 import { EntryDialog } from "@/components/ledger/entry-dialog";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
@@ -298,6 +302,7 @@ export const LedgerPage = () => {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
   const {
     data: ledger,
@@ -318,10 +323,24 @@ export const LedgerPage = () => {
     ...LEDGER_LIVE_QUERY,
   });
 
+  // 고른 분류가 삭제됐으면 빈 목록 대신 전체를 보여 준다.
+  const filterCategory =
+    ledger?.categories.find(
+      (category) => category.kind === "expense" && category.id === categoryFilter
+    ) ?? null;
+  const filterCategoryId = filterCategory?.id ?? null;
+
+  const listEntries = useMemo(() => {
+    const entries = ledger?.entries ?? [];
+    return filterCategoryId == null
+      ? entries
+      : entries.filter((entry) => entry.categoryId === filterCategoryId);
+  }, [ledger?.entries, filterCategoryId]);
+
   const dayGroups = useMemo(() => {
     const groups = new Map<string, DayGroup>();
 
-    for (const entry of ledger?.entries ?? []) {
+    for (const entry of listEntries) {
       const group = groups.get(entry.entryDate) ?? {
         date: entry.entryDate,
         entries: [],
@@ -335,7 +354,7 @@ export const LedgerPage = () => {
     }
 
     return [...groups.values()].sort((a, b) => b.date.localeCompare(a.date));
-  }, [ledger?.entries]);
+  }, [listEntries]);
 
   const openAdd = () => {
     setEditingEntry(null);
@@ -556,8 +575,34 @@ export const LedgerPage = () => {
                     />
                   </div>
 
+                  {!deferredSearch && (
+                    <ExpenseCategoryChips
+                      label="내역 분류"
+                      categories={ledger.categories}
+                      selected={filterCategory?.id ?? "all"}
+                      onSelect={setCategoryFilter}
+                    />
+                  )}
+
+                  {!deferredSearch && filterCategory && dayGroups.length > 0 && (
+                    <p className="px-1 text-[12px] text-muted tabular-nums">
+                      {monthLabel} {filterCategory.name} {listEntries.length}건 · 지출{" "}
+                      <span className="font-medium text-ink">
+                        {formatWon(
+                          listEntries.reduce((sum, entry) => sum + entry.amount, 0)
+                        )}
+                      </span>
+                    </p>
+                  )}
+
                   {deferredSearch ? (
                     <SearchResults query={deferredSearch} onEdit={openEdit} />
+                  ) : filterCategory && !dayGroups.length ? (
+                    <div className="rounded-2xl border border-hairline bg-surface px-6 py-10 text-center">
+                      <p className="text-[13px] text-muted">
+                        {monthLabel}에는 {filterCategory.name} 내역이 없어요
+                      </p>
+                    </div>
                   ) : dayGroups.length ? (
                     dayGroups.map((group) => (
                       <section

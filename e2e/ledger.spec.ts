@@ -423,6 +423,90 @@ test("전체 탭과 큰 지출 TOP 8에서 분류로 거를 수 있다", async (
   await expect(top).not.toContainText("점심");
 });
 
+test("내역 탭에서 분류로 거르고 달을 옮겨도 유지된다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  const add = (entryDate: string, amount: number, memo: string, name: string) =>
+    addEntry(request, token, {
+      entryDate,
+      amount,
+      memo,
+      categoryId: categoryId(name),
+    });
+  await add(today(), 9_000, "점심", "식비");
+  await add(today(), 8_000, "저녁", "식비");
+  await add(today(), 5_000, "커피", "카페");
+  await add(`${lastMonth()}-15`, 7_000, "지난달 밥", "식비");
+  await addEntry(request, token, {
+    entryDate: today(),
+    kind: "income",
+    amount: 50_000,
+    memo: "충전",
+  });
+
+  await openLedger(page, token);
+  const chips = page.getByRole("group", { name: "내역 분류" });
+  await expect(page.getByRole("button", { name: /커피/ })).toBeVisible();
+  await expect(chips.getByRole("button", { name: "전체", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+
+  await chips.getByRole("button", { name: "식비", exact: true }).click();
+  await expect(page.getByRole("button", { name: /점심/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /저녁/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /커피/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /충전/ })).toHaveCount(0);
+  await expect(page.getByText(/식비 2건 · 지출 17,000원/)).toBeVisible();
+  await expect(page.getByText("지출 17,000원", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "이전 달" }).click();
+  await expect(page.getByRole("button", { name: /지난달 밥/ })).toBeVisible();
+  await expect(page.getByText(/식비 1건 · 지출 7,000원/)).toBeVisible();
+
+  await chips.getByRole("button", { name: "카페", exact: true }).click();
+  await expect(page.getByText(/에는 카페 내역이 없어요/)).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "내역 검색" }).fill("커피");
+  await expect(chips).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /커피/ })).toBeVisible();
+  await page.getByRole("searchbox", { name: "내역 검색" }).fill("");
+
+  await chips.getByRole("button", { name: "전체", exact: true }).click();
+  await page.getByRole("button", { name: "다음 달" }).click();
+  await expect(page.getByRole("button", { name: /충전/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /커피/ })).toBeVisible();
+});
+
+test("내역 행 구분선은 곧은 선이고 마지막 행에는 없다", async ({ page, request }) => {
+  await addEntry(request, token, { entryDate: today(), amount: 1_000, memo: "첫 내역" });
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 2_000,
+    memo: "둘째 내역",
+  });
+
+  await openLedger(page, token);
+  const row = page.getByRole("button", { name: /첫 내역/ });
+  await row.hover();
+
+  const style = await row.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return { border: computed.borderBottomWidth, shadow: computed.boxShadow };
+  });
+  expect(style).toEqual({ border: "0px", shadow: "none" });
+
+  const dividers = await row.evaluate((element) =>
+    [...element.parentElement!.parentElement!.children].map((cell) => {
+      const divider = getComputedStyle(cell, "::after");
+      return { height: divider.height, left: divider.left };
+    })
+  );
+  expect(dividers).toEqual([
+    { height: "1px", left: "56px" },
+    { height: "auto", left: "auto" },
+  ]);
+});
+
 test("내역 창의 버튼 줄은 맨 아래에 붙고 입력칸이 그 뒤로 비치지 않는다", async ({
   page,
   request,
