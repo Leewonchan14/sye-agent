@@ -233,6 +233,26 @@ const CategoryBudgetCard = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   );
 };
 
+/** 이 분류를 골랐을 때 합계를 함께 보여 줄 분류. 내역 목록에는 섞지 않는다. */
+const COMPANION_CATEGORY: Record<string, string> = { 식비: "카페" };
+
+const CategoryTotalLine = ({
+  monthLabel,
+  name,
+  entries,
+}: {
+  monthLabel: string;
+  name: string;
+  entries: LedgerEntryView[];
+}) => (
+  <p className="px-1 text-[12px] text-muted tabular-nums">
+    {monthLabel} {name} {entries.length}건 · 지출{" "}
+    <span className="font-medium text-ink">
+      {formatWon(entries.reduce((sum, entry) => sum + entry.amount, 0))}
+    </span>
+  </p>
+);
+
 const SearchResults = ({
   query,
   onEdit,
@@ -336,6 +356,15 @@ export const LedgerPage = () => {
       ? entries
       : entries.filter((entry) => entry.categoryId === filterCategoryId);
   }, [ledger?.entries, filterCategoryId]);
+
+  const companionName = filterCategory && COMPANION_CATEGORY[filterCategory.name];
+  const companionCategory =
+    ledger?.categories.find(
+      (category) => category.kind === "expense" && category.name === companionName
+    ) ?? null;
+  const companionEntries = companionCategory
+    ? (ledger?.entries ?? []).filter((entry) => entry.categoryId === companionCategory.id)
+    : [];
 
   const dayGroups = useMemo(() => {
     const groups = new Map<string, DayGroup>();
@@ -584,16 +613,26 @@ export const LedgerPage = () => {
                     />
                   )}
 
-                  {!deferredSearch && filterCategory && dayGroups.length > 0 && (
-                    <p className="px-1 text-[12px] text-muted tabular-nums">
-                      {monthLabel} {filterCategory.name} {listEntries.length}건 · 지출{" "}
-                      <span className="font-medium text-ink">
-                        {formatWon(
-                          listEntries.reduce((sum, entry) => sum + entry.amount, 0)
+                  {!deferredSearch &&
+                    filterCategory &&
+                    (dayGroups.length > 0 || companionCategory) && (
+                      <div className="space-y-0.5">
+                        {dayGroups.length > 0 && (
+                          <CategoryTotalLine
+                            monthLabel={monthLabel}
+                            name={filterCategory.name}
+                            entries={listEntries}
+                          />
                         )}
-                      </span>
-                    </p>
-                  )}
+                        {companionCategory && (
+                          <CategoryTotalLine
+                            monthLabel={monthLabel}
+                            name={companionCategory.name}
+                            entries={companionEntries}
+                          />
+                        )}
+                      </div>
+                    )}
 
                   {deferredSearch ? (
                     <SearchResults query={deferredSearch} onEdit={openEdit} />

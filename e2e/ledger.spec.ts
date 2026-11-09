@@ -477,6 +477,39 @@ test("내역 탭에서 분류로 거르고 달을 옮겨도 유지된다", async
   await expect(page.getByRole("button", { name: /커피/ })).toBeVisible();
 });
 
+test("식비를 고르면 같은 달 카페 합계도 함께 보여 준다", async ({ page, request }) => {
+  const categoryId = await getCategories(request, token);
+  const add = (entryDate: string, amount: number, memo: string, name: string) =>
+    addEntry(request, token, {
+      entryDate,
+      amount,
+      memo,
+      categoryId: categoryId(name),
+    });
+  await add(today(), 9_000, "점심", "식비");
+  await add(today(), 5_000, "커피", "카페");
+  await add(today(), 3_000, "라떼", "카페");
+  await add(`${lastMonth()}-15`, 7_000, "지난달 밥", "식비");
+
+  await openLedger(page, token);
+  const chips = page.getByRole("group", { name: "내역 분류" });
+
+  await chips.getByRole("button", { name: "식비", exact: true }).click();
+  await expect(page.getByText(/식비 1건 · 지출 9,000원/)).toBeVisible();
+  await expect(page.getByText(/카페 2건 · 지출 8,000원/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /점심/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /커피/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "이전 달" }).click();
+  await expect(page.getByText(/식비 1건 · 지출 7,000원/)).toBeVisible();
+  await expect(page.getByText(/카페 0건 · 지출 0원/)).toBeVisible();
+
+  await page.getByRole("button", { name: "다음 달" }).click();
+  await chips.getByRole("button", { name: "카페", exact: true }).click();
+  await expect(page.getByText(/카페 2건 · 지출 8,000원/)).toBeVisible();
+  await expect(page.getByText(/식비 \d+건 · 지출/)).toHaveCount(0);
+});
+
 test("내역 행 구분선은 곧은 선이고 마지막 행에는 없다", async ({ page, request }) => {
   await addEntry(request, token, { entryDate: today(), amount: 1_000, memo: "첫 내역" });
   await addEntry(request, token, {
