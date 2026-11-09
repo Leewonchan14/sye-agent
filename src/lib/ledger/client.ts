@@ -7,6 +7,7 @@ export const ledgerKeys = {
   tripCandidates: (tripId: number) => ["ledger", "trip-candidates", tripId] as const,
   search: (query: string) => ["ledger", "search", query] as const,
   history: ["ledger", "history"] as const,
+  recap: ["ledger", "recap"] as const,
 };
 
 /** 두 사람이 함께 쓰므로 상대가 입력한 내역이 자동으로 보이게 한다. */

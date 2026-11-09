@@ -11,6 +11,7 @@ import {
   suggestLedgerCategoryName,
 } from "../src/lib/ledger/notification";
 import { getBudgetPace, projectMonthExpense } from "../src/lib/ledger/pace";
+import { lastCompletedWeek, parseRecapComment } from "../src/lib/ledger/recap";
 
 test.describe("은행 알림 해석", () => {
   const today = "2026-11-08";
@@ -229,4 +230,24 @@ test.describe("예상 지출", () => {
 test("항공과 렌터카는 각각의 분류로 추측한다", () => {
   expect(suggestLedgerCategoryName("이스타항공(주)", "expense")).toBe("항공");
   expect(suggestLedgerCategoryName("토스페이_렌터카_나이스", "expense")).toBe("렌트");
+});
+
+test("주간 리캡 기간: 월요일과 일요일 모두 끝난 월~일 주를 고른다", () => {
+  expect(lastCompletedWeek("2026-11-09")).toEqual({
+    from: "2026-11-02",
+    to: "2026-11-08",
+    previousFrom: "2026-10-26",
+    previousTo: "2026-11-01",
+  });
+  expect(lastCompletedWeek("2026-11-08").from).toBe("2026-10-26");
+  expect(lastCompletedWeek("2026-11-08").to).toBe("2026-11-01");
+});
+
+test("주간 리캡 코멘트: 숫자가 있거나 너무 길면 버린다", () => {
+  expect(parseRecapComment('  "이번 주는 카페를\n많이 갔네!"  ')).toBe(
+    "이번 주는 카페를 많이 갔네!"
+  );
+  expect(parseRecapComment("이번 주는 3만원 썼어")).toBeNull();
+  expect(parseRecapComment("   ")).toBeNull();
+  expect(parseRecapComment("가".repeat(201))).toBeNull();
 });
