@@ -176,6 +176,17 @@ export interface MonitorIssueSnapshotView {
   reportText: string | null;
   isReport: boolean;
   usage: MonitorUsage | null;
+  /** 저장된 기사 목록 건수. 0이면 목록 저장 전에 돈 집계다. */
+  articleCount: number;
+}
+
+export interface MonitorIssueArticleView {
+  id: number;
+  url: string;
+  media: string;
+  title: string;
+  publishedAt: string | null;
+  brandMention: boolean;
 }
 
 export interface MonitorIssuePayload {
@@ -271,6 +282,8 @@ export const agentRunSchema = z
   });
 export type AgentRunInput = z.infer<typeof agentRunSchema>;
 
+export const MAX_ISSUE_ARTICLES = 2000;
+
 export const agentSnapshotSchema = z.object({
   /** 집계 시각. 비우면 서버가 받은 시각. 대시보드 버튼으로 시작한 집계는 항상 서버 시각을 쓴다. */
   at: z.string().max(40).optional(),
@@ -288,6 +301,30 @@ export const agentSnapshotSchema = z.object({
     .nullish(),
   reportText: z.string().max(8000).nullish(),
   isReport: z.boolean().default(true),
+  /** 이번 구간에 센 기사 전부 — 화면의 기사 목록이 된다 */
+  articles: z
+    .array(
+      z.object({
+        url: z
+          .string()
+          .url()
+          .max(2000)
+          .refine((v) => /^https?:\/\//i.test(v), "http 주소만 받아요."),
+        media: z.string().max(80).nullish(),
+        title: z.string().min(1).max(400),
+        /** KST 'YYYY-MM-DD HH:mm' */
+        publishedAt: z
+          .string()
+          .regex(
+            /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/,
+            "YYYY-MM-DD HH:mm 형식으로 보내 주세요."
+          )
+          .nullish(),
+        brandMention: z.boolean().default(false),
+      })
+    )
+    .max(MAX_ISSUE_ARTICLES)
+    .default([]),
   /** 새로 알게 된 주요 흐름 — 기존 events 뒤에 붙는다 */
   events: z
     .array(

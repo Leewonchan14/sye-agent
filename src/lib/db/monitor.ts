@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   gte,
@@ -13,7 +14,7 @@ import {
 } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
-import { kst } from "@/lib/kst";
+import { dayjs, kst } from "@/lib/kst";
 import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
 import {
@@ -27,6 +28,7 @@ import type {
   MonitorCategory,
   MonitorClientPayload,
   MonitorClientView,
+  MonitorIssueArticleView,
   MonitorIssueEvent,
   MonitorIssuePayload,
   MonitorItemView,
@@ -45,6 +47,7 @@ const {
   monitorItems: itemsT,
   monitorIssues: issuesT,
   monitorIssueSnapshots: snapsT,
+  monitorIssueArticles: issueArticlesT,
 } = schema;
 
 /** 사용자에게 그대로 보여줄 수 있는 검증 오류 */
@@ -1036,6 +1039,14 @@ export const getMonitorIssuePayload = async (
     .where(eq(snapsT.issueId, id))
     .orderBy(asc(snapsT.at), asc(snapsT.id));
 
+  const articleCounts = await db
+    .select({ snapshotId: issueArticlesT.snapshotId, count: count() })
+    .from(issueArticlesT)
+    .innerJoin(snapsT, eq(issueArticlesT.snapshotId, snapsT.id))
+    .where(eq(snapsT.issueId, id))
+    .groupBy(issueArticlesT.snapshotId);
+  const articleCountOf = new Map(articleCounts.map((c) => [c.snapshotId, c.count]));
+
   return {
     issue: {
       id: issue.id,
@@ -1065,8 +1076,30 @@ export const getMonitorIssuePayload = async (
       reportText: s.reportText,
       isReport: s.isReport,
       usage: (s.usage as MonitorUsage | null) ?? null,
+      articleCount: articleCountOf.get(s.id) ?? 0,
     })),
   };
+};
+
+/** 집계 한 번의 기사 목록 — 최신 기사부터 */
+export const getIssueArticles = async (
+  issueId: number,
+  snapshotId: number
+): Promise<MonitorIssueArticleView[]> => {
+  const rows = await getDb()
+    .select({ article: issueArticlesT })
+    .from(issueArticlesT)
+    .innerJoin(snapsT, eq(issueArticlesT.snapshotId, snapsT.id))
+    .where(and(eq(snapsT.issueId, issueId), eq(issueArticlesT.snapshotId, snapshotId)))
+    .orderBy(sql`${issueArticlesT.publishedAt} desc nulls last`, asc(issueArticlesT.id));
+  return rows.map(({ article: a }) => ({
+    id: a.id,
+    url: a.url,
+    media: a.media,
+    title: a.title,
+    publishedAt: iso(a.publishedAt),
+    brandMention: a.brandMention,
+  }));
 };
 
 export const setIssuePending = async (
@@ -1109,6 +1142,29 @@ export const addIssueSnapshot = async (
       usage: usage ?? null,
     })
     .returning();
+
+  // 건수는 이미 저장됐다. 목록 때문에 실패로 돌려주면 하치와레가 다시 보내 건수가 두 배가 된다.
+  const seenUrls = new Set<string>();
+  const articles = input.articles.filter(
+    (a) => !seenUrls.has(a.url) && seenUrls.add(a.url)
+  );
+  if (articles.length) {
+    await db
+      .insert(issueArticlesT)
+      .values(
+        articles.map((a) => ({
+          snapshotId: row.id,
+          url: a.url,
+          media: a.media ?? "",
+          title: a.title,
+          publishedAt: a.publishedAt
+            ? dayjs.tz(a.publishedAt, "Asia/Seoul").toDate()
+            : null,
+          brandMention: a.brandMention,
+        }))
+      )
+      .catch((error) => console.error("이슈 기사 목록을 저장하지 못했어요.", error));
+  }
 
   await db
     .update(issuesT)
