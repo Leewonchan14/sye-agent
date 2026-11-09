@@ -27,7 +27,7 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
     <button
       type="button"
       onClick={() => onEdit(entry)}
-      className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-shadow hover:bg-canvas-soft/60 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-canvas-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:bg-canvas-soft"
     >
       <EntryIcon entry={entry} size={36} className="rounded-[10px]" />
       <span className="min-w-0 flex-1">
@@ -62,9 +62,16 @@ export const LedgerEntryList = ({ entries, onEdit, emptyText }: ListProps) => {
   }
 
   return (
-    <div className="divide-y divide-hairline-soft">
+    <div>
       {entries.map((entry) => (
-        <LedgerEntryRow key={entry.id} entry={entry} onEdit={onEdit} />
+        // 둥근 버튼에 테두리를 주면 선 끝이 휘므로, 곧은 선은 바깥 칸에 그린다.
+        // left-14는 버튼 여백 + 아이콘 + 간격을 더한 글자 시작점이다.
+        <div
+          key={entry.id}
+          className="relative not-last:after:absolute not-last:after:right-2 not-last:after:bottom-0 not-last:after:left-14 not-last:after:h-px not-last:after:bg-hairline"
+        >
+          <LedgerEntryRow entry={entry} onEdit={onEdit} />
+        </div>
       ))}
     </div>
   );

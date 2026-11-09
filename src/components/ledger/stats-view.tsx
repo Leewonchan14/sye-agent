@@ -5,6 +5,11 @@ import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import {
+  categoryChipClass,
+  ExpenseCategoryChips,
+  type CategoryFilter,
+} from "@/components/ledger/category-chips";
+import {
   CATEGORY_COLOR_HEX,
   CategoryIcon,
   EntryIcon,
@@ -427,52 +432,6 @@ const KIND_FILTERS = [
 ] as const;
 
 type EntryKindFilter = (typeof KIND_FILTERS)[number]["id"];
-type CategoryFilter = number | "all";
-
-const categoryChipClass = (active: boolean) =>
-  `inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
-    active
-      ? "border-primary/30 bg-primary/10 text-primary"
-      : "border-hairline bg-surface text-muted hover:text-ink"
-  }`;
-
-const ExpenseCategoryChips = ({
-  label,
-  categories,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  categories: LedgerMonthPayload["categories"];
-  selected: CategoryFilter;
-  onSelect: (value: CategoryFilter) => void;
-}) => (
-  <div role="group" aria-label={label} className="mt-1.5 flex flex-wrap gap-1.5">
-    <button
-      type="button"
-      aria-pressed={selected === "all"}
-      onClick={() => onSelect("all")}
-      className={categoryChipClass(selected === "all")}
-    >
-      <CategoryIcon icon="wallet" color="neutral" size={16} />
-      <span className="truncate">전체</span>
-    </button>
-    {categories
-      .filter((category) => category.kind === "expense")
-      .map((category) => (
-        <button
-          key={category.id}
-          type="button"
-          aria-pressed={selected === category.id}
-          onClick={() => onSelect(category.id)}
-          className={categoryChipClass(selected === category.id)}
-        >
-          <CategoryIcon icon={category.icon} color={category.color} size={16} />
-          <span className="min-w-0 truncate">{category.name}</span>
-        </button>
-      ))}
-  </div>
-);
 
 const ENTRY_PAGE_SIZE = 10;
 const ENTRY_MORE_SIZE = 20;
@@ -551,6 +510,7 @@ const PeriodEntriesCard = ({
       {kind !== "income" && (
         <ExpenseCategoryChips
           label="지출·입금 내역 분류"
+          className="mt-1.5"
           categories={categories}
           selected={selected}
           onSelect={selectCategory}
@@ -770,6 +730,7 @@ const TopExpensesCard = ({
       <p className="text-[12px] font-medium text-muted">큰 지출 TOP 8</p>
       <ExpenseCategoryChips
         label="큰 지출 분류"
+        className="mt-1.5"
         categories={categories}
         selected={selected}
         onSelect={setSelected}
