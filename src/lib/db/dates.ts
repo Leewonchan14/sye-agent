@@ -9,9 +9,10 @@ import {
   isNull,
   lt,
   or,
+  sql,
 } from "drizzle-orm";
 
-import { fetchInstagramPhoto } from "@/lib/dates/photo";
+import { fetchInstagramPhotos } from "@/lib/dates/photo";
 import {
   type AgentDigestInput,
   DATE_REACTIONS,
@@ -252,10 +253,8 @@ const toSpotView = (row: SpotRow, dayKey: string): DateSpotView => ({
   address: row.address,
   priceHint: row.priceHint,
   tags: row.tags,
-  photoUrl:
-    row.photoUrl && row.photoExpiresAt && row.photoExpiresAt.valueOf() > Date.now()
-      ? row.photoUrl
-      : null,
+  photos:
+    row.photoExpiresAt && row.photoExpiresAt.valueOf() > Date.now() ? row.photoUrls : [],
   reaction: (DATE_REACTIONS as readonly string[]).includes(row.reaction ?? "")
     ? (row.reaction as DateReaction)
     : null,
@@ -371,6 +370,7 @@ export const refreshSpotPhotos = async (target: {
         eq(spotsT.reaction, "like")
       );
   const retryBefore = new Date(now - PHOTO_RETRY_MS);
+  const hasNoPhotos = sql`cardinality(${spotsT.photoUrls}) = 0`;
   const stale = await db
     .select({ id: spotsT.id, instagramUrl: spotsT.instagramUrl })
     .from(spotsT)
@@ -380,12 +380,12 @@ export const refreshSpotPhotos = async (target: {
         or(
           // 한 번도 안 찾아봤거나, 못 찾은 지 오래됐거나
           and(
-            isNull(spotsT.photoUrl),
+            hasNoPhotos,
             or(isNull(spotsT.photoCheckedAt), lt(spotsT.photoCheckedAt, retryBefore))
           ),
           // 주소 만료가 가까운데 최근에 다시 찾아보지 않았거나
           and(
-            isNotNull(spotsT.photoUrl),
+            sql`not ${hasNoPhotos}`,
             lt(spotsT.photoExpiresAt, new Date(now + PHOTO_REFRESH_BEFORE_MS)),
             or(
               isNull(spotsT.photoCheckedAt),
@@ -400,13 +400,13 @@ export const refreshSpotPhotos = async (target: {
 
   await Promise.all(
     stale.map(async (spot) => {
-      const photo = await fetchInstagramPhoto(spot.instagramUrl);
+      const photos = await fetchInstagramPhotos(spot.instagramUrl);
       await db
         .update(spotsT)
         .set({
           photoCheckedAt: new Date(),
           // 못 읽었을 때 아직 쓸 수 있는 예전 주소는 그대로 둔다(만료되면 화면에서 감춘다).
-          ...(photo ? { photoUrl: photo.url, photoExpiresAt: photo.expiresAt } : {}),
+          ...(photos ? { photoUrls: photos.urls, photoExpiresAt: photos.expiresAt } : {}),
         })
         .where(eq(spotsT.id, spot.id));
     })

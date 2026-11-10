@@ -566,10 +566,14 @@ export const dateSpots = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     /**
-     * 게시물 대표 사진(인스타그램 CDN 주소). 주소가 4~5일 뒤 만료되므로 사진 파일은 저장하지 않고,
-     * 만료가 가까우면 공식 임베드에서 다시 읽는다.
+     * 게시물 사진들(인스타그램 CDN 주소, 여러 장이면 게시물 순서대로 최대 10장).
+     * 주소가 4~5일 뒤 만료되므로 사진 파일은 저장하지 않고, 만료가 가까우면 공식 임베드에서 다시 읽는다.
      */
-    photoUrl: text("photo_url"),
+    photoUrls: text("photo_urls")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** 사진 주소 중 가장 먼저 만료되는 시각 */
     photoExpiresAt: timestamp("photo_expires_at", { withTimezone: true }),
     /** 마지막으로 사진을 찾아본 시각 — 사진이 없는 게시물을 계속 다시 찾지 않게 한다. */
     photoCheckedAt: timestamp("photo_checked_at", { withTimezone: true }),

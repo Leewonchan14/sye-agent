@@ -1,5 +1,5 @@
 {
-  "id": "99d7745d-6990-44bc-bdba-0bffa5e348be",
+  "id": "fba7a90d-3b36-4e44-a31a-496be21a22d8",
   "prevId": "cfada08f-0089-416a-b2c7-f40d64fe2cb4",
   "version": "7",
   "dialect": "postgresql",
@@ -415,11 +415,12 @@
           "notNull": true,
           "default": "'{}'::text[]"
         },
-        "photo_url": {
-          "name": "photo_url",
-          "type": "text",
+        "photo_urls": {
+          "name": "photo_urls",
+          "type": "text[]",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'{}'::text[]"
         },
         "photo_expires_at": {
           "name": "photo_expires_at",

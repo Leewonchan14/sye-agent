@@ -9,9 +9,17 @@ import {
   ThumbsDown,
   Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Carousel,
+  type CarouselApi,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import type { DateReaction, DateSpotView } from "@/lib/dates/types";
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
@@ -43,30 +51,93 @@ const mapUrl = (spot: DateSpotView) =>
     [spot.name, spot.address?.split(" ").slice(0, 3).join(" ")].filter(Boolean).join(" ")
   )}`;
 
-/** 게시물 대표 사진. 인스타그램 CDN에서 바로 받고, 못 받으면 자리를 비우지 않고 감춘다. */
-const SpotPhoto = ({ spot }: { spot: DateSpotView }) => {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  if (!spot.photoUrl || failedUrl === spot.photoUrl) return null;
+/** 게시물 사진. 인스타그램 CDN에서 바로 받고, 못 받은 사진은 빼고 보여 준다. */
+const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
+  const [failed, setFailed] = useState<string[]>([]);
+  const [api, setApi] = useState<CarouselApi>();
+  const [current, setCurrent] = useState(0);
+  const photos = spot.photos.filter((url) => !failed.includes(url));
+
+  useEffect(() => {
+    if (!api) return;
+    // 처음엔 0번째라 따로 맞추지 않고, 넘기거나 사진 수가 바뀔 때만 따라간다.
+    const sync = () => setCurrent(api.selectedScrollSnap());
+    api.on("select", sync).on("reInit", sync);
+    return () => {
+      api.off("select", sync).off("reInit", sync);
+    };
+  }, [api]);
+
+  if (!photos.length) return null;
+  const many = photos.length > 1;
+
   return (
-    <a
-      href={spot.instagramUrl}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`${spot.name} 인스타그램 게시물`}
-      className="block aspect-[4/3] overflow-hidden bg-canvas-card"
+    <Carousel
+      setApi={setApi}
+      aria-label={`${spot.name} 사진 ${photos.length}장`}
+      className="group/photos relative bg-canvas-card"
     >
-      {/* 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={spot.photoUrl}
-        alt={`${spot.name} 사진`}
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setFailedUrl(spot.photoUrl)}
-        className="size-full object-cover transition-transform duration-300 hover:scale-[1.02]"
-      />
-    </a>
+      <CarouselContent className="ml-0">
+        {photos.map((url, index) => (
+          <CarouselItem key={url} className="pl-0">
+            <a
+              href={spot.instagramUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${spot.name} 인스타그램 게시물`}
+              className="block aspect-[4/3] overflow-hidden"
+            >
+              {/* 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={many ? `${spot.name} 사진 ${index + 1}` : `${spot.name} 사진`}
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding="async"
+                draggable={false}
+                referrerPolicy="no-referrer"
+                onError={() => setFailed((list) => [...list, url])}
+                className="size-full object-cover select-none"
+              />
+            </a>
+          </CarouselItem>
+        ))}
+      </CarouselContent>
+      {many && (
+        <>
+          <span
+            aria-live="polite"
+            className="pointer-events-none absolute top-2.5 right-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums"
+          >
+            {current + 1} / {photos.length}
+          </span>
+          <CarouselPrevious
+            aria-label="이전 사진"
+            variant="secondary"
+            className="left-2 border-0 bg-white/85 shadow-sm hover:bg-white disabled:opacity-0 md:opacity-0 md:group-hover/photos:opacity-100 md:disabled:group-hover/photos:opacity-0"
+          />
+          <CarouselNext
+            aria-label="다음 사진"
+            variant="secondary"
+            className="right-2 border-0 bg-white/85 shadow-sm hover:bg-white disabled:opacity-0 md:opacity-0 md:group-hover/photos:opacity-100 md:disabled:group-hover/photos:opacity-0"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1"
+          >
+            {photos.map((url, index) => (
+              <span
+                key={url}
+                className={cn(
+                  "size-1.5 rounded-full bg-white/55 transition-colors",
+                  index === current && "bg-white"
+                )}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </Carousel>
   );
 };
 
@@ -86,7 +157,7 @@ export const SpotCard = ({
       spot.reaction === "pass" && "opacity-55"
     )}
   >
-    <SpotPhoto spot={spot} />
+    <SpotPhotos spot={spot} />
     <div className="flex flex-1 flex-col gap-3 p-4">
       <header className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
