@@ -22,8 +22,10 @@ import { EntryDialog } from "@/components/ledger/entry-dialog";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { LedgerEntryList } from "@/components/ledger/entry-list";
 import { PasteDialog } from "@/components/ledger/paste-dialog";
+import { RecurringTab } from "@/components/ledger/recurring-tab";
 import {
   SettingsDialog,
+  TripsTab,
   type LedgerSettingsTab,
 } from "@/components/ledger/settings-dialog";
 import { CategoryCard, StatsView } from "@/components/ledger/stats-view";
@@ -53,6 +55,8 @@ const TABS = [
   { id: "list", label: "내역" },
   { id: "calendar", label: "달력" },
   { id: "stats", label: "통계" },
+  { id: "recurring", label: "반복" },
+  { id: "trips", label: "여행" },
 ] as const;
 
 type LedgerTab = (typeof TABS)[number]["id"];
@@ -411,6 +415,8 @@ export const LedgerPage = () => {
   const fallbackDay = month === thisMonth ? today : `${month}-01`;
   const activeDay = selectedDay?.startsWith(`${month}-`) ? selectedDay : fallbackDay;
   const defaultEntryDate = tab === "calendar" ? activeDay : fallbackDay;
+  // 통계·반복·여행 탭은 월과 상관없는 화면이라 월 이동과 요약을 숨긴다.
+  const hidesMonthSummary = tab === "stats" || tab === "recurring" || tab === "trips";
   const monthLabel = formatMonthKo(month);
 
   const totalBudget = ledger?.budget.totalBudget ?? null;
@@ -461,7 +467,7 @@ export const LedgerPage = () => {
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <LedgerTabs tab={tab} onChange={setTab} />
 
-          {tab !== "stats" && (
+          {!hidesMonthSummary && (
             <div className="ml-auto flex items-center gap-1">
               {month !== thisMonth && (
                 <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
@@ -491,7 +497,7 @@ export const LedgerPage = () => {
           )}
         </div>
 
-        <div className={cn("mt-4", tab === "stats" && "hidden")}>
+        <div className={cn("mt-4", hidesMonthSummary && "hidden")}>
           <WeeklyRecapCard />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
@@ -719,6 +725,10 @@ export const LedgerPage = () => {
                   onEdit={openEdit}
                 />
               )}
+
+              {tab === "recurring" && <RecurringTab ledger={ledger} />}
+
+              {tab === "trips" && <TripsTab ledger={ledger} variant="page" />}
 
               {tab === "stats" && (
                 <StatsView

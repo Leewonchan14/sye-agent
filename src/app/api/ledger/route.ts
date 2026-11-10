@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth";
 import { getLedgerMonth } from "@/lib/db/ledger";
+import { materializeRecurring } from "@/lib/db/ledger-recurring";
 import { kst } from "@/lib/kst";
 import { ledgerErrorResponse } from "@/lib/ledger/api";
 
@@ -18,6 +19,7 @@ export const GET = async (req: Request) => {
       : kst().format("YYYY-MM");
 
   try {
+    await materializeRecurring();
     const ledger = await getLedgerMonth(month);
     return Response.json({ ledger });
   } catch (error) {

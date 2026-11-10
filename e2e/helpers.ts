@@ -18,7 +18,7 @@ export const daysAgo = (days: number) => kst().subtract(days, "day").format("YYY
 export const resetLedger = async () => {
   await pool.query(`
     truncate ledger_weekly_comments, auth_login_attempts, ledger_trips, ledger_entry_history, ledger_account, ledger_budgets, ledger_months,
-      ledger_entries, ledger_categories, ledger_assets restart identity cascade
+      ledger_entries, ledger_recurring, ledger_categories, ledger_assets restart identity cascade
   `);
 };
 
