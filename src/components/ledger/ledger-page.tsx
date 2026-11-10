@@ -451,9 +451,17 @@ export const LedgerPage = () => {
           </div>
         </header>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        {/* 탭은 항상 같은 자리에 둔다. 월 이동이 숨는 탭에서도 탭이 움직이지 않게 한다. */}
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <LedgerTabs tab={tab} onChange={setTab} />
+
           {tab !== "stats" && (
-            <div className="flex items-center gap-1">
+            <div className="ml-auto flex items-center gap-1">
+              {month !== thisMonth && (
+                <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
+                  이번 달
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -473,15 +481,8 @@ export const LedgerPage = () => {
               >
                 <ChevronRight />
               </Button>
-              {month !== thisMonth && (
-                <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
-                  이번 달
-                </Button>
-              )}
             </div>
           )}
-
-          <LedgerTabs tab={tab} onChange={setTab} />
         </div>
 
         <div className={cn("mt-4", tab === "stats" && "hidden")}>
