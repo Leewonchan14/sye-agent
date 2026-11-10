@@ -444,24 +444,56 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   await expect(multi.getByText("3 / 3")).toBeVisible();
   await expect(multi.getByRole("button", { name: "다음 사진" })).toBeDisabled();
 
-  // 사진을 누르면 그 자리에서 화면 가득 커지고, 다시 누르거나 Esc로 닫는다.
-  await multi.getByRole("img", { name: "여러 장 카페 사진 3" }).click();
-  const zoomed = page.locator("dialog[data-rmiz-modal][open] [data-rmiz-modal-img]");
-  await expect(zoomed).toBeVisible();
-  await expect(zoomed).toHaveAttribute("src", /\/img\/MULTI3a-3-640\.png/);
-  await expect(zoomed).toHaveAttribute("referrerpolicy", "no-referrer");
+  // 사진을 누르면 화면 가득 커지고, 크게 본 채로도 넘길 수 있다.
+  await multi.getByRole("button", { name: "여러 장 카페 사진 3 크게 보기" }).click();
+  const gallery = page.getByRole("dialog", { name: "여러 장 카페 사진 크게 보기" });
+  await expect(gallery).toBeVisible();
+  const big = (n: number) => gallery.getByRole("img", { name: `여러 장 카페 사진 ${n}` });
+  await expect(big(3)).toBeInViewport();
+  await expect(big(3)).toHaveAttribute("src", /\/img\/MULTI3a-3-640\.png/);
+  await expect(big(3)).toHaveAttribute("referrerpolicy", "no-referrer");
+  await expect(gallery.getByText("3 / 3")).toBeVisible();
+  await expect(gallery.getByRole("button", { name: "다음 사진" })).toBeDisabled();
+  // 화살표 버튼, 키보드, 밀기로 넘긴다. 밀어서 넘긴 것은 닫기로 치지 않는다.
+  await gallery.getByRole("button", { name: "이전 사진" }).click();
+  await expect(gallery.getByText("2 / 3")).toBeVisible();
+  await expect(big(2)).toBeInViewport();
+  await page.keyboard.press("ArrowLeft");
+  await expect(gallery.getByText("1 / 3")).toBeVisible();
+  await expect(gallery.getByRole("button", { name: "이전 사진" })).toBeDisabled();
+  const view = page.viewportSize()!;
+  await page.mouse.move(view.width * 0.8, view.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(view.width * 0.2, view.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(gallery.getByText("2 / 3")).toBeVisible();
+  await expect(gallery).toBeVisible();
+  // 크게 보는 사진은 카드보다 크다.
+  expect((await big(2).boundingBox())!.width).toBeGreaterThan(
+    (await multi.boundingBox())!.width * 0.9
+  );
+  // 닫으면 카드도 마지막에 본 사진에 와 있다.
   await page.keyboard.press("Escape");
-  await expect(page.locator("dialog[data-rmiz-modal][open]")).toHaveCount(0);
-  // 넘기려고 끈 것은 확대로 치지 않는다.
+  await expect(gallery).toBeHidden();
+  await expect(multi.getByText("2 / 3")).toBeVisible();
+  await expect(multi.getByRole("img", { name: "여러 장 카페 사진 2" })).toBeInViewport();
+  // 사진을 한 번 누르거나 닫기 버튼으로도 닫는다.
+  await multi.getByRole("button", { name: "여러 장 카페 사진 2 크게 보기" }).click();
+  await big(2).click();
+  await expect(gallery).toBeHidden();
+  await multi.getByRole("button", { name: "여러 장 카페 사진 2 크게 보기" }).click();
+  await gallery.getByRole("button", { name: "닫기" }).click();
+  await expect(gallery).toBeHidden();
+  // 카드에서 넘기려고 끈 것은 크게 보기로 치지 않는다.
   const box = (await multi
-    .getByRole("img", { name: "여러 장 카페 사진 3" })
+    .getByRole("img", { name: "여러 장 카페 사진 2" })
     .boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
   await page.mouse.up();
-  await expect(multi.getByText("2 / 3")).toBeVisible();
-  await expect(page.locator("dialog[data-rmiz-modal][open]")).toHaveCount(0);
+  await expect(multi.getByText("1 / 3")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // 영상은 GIF처럼 소리 없이 반복 재생한다.
   const clip = page.getByRole("article", { name: "영상 섞인 카페" });
@@ -479,11 +511,10 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   await expect
     .poll(() => video.evaluate((el: HTMLVideoElement) => el.paused))
     .toBe(false);
-  // 영상도 사진처럼 누르면 크게 보고, 확대한 화면에서도 GIF처럼 돈다.
-  await video.click();
-  const zoomedVideo = page.locator(
-    "dialog[data-rmiz-modal][open] video[data-rmiz-modal-img]"
-  );
+  // 영상도 사진처럼 누르면 크게 보고, 크게 본 화면에서도 GIF처럼 돈다.
+  await clip.getByRole("button", { name: "영상 섞인 카페 영상 2 크게 보기" }).click();
+  const clipGallery = page.getByRole("dialog", { name: "영상 섞인 카페 사진 크게 보기" });
+  const zoomedVideo = clipGallery.locator('video[aria-label="영상 섞인 카페 영상 2"]');
   await expect(zoomedVideo).toBeVisible();
   await expect(zoomedVideo).toHaveAttribute("src", /\/img\/MULTI2v-2\.mp4/);
   await expect(zoomedVideo).toHaveAttribute("aria-label", "영상 섞인 카페 영상 2");
@@ -496,8 +527,14 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   expect(
     await zoomedVideo.evaluate((el) => el.getBoundingClientRect().height)
   ).toBeGreaterThan((await video.boundingBox())!.height);
+  // 크게 본 채로 사진 칸으로 넘기면 영상은 멈춘다.
+  await clipGallery.getByRole("button", { name: "이전 사진" }).click();
+  await expect
+    .poll(() => zoomedVideo.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
   await page.keyboard.press("Escape");
-  await expect(page.locator("dialog[data-rmiz-modal][open]")).toHaveCount(0);
+  await expect(clipGallery).toBeHidden();
+  await clip.getByRole("button", { name: "다음 사진" }).click();
   // 보이지 않는 칸으로 넘기면 멈춘다.
   await clip.getByRole("button", { name: "이전 사진" }).click();
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
