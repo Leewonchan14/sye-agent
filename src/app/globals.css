@@ -317,3 +317,69 @@ body {
 [data-streamdown="code-block-actions"] {
   border: none !important;
 }
+[data-rmiz-btn-zoom],
+[data-rmiz-btn-unzoom] {
+  display: none;
+}
+[data-rmiz-content="found"] img,
+[data-rmiz-content="found"] svg,
+[data-rmiz-content="found"] [role="img"],
+[data-rmiz-content="found"] [data-zoom] {
+  cursor: zoom-in;
+}
+[data-rmiz-ghost] {
+  pointer-events: none;
+  position: absolute;
+}
+[data-rmiz-modal-content] {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+[data-rmiz-modal-img] {
+  cursor: zoom-out;
+  image-rendering: high-quality;
+  position: absolute;
+  transform-origin: 0 0;
+  transition: transform 0.3s;
+}
+[data-rmiz-modal-overlay] {
+  inset: 0;
+  position: absolute;
+  transition: background-color 0.3s;
+}
+[data-rmiz-modal-overlay="hidden"] {
+  background-color: transparent;
+}
+[data-rmiz-modal-overlay="visible"] {
+  background-color: var(--background);
+}
+[data-rmiz-modal]::backdrop {
+  display: none;
+}
+[data-rmiz-modal]:focus-visible {
+  outline: none;
+}
+[data-rmiz-modal][open] {
+  background-color: transparent;
+  border: 0;
+  height: 100dvh;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  overflow: hidden;
+  padding: 0;
+  position: fixed;
+  width: 100dvw;
+}
+[data-rmiz] {
+  display: block;
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-rmiz-modal-overlay],
+  [data-rmiz-modal-img] {
+    transition-duration: 0.01ms !important;
+  }
+}
