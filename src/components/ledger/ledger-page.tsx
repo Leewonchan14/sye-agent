@@ -26,7 +26,7 @@ import {
   SettingsDialog,
   type LedgerSettingsTab,
 } from "@/components/ledger/settings-dialog";
-import { StatsView } from "@/components/ledger/stats-view";
+import { CategoryCard, StatsView } from "@/components/ledger/stats-view";
 import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
 import { WeeklyRecapCard } from "@/components/ledger/weekly-recap-card";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -641,25 +641,31 @@ export const LedgerPage = () => {
                       </div>
                     )}
 
-                  {!deferredSearch && topExpenses.length > 0 && (
-                    <section
-                      aria-label="큰 지출"
-                      className="rounded-2xl border border-hairline bg-surface p-4"
-                    >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <h3 className="text-[12px] font-medium text-muted">
-                          큰 지출 TOP 8
-                        </h3>
-                        <span className="text-[11px] text-muted">
-                          {monthLabel}
-                          {filterCategory && ` · ${filterCategory.name}`}
-                        </span>
-                      </div>
-                      <TopExpensesList
-                        items={topExpenses}
-                        className="mt-2 md:grid md:grid-cols-2 md:space-y-0 md:gap-x-6 md:gap-y-2.5"
+                  {!deferredSearch && ledger.byCategory.length > 0 && (
+                    <div className="grid items-start gap-3 md:grid-cols-2">
+                      <CategoryCard
+                        total={ledger.summary.expense}
+                        byCategory={ledger.byCategory}
+                        entries={ledger.entries}
                       />
-                    </section>
+                      {topExpenses.length > 0 && (
+                        <section
+                          aria-label="큰 지출"
+                          className="rounded-2xl border border-hairline bg-surface p-4"
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <h3 className="text-[12px] font-medium text-muted">
+                              큰 지출 TOP 8
+                            </h3>
+                            <span className="text-[11px] text-muted">
+                              {monthLabel}
+                              {filterCategory && ` · ${filterCategory.name}`}
+                            </span>
+                          </div>
+                          <TopExpensesList items={topExpenses} className="mt-2" />
+                        </section>
+                      )}
+                    </div>
                   )}
 
                   {deferredSearch ? (

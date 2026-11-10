@@ -1,7 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import {
@@ -292,10 +292,85 @@ const SpendCard = ({ daily }: { daily: LedgerStats["daily"] }) => {
   );
 };
 
-const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
-  const total = stats.summary.expense;
-  const top = stats.byCategory.slice(0, 7);
-  const rest = stats.byCategory.slice(7);
+type BreakdownRow = { name: string; amount: number; count: number };
+
+const sumBy = (entries: LedgerEntryView[], keyOf: (entry: LedgerEntryView) => string) => {
+  const totals = new Map<string, BreakdownRow>();
+  for (const entry of entries) {
+    const name = keyOf(entry);
+    const row = totals.get(name) ?? { name, amount: 0, count: 0 };
+    row.amount += entry.amount;
+    row.count += 1;
+    totals.set(name, row);
+  }
+  return [...totals.values()].sort((a, b) => b.amount - a.amount || b.count - a.count);
+};
+
+const BreakdownList = ({
+  title,
+  rows,
+  total,
+}: {
+  title: string;
+  rows: BreakdownRow[];
+  total: number;
+}) => (
+  <div>
+    <p className="text-[11px] font-medium text-muted">{title}</p>
+    <ul className="mt-1 space-y-1">
+      {rows.map((row) => (
+        <li
+          key={row.name}
+          className="flex items-baseline justify-between gap-2 text-[12px] tabular-nums"
+        >
+          <span className="min-w-0 truncate text-ink">{row.name}</span>
+          <span className="shrink-0 text-ink">
+            {formatWon(row.amount)}{" "}
+            <span className="text-[11px] text-muted">
+              {row.count}건 · {total === 0 ? 0 : Math.round((row.amount / total) * 100)}%
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
+
+/** 분류를 눌렀을 때 그 돈이 어디에서 나갔는지 보여 준다. */
+const CategoryBreakdown = ({
+  entries,
+  total,
+}: {
+  entries: LedgerEntryView[];
+  total: number;
+}) => {
+  const places = sumBy(
+    entries,
+    (entry) => entry.memo.trim() || entry.categoryName || "지출"
+  ).slice(0, 5);
+
+  return (
+    <div className="mt-2 rounded-lg bg-canvas-soft p-2.5">
+      <BreakdownList title="많이 쓴 곳 TOP 5" rows={places} total={total} />
+    </div>
+  );
+};
+
+/** 통계 탭과 내역 탭이 함께 쓰는 분류별 지출 도넛. 분류를 누르면 사용처를 펼친다. */
+export const CategoryCard = ({
+  total,
+  byCategory,
+  entries,
+  className,
+}: {
+  total: number;
+  byCategory: LedgerStats["byCategory"];
+  entries: LedgerEntryView[];
+  className?: string;
+}) => {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const top = byCategory.slice(0, 7);
+  const rest = byCategory.slice(7);
   const slices = top.map((category) => ({
     key: category.categoryId == null ? "none" : String(category.categoryId),
     name: category.name,
@@ -304,6 +379,7 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
     amount: category.amount,
     pct: category.pct,
     color: CATEGORY_COLOR_HEX(category.color),
+    categoryIds: [category.categoryId],
   }));
 
   if (rest.length) {
@@ -316,8 +392,13 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
       amount,
       pct: total === 0 ? 0 : Math.round((amount / total) * 100),
       color: CATEGORY_COLOR_HEX("neutral"),
+      categoryIds: rest.map((category) => category.categoryId),
     });
   }
+
+  const expenses = entries.filter((entry) => entry.kind === "expense");
+  const entriesOf = (categoryIds: (number | null)[]) =>
+    expenses.filter((entry) => categoryIds.includes(entry.categoryId));
 
   const radius = 70;
   const circumference = 2 * Math.PI * radius;
@@ -333,8 +414,13 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
   });
 
   return (
-    <StatCard>
-      <p className="text-[12px] font-medium text-muted">분류별 지출</p>
+    <StatCard className={className}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[12px] font-medium text-muted">분류별 지출</p>
+        {slices.length > 0 && (
+          <span className="text-[11px] text-muted">눌러서 자세히</span>
+        )}
+      </div>
       {slices.length ? (
         <div className="mt-3 flex flex-col items-center gap-4 sm:flex-row">
           <div className="w-36 shrink-0">
@@ -361,6 +447,7 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
                   r={radius}
                   fill="none"
                   stroke={slice.color}
+                  strokeOpacity={openKey && openKey !== slice.key ? 0.25 : 1}
                   strokeWidth={22}
                   strokeDasharray={`${length} ${circumference - length}`}
                   strokeDashoffset={dashOffset}
@@ -393,28 +480,49 @@ const CategoryCard = ({ stats }: { stats: LedgerStats }) => {
             </svg>
           </div>
 
-          <ul className="min-w-0 flex-1 space-y-2">
+          <ul className="w-full min-w-0 flex-1 space-y-2">
             {slices.map((slice) => (
               <li key={slice.key}>
-                <div className="flex items-center justify-between gap-2 text-[12px]">
-                  <span className="flex min-w-0 items-center gap-1.5 text-ink">
-                    <CategoryIcon icon={slice.icon} color={slice.colorKey} size={18} />
-                    <span className="truncate">{slice.name}</span>
-                  </span>
-                  <span className="shrink-0 text-[11px] text-body tabular-nums">
-                    {formatWon(slice.amount)}{" "}
-                    <span className="text-muted">{slice.pct}%</span>
-                  </span>
-                </div>
-                <div className="mt-1 h-1 overflow-hidden rounded-full bg-canvas-soft">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.max(0, Math.min(slice.pct, 100))}%`,
-                      backgroundColor: slice.color,
-                    }}
+                <button
+                  type="button"
+                  aria-expanded={openKey === slice.key}
+                  onClick={() =>
+                    setOpenKey((current) => (current === slice.key ? null : slice.key))
+                  }
+                  className="block w-full rounded-md text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  <div className="flex items-center justify-between gap-2 text-[12px]">
+                    <span className="flex min-w-0 items-center gap-1.5 text-ink">
+                      <CategoryIcon icon={slice.icon} color={slice.colorKey} size={18} />
+                      <span className="truncate">{slice.name}</span>
+                      <ChevronDown
+                        className={cn(
+                          "size-3 shrink-0 text-muted transition-transform",
+                          openKey === slice.key && "rotate-180"
+                        )}
+                      />
+                    </span>
+                    <span className="shrink-0 text-[11px] text-body tabular-nums">
+                      {formatWon(slice.amount)}{" "}
+                      <span className="text-muted">{slice.pct}%</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-canvas-soft">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(0, Math.min(slice.pct, 100))}%`,
+                        backgroundColor: slice.color,
+                      }}
+                    />
+                  </div>
+                </button>
+                {openKey === slice.key && (
+                  <CategoryBreakdown
+                    entries={entriesOf(slice.categoryIds)}
+                    total={slice.amount}
                   />
-                </div>
+                )}
               </li>
             ))}
           </ul>
@@ -1186,7 +1294,11 @@ export const StatsView = ({
           {hasActivity && (
             <>
               <TopExpensesCard entries={stats.entries} categories={categories} />
-              <CategoryCard stats={stats} />
+              <CategoryCard
+                total={stats.summary.expense}
+                byCategory={stats.byCategory}
+                entries={stats.entries}
+              />
             </>
           )}
           {!isTripReport && <AllTimeCard allTime={stats.allTime} />}
