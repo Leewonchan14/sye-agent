@@ -50,6 +50,15 @@ export const openLedger = async (page: Page, token: string) => {
   await page.getByRole("button", { name: "내역 추가" }).first().waitFor();
 };
 
+/** 내역을 주 단위로 바꾸고 지난주로 옮긴다. 리캡도 지난주 주간 리캡으로 바뀐다. */
+export const showLastWeek = async (page: Page) => {
+  await page
+    .getByRole("group", { name: "기간 단위" })
+    .getByRole("button", { name: "주" })
+    .click();
+  await page.getByRole("button", { name: "이전 주" }).click();
+};
+
 export const authHeaders = (token: string) => ({ "x-auth-token": token });
 
 /** 기본 분류를 만들고 이름으로 찾을 수 있게 돌려준다. */

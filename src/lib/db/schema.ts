@@ -291,9 +291,12 @@ export const ledgerBudgets = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.month, t.categoryId] }) })
 );
 
-/** 주간 리캡의 하치와레 코멘트. expense는 코멘트를 쓸 때의 지출 합계다. */
+/**
+ * 주간·월간 리캡의 하치와레 코멘트. expense는 코멘트를 쓸 때의 지출 합계다.
+ * weekStart는 리캡 키다: 주간은 월요일(YYYY-MM-DD), 월간은 달(YYYY-MM).
+ */
 export const ledgerWeeklyComments = pgTable("ledger_weekly_comments", {
-  weekStart: text("week_start").primaryKey(), // YYYY-MM-DD, 월요일
+  weekStart: text("week_start").primaryKey(), // 주간 YYYY-MM-DD(월요일) 또는 월간 YYYY-MM
   expense: integer("expense").notNull(),
   comment: text("comment"),
   attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),

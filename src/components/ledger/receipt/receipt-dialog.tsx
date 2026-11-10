@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { kst } from "@/lib/kst";
-import type { LedgerWeeklyRecap } from "@/lib/ledger/recap";
+import type { LedgerRecap } from "@/lib/ledger/recap";
 import { buildReceiptLines, receiptLineText } from "@/lib/ledger/receipt";
 
 // three.js는 영수증을 뽑을 때만 받는다.
@@ -29,13 +29,21 @@ const ReceiptPrinter = dynamic(
 );
 
 interface Props {
-  recap: LedgerWeeklyRecap;
+  recap: LedgerRecap;
+  /** 리캡 카드 제목과 같은 이름(예: 지난주, 10월). 영수증 제목에 붙인다. */
+  periodName: string;
   budgetLine: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const ReceiptDialog = ({ recap, budgetLine, open, onOpenChange }: Props) => {
+export const ReceiptDialog = ({
+  recap,
+  periodName,
+  budgetLine,
+  open,
+  onOpenChange,
+}: Props) => {
   // 열 때마다, 그리고 다시 뽑을 때마다 새로 출력한다(출력 시각도 새로 찍힌다).
   const [run, setRun] = useState(0);
 
@@ -43,7 +51,7 @@ export const ReceiptDialog = ({ recap, budgetLine, open, onOpenChange }: Props) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>지난주 영수증</DialogTitle>
+          <DialogTitle>{periodName} 영수증</DialogTitle>
           <DialogDescription>
             {shortDate(recap.from)} ~ {shortDate(recap.to)} 지출을 한 장으로 뽑았어요.
           </DialogDescription>
@@ -52,6 +60,7 @@ export const ReceiptDialog = ({ recap, budgetLine, open, onOpenChange }: Props) 
           <ReceiptBody
             key={run}
             recap={recap}
+            periodName={periodName}
             budgetLine={budgetLine}
             onReprint={() => setRun((value) => value + 1)}
           />
@@ -63,10 +72,12 @@ export const ReceiptDialog = ({ recap, budgetLine, open, onOpenChange }: Props) 
 
 const ReceiptBody = ({
   recap,
+  periodName,
   budgetLine,
   onReprint,
 }: {
-  recap: LedgerWeeklyRecap;
+  recap: LedgerRecap;
+  periodName: string;
   budgetLine: string | null;
   onReprint: () => void;
 }) => {
@@ -99,7 +110,7 @@ const ReceiptBody = ({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={image}
-        alt={`지난주 영수증, 합계 ${recap.expense.toLocaleString("ko-KR")}원`}
+        alt={`${periodName} 영수증, 합계 ${recap.expense.toLocaleString("ko-KR")}원`}
         className="w-full max-w-[300px] animate-in drop-shadow-md duration-500 fade-in slide-in-from-top-4"
       />
       <ul className="sr-only">
@@ -116,7 +127,7 @@ const ReceiptBody = ({
         <Button
           variant="outline"
           size="sm"
-          render={<a href={image} download={`모임통장-영수증-${recap.from}.png`} />}
+          render={<a href={image} download={`모임통장-영수증-${recap.key}.png`} />}
           nativeButton={false}
         >
           <Download />

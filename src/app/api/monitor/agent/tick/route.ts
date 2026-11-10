@@ -1,7 +1,7 @@
 import { after } from "next/server";
 
 import { runDateSpotTick } from "@/lib/dates/tick";
-import { writeWeeklyRecapComment } from "@/lib/ledger/recap-comment";
+import { writeRecapComments } from "@/lib/ledger/recap-comment";
 import { monitorErrorResponse, requireAgentKey } from "@/lib/monitor/api";
 import { runDailyCollectTick } from "@/lib/monitor/daily-collect";
 import { publicOrigin } from "@/lib/monitor/origin";
@@ -37,7 +37,7 @@ export const POST = async (req: Request) => {
   const authError = requireAgentKey(req);
   if (authError) return authError;
   // 응답을 돌려준 뒤에 돌아서 수집 시계를 늦추지 않는다.
-  after(writeWeeklyRecapComment);
+  after(writeRecapComments);
   try {
     const origin = publicOrigin(req);
     const siteOrigin = new URL(req.url).origin;
