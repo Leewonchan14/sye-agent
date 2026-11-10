@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
-import { getLedgerMonth } from "@/lib/db/ledger";
+import { compareLedgerEntries, getLedgerMonth } from "@/lib/db/ledger";
 import { getLedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { getBudgetPace } from "@/lib/ledger/pace";
@@ -48,6 +48,16 @@ export const getLedgerWeeklyRecap = async (): Promise<LedgerWeeklyRecap> => {
         id: entry.id,
         date: entry.entryDate,
         memo: entry.memo,
+        amount: entry.amount,
+        categoryName: entry.categoryName,
+      })),
+    items: current.entries
+      .filter((entry) => entry.kind === "expense")
+      .sort((a, b) => compareLedgerEntries(b, a))
+      .map((entry) => ({
+        id: entry.id,
+        date: entry.entryDate,
+        label: entry.memo || entry.categoryName || "내역",
         amount: entry.amount,
         categoryName: entry.categoryName,
       })),

@@ -1,7 +1,14 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Wallet,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
   Bar,
@@ -55,6 +62,13 @@ import {
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
 import { projectMonthExpense } from "@/lib/ledger/pace";
+import {
+  comparableWeekRange,
+  formatWeekKo,
+  shiftWeek,
+  weekRange,
+  weekStartOf,
+} from "@/lib/ledger/week";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -65,10 +79,16 @@ interface Props {
   totalBudget: number | null;
   onEdit: (entry: LedgerEntryView) => void;
   trips: LedgerMonthPayload["trips"];
+  /** 내역·달력에서 주 단위로 보고 있었으면 주별 리포트로 연다. */
+  initialPeriod: "month" | "week";
+  /** 주별 리포트의 주(월요일). 내역·달력 탭과 같은 주를 함께 쓴다. */
+  weekStart: string;
+  onWeekChange: (weekStart: string) => void;
 }
 
 const RANGES = [
   { id: "month", label: "월별" },
+  { id: "week", label: "주별" },
   { id: "trip", label: "여행" },
   { id: "all", label: "전체" },
   { id: "3m", label: "최근 3개월" },
@@ -687,6 +707,26 @@ type EntryKindFilter = (typeof KIND_FILTERS)[number]["id"];
 const ENTRY_PAGE_SIZE = 10;
 const ENTRY_MORE_SIZE = 20;
 
+const SORT_KEYS = [
+  { id: "date", label: "날짜" },
+  { id: "amount", label: "금액" },
+] as const;
+
+type EntrySortKey = (typeof SORT_KEYS)[number]["id"];
+type EntrySortDir = "desc" | "asc";
+
+const SORT_DIR_LABEL: Record<EntrySortKey, Record<EntrySortDir, string>> = {
+  date: { desc: "최신순", asc: "오래된순" },
+  amount: { desc: "큰 금액순", asc: "작은 금액순" },
+};
+
+/** rows는 최신순으로 들어온다. 금액이 같으면 최신 내역이 먼저 오도록 안정 정렬한다. */
+const sortEntries = (rows: LedgerEntryView[], key: EntrySortKey, dir: EntrySortDir) => {
+  if (key === "date") return dir === "desc" ? rows : [...rows].reverse();
+  const sign = dir === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => sign * (a.amount - b.amount));
+};
+
 const PeriodEntriesCard = ({
   entries,
   categories,
@@ -698,6 +738,8 @@ const PeriodEntriesCard = ({
 }) => {
   const [kind, setKind] = useState<EntryKindFilter>("all");
   const [selected, setSelected] = useState<CategoryFilter>("all");
+  const [sortKey, setSortKey] = useState<EntrySortKey>("date");
+  const [sortDir, setSortDir] = useState<EntrySortDir>("desc");
   const [visibleCount, setVisibleCount] = useState(ENTRY_PAGE_SIZE);
 
   const selectCategory = (value: CategoryFilter) => {
@@ -712,6 +754,7 @@ const PeriodEntriesCard = ({
         (selected === "all" || entry.categoryId === selected)
     )
     .reverse();
+  const sortedRows = sortEntries(rows, sortKey, sortDir);
 
   const expenseTotal = rows
     .filter((entry) => entry.kind === "expense")
@@ -733,29 +776,74 @@ const PeriodEntriesCard = ({
         </span>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {KIND_FILTERS.map((option) => {
-          const active = kind === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => {
-                setKind(option.id);
-                if (option.id === "income") selectCategory("all");
-                else setVisibleCount(ENTRY_PAGE_SIZE);
-              }}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                active
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-hairline bg-surface text-muted hover:text-ink"
-              }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
+          {KIND_FILTERS.map((option) => {
+            const active = kind === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  setKind(option.id);
+                  if (option.id === "income") selectCategory("all");
+                  else setVisibleCount(ENTRY_PAGE_SIZE);
+                }}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  active
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-hairline bg-surface text-muted hover:text-ink"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-1">
+          <div role="group" aria-label="정렬 기준" className="flex gap-0.5">
+            {SORT_KEYS.map((option) => {
+              const active = sortKey === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    if (active) return;
+                    setSortKey(option.id);
+                    setSortDir("desc");
+                    setVisibleCount(ENTRY_PAGE_SIZE);
+                  }}
+                  className={cn(
+                    "rounded-full px-2 py-1 text-[11px] transition-colors",
+                    active && "bg-canvas-soft font-medium text-ink",
+                    !active && "text-muted hover:text-ink"
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            aria-label={`정렬 방향: ${SORT_DIR_LABEL[sortKey][sortDir]}`}
+            onClick={() => {
+              setSortDir((dir) => (dir === "desc" ? "asc" : "desc"));
+              setVisibleCount(ENTRY_PAGE_SIZE);
+            }}
+            className="flex items-center gap-0.5 rounded-full px-1.5 py-1 text-[11px] text-muted transition-colors hover:text-ink"
+          >
+            {sortDir === "desc" ? (
+              <ArrowDown className="size-3" />
+            ) : (
+              <ArrowUp className="size-3" />
+            )}
+            {SORT_DIR_LABEL[sortKey][sortDir]}
+          </button>
+        </div>
       </div>
 
       {kind !== "income" && (
@@ -770,7 +858,7 @@ const PeriodEntriesCard = ({
 
       {rows.length ? (
         <ul className="mt-2 divide-y divide-hairline-soft">
-          {rows.slice(0, visibleCount).map((entry) => {
+          {sortedRows.slice(0, visibleCount).map((entry) => {
             const isIncome = entry.kind === "income";
             return (
               <li key={entry.id}>
@@ -1005,13 +1093,17 @@ const MonthCompareCard = ({
   range,
   isCurrentMonth,
   wide,
+  unit = "month",
 }: {
   current: LedgerStats;
   previous: LedgerStats;
   range: { from: string; to: string };
   isCurrentMonth: boolean;
   wide: boolean;
+  /** 주별 리포트면 지난주와 비교한다. */
+  unit?: "month" | "week";
 }) => {
+  const previousName = unit === "week" ? "지난주" : "지난달";
   const result = compareLedgerPeriods(current, previous);
   const { expense, income } = result;
   const span = `${range.from.slice(5).replace("-", ".")} ~ ${range.to.slice(5).replace("-", ".")}`;
@@ -1019,9 +1111,13 @@ const MonthCompareCard = ({
   return (
     <StatCard className={cn(wide && "md:col-span-2")}>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">전월 대비</p>
+        <p className="text-[12px] font-medium text-muted">
+          {unit === "week" ? "전주 대비" : "전월 대비"}
+        </p>
         <span className="shrink-0 text-[10px] text-muted-soft tabular-nums">
-          {isCurrentMonth ? `지난달 같은 기간 ${span}` : `지난달 ${span}`}
+          {isCurrentMonth
+            ? `${previousName} 같은 기간 ${span}`
+            : `${previousName} ${span}`}
         </span>
       </div>
 
@@ -1161,14 +1257,22 @@ export const StatsView = ({
   expenseReference,
   totalBudget,
   onEdit,
+  initialPeriod,
+  weekStart,
+  onWeekChange,
 }: Props) => {
   const token = useAuthStore((s) => s.token);
-  const [range, setRange] = useState<RangeId>("month");
+  const [range, setRange] = useState<RangeId>(initialPeriod);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
-  const applied = range === "month" ? monthRange(month) : appliedRange;
+  const applied =
+    range === "month"
+      ? monthRange(month)
+      : range === "week"
+        ? weekRange(weekStart, todayKst())
+        : appliedRange;
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
   const [excludeTrips, setExcludeTrips] = useState(false);
   const isTripReport = range === "trip";
@@ -1176,12 +1280,13 @@ export const StatsView = ({
   const shouldExclude = !isTripReport && excludeTrips;
   const statsScope = shouldExclude ? "without-trips" : undefined;
   const thisMonth = currentMonthKst();
+  const thisWeek = weekStartOf(todayKst());
 
   const selectRange = (id: RangeId) => {
     setRange(id);
     setCustomError(null);
 
-    if (id === "month" || id === "trip") return;
+    if (id === "month" || id === "week" || id === "trip") return;
 
     if (id === "custom") {
       const from = customFrom || kst(todayKst()).subtract(30, "day").format("YYYY-MM-DD");
@@ -1223,7 +1328,11 @@ export const StatsView = ({
   const stats = statsQuery.data;
 
   const previousRange =
-    range === "month" ? comparableMonthRange(month, todayKst()) : null;
+    range === "month"
+      ? comparableMonthRange(month, todayKst())
+      : range === "week"
+        ? comparableWeekRange(weekStart, todayKst())
+        : null;
   const previousQuery = useQuery({
     queryKey: ledgerKeys.stats(previousRange?.from, previousRange?.to, statsScope),
     queryFn: () =>
@@ -1336,6 +1445,36 @@ export const StatsView = ({
             </div>
           )}
 
+          {range === "week" && (
+            <div className="-ml-2 flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="이전 주"
+                onClick={() => onWeekChange(shiftWeek(weekStart, -1))}
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
+                {formatWeekKo(weekStart, todayKst())}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="다음 주"
+                disabled={weekStart >= thisWeek}
+                onClick={() => onWeekChange(shiftWeek(weekStart, 1))}
+              >
+                <ChevronRight />
+              </Button>
+              {weekStart !== thisWeek && (
+                <Button variant="ghost" size="sm" onClick={() => onWeekChange(thisWeek)}>
+                  이번 주
+                </Button>
+              )}
+            </div>
+          )}
+
           {range === "custom" ? (
             <div className="w-full">
               <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:items-end">
@@ -1419,8 +1558,12 @@ export const StatsView = ({
               current={stats}
               previous={previousQuery.data}
               range={previousRange}
-              isCurrentMonth={month === thisMonth}
-              wide={month !== thisMonth}
+              unit={range === "week" ? "week" : "month"}
+              isCurrentMonth={
+                range === "week" ? weekStart === thisWeek : month === thisMonth
+              }
+              // 주별에는 이번 달 예상 카드가 없어 비교 카드가 한 줄을 다 쓴다.
+              wide={range === "week" || month !== thisMonth}
             />
           )}
           {hasActivity && range === "month" && (

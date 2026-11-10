@@ -30,6 +30,7 @@ import {
 } from "@/components/ledger/settings-dialog";
 import { CategoryCard, StatsView } from "@/components/ledger/stats-view";
 import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
+import { ViewToggle } from "@/components/ledger/view-toggle";
 import { WeeklyRecapCard } from "@/components/ledger/weekly-recap-card";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,14 @@ import {
   todayKst,
 } from "@/lib/ledger/format";
 import { getBudgetPace, type LedgerBudgetPace } from "@/lib/ledger/pace";
+import {
+  formatWeekKo,
+  isInWeek,
+  shiftWeek,
+  weekMonth,
+  weekMonths,
+  weekStartOf,
+} from "@/lib/ledger/week";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -60,6 +69,13 @@ const TABS = [
 ] as const;
 
 type LedgerTab = (typeof TABS)[number]["id"];
+
+const PERIODS = [
+  { id: "month", label: "월" },
+  { id: "week", label: "주" },
+] as const;
+
+export type LedgerPeriod = (typeof PERIODS)[number]["id"];
 
 interface DayGroup {
   date: string;
@@ -242,16 +258,16 @@ const CategoryBudgetCard = ({ ledger }: { ledger: LedgerMonthPayload }) => {
 const COMPANION_CATEGORY: Record<string, string> = { 식비: "카페" };
 
 const CategoryTotalLine = ({
-  monthLabel,
+  periodLabel,
   name,
   entries,
 }: {
-  monthLabel: string;
+  periodLabel: string;
   name: string;
   entries: LedgerEntryView[];
 }) => (
   <p className="px-1 text-[12px] text-muted tabular-nums">
-    {monthLabel} {name} {entries.length}건 · 지출{" "}
+    {periodLabel} {name} {entries.length}건 · 지출{" "}
     <span className="font-medium text-ink">
       {formatWon(entries.reduce((sum, entry) => sum + entry.amount, 0))}
     </span>
@@ -318,6 +334,10 @@ const SearchResults = ({
 export const LedgerPage = () => {
   const token = useAuthStore((s) => s.token);
   const [month, setMonth] = useState<string>(() => currentMonthKst());
+  // 주 단위로 볼 때 그 주의 월요일. 이때 month는 그 주가 속한 달을 따라간다.
+  const [period, setPeriod] = useState<LedgerPeriod>("month");
+  const [weekStart, setWeekStart] = useState<string>(() => weekStartOf(todayKst()));
+  const isWeek = period === "week";
   const [tab, setTab] = useState<LedgerTab>("list");
   const [entryOpen, setEntryOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LedgerEntryView | null>(null);
@@ -348,6 +368,72 @@ export const LedgerPage = () => {
     ...LEDGER_LIVE_QUERY,
   });
 
+  // 두 달에 걸친 주는 다른 달 내역도 읽어 합친다.
+  const otherMonth = isWeek ? weekMonths(weekStart).find((m) => m !== month) : undefined;
+  const otherQuery = useQuery({
+    queryKey: ledgerKeys.month(otherMonth ?? ""),
+    queryFn: async () => {
+      const data = await ledgerRequest<{ ledger: LedgerMonthPayload }>(
+        token,
+        `/api/ledger?month=${otherMonth}`
+      );
+      return data.ledger;
+    },
+    enabled: Boolean(token && otherMonth),
+    ...LEDGER_LIVE_QUERY,
+  });
+  const otherLedger = otherMonth ? otherQuery.data : undefined;
+  const periodPending = Boolean(otherMonth) && !otherLedger;
+  const loadError = isError ? error : otherQuery.error;
+
+  // 지금 보는 기간(달 또는 주)의 내역과 날짜별 합계.
+  const periodEntries = useMemo(() => {
+    if (!ledger) return [];
+    if (!isWeek) return ledger.entries;
+    return [...ledger.entries, ...(otherLedger?.entries ?? [])].filter((entry) =>
+      isInWeek(entry.entryDate, weekStart)
+    );
+  }, [ledger, otherLedger, isWeek, weekStart]);
+  const periodCalendar = useMemo(() => {
+    if (!ledger) return [];
+    if (!isWeek) return ledger.calendar;
+    return [...ledger.calendar, ...(otherLedger?.calendar ?? [])].filter((day) =>
+      isInWeek(day.date, weekStart)
+    );
+  }, [ledger, otherLedger, isWeek, weekStart]);
+
+  // 주 단위일 때 쓰는 합계와 분류별 지출. 달 단위는 서버가 계산한 값을 쓴다.
+  const periodSummary = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    const totals = new Map<number | null, LedgerMonthPayload["byCategory"][number]>();
+    for (const entry of periodEntries) {
+      if (entry.kind === "income") {
+        income += entry.amount;
+        continue;
+      }
+      expense += entry.amount;
+      const row = totals.get(entry.categoryId) ?? {
+        categoryId: entry.categoryId,
+        name: entry.categoryName ?? "분류 없음",
+        emoji: entry.categoryEmoji ?? "🧾",
+        icon: entry.categoryIcon ?? "tag",
+        color: entry.categoryColor ?? "neutral",
+        amount: 0,
+        pct: 0,
+      };
+      row.amount += entry.amount;
+      totals.set(entry.categoryId, row);
+    }
+    const byCategory = [...totals.values()]
+      .map((row) => ({
+        ...row,
+        pct: expense === 0 ? 0 : Math.round((row.amount / expense) * 100),
+      }))
+      .sort((a, b) => b.amount - a.amount);
+    return { income, expense, byCategory };
+  }, [periodEntries]);
+
   // 고른 분류가 삭제됐으면 빈 목록 대신 전체를 보여 준다.
   const filterCategory =
     ledger?.categories.find(
@@ -355,12 +441,13 @@ export const LedgerPage = () => {
     ) ?? null;
   const filterCategoryId = filterCategory?.id ?? null;
 
-  const listEntries = useMemo(() => {
-    const entries = ledger?.entries ?? [];
-    return filterCategoryId == null
-      ? entries
-      : entries.filter((entry) => entry.categoryId === filterCategoryId);
-  }, [ledger?.entries, filterCategoryId]);
+  const listEntries = useMemo(
+    () =>
+      filterCategoryId == null
+        ? periodEntries
+        : periodEntries.filter((entry) => entry.categoryId === filterCategoryId),
+    [periodEntries, filterCategoryId]
+  );
 
   const companionName = filterCategory && COMPANION_CATEGORY[filterCategory.name];
   const companionCategory =
@@ -368,12 +455,12 @@ export const LedgerPage = () => {
       (category) => category.kind === "expense" && category.name === companionName
     ) ?? null;
   const companionEntries = companionCategory
-    ? (ledger?.entries ?? []).filter((entry) => entry.categoryId === companionCategory.id)
+    ? periodEntries.filter((entry) => entry.categoryId === companionCategory.id)
     : [];
 
   const topExpenses = useMemo(
-    () => groupTopExpenses(ledger?.entries ?? [], filterCategoryId ?? "all"),
-    [ledger?.entries, filterCategoryId]
+    () => groupTopExpenses(periodEntries, filterCategoryId ?? "all"),
+    [periodEntries, filterCategoryId]
   );
 
   const dayGroups = useMemo(() => {
@@ -412,12 +499,39 @@ export const LedgerPage = () => {
 
   const thisMonth = currentMonthKst();
   const today = todayKst();
-  const fallbackDay = month === thisMonth ? today : `${month}-01`;
-  const activeDay = selectedDay?.startsWith(`${month}-`) ? selectedDay : fallbackDay;
+  const thisWeek = weekStartOf(today);
+  const inPeriod = (date: string) =>
+    isWeek ? isInWeek(date, weekStart) : date.startsWith(`${month}-`);
+  const fallbackDay = inPeriod(today) ? today : isWeek ? weekStart : `${month}-01`;
+  const activeDay = selectedDay && inPeriod(selectedDay) ? selectedDay : fallbackDay;
   const defaultEntryDate = tab === "calendar" ? activeDay : fallbackDay;
   // 통계·반복·여행 탭은 월과 상관없는 화면이라 월 이동과 요약을 숨긴다.
   const hidesMonthSummary = tab === "stats" || tab === "recurring" || tab === "trips";
   const monthLabel = formatMonthKo(month);
+  const periodLabel = isWeek ? formatWeekKo(weekStart, today) : monthLabel;
+
+  const goWeek = (start: string) => {
+    setWeekStart(start);
+    setMonth(weekMonth(start));
+  };
+  // 주 단위일 때 month는 늘 그 주가 속한 달이어야 한다. 통계 탭에서 달을 옮기면
+  // 그 달에 속한 주(이번 달이면 이번 주, 아니면 첫 주)로 함께 옮긴다.
+  const changeMonth = (next: string) => {
+    setMonth(next);
+    if (!isWeek) return;
+    if (next === thisMonth) {
+      setWeekStart(thisWeek);
+      return;
+    }
+    const first = weekStartOf(`${next}-01`);
+    setWeekStart(weekMonth(first) === next ? first : shiftWeek(first, 1));
+  };
+  const changePeriod = (next: LedgerPeriod) => {
+    if (next === period) return;
+    // 주로 바꿀 때는 보고 있던 날(달력에서 고른 날 등)이 든 주로 간다.
+    if (next === "week") goWeek(weekStartOf(activeDay));
+    setPeriod(next);
+  };
 
   const totalBudget = ledger?.budget.totalBudget ?? null;
   const pace = ledger
@@ -468,31 +582,68 @@ export const LedgerPage = () => {
           <LedgerTabs tab={tab} onChange={setTab} />
 
           {!hidesMonthSummary && (
-            <div className="-ml-2 flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="이전 달"
-                onClick={() => setMonth((current) => shiftMonth(current, -1))}
-              >
-                <ChevronLeft />
-              </Button>
-              <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
-                {monthLabel}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="다음 달"
-                onClick={() => setMonth((current) => shiftMonth(current, 1))}
-              >
-                <ChevronRight />
-              </Button>
-              {month !== thisMonth && (
-                <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
-                  이번 달
-                </Button>
+            <div className="-ml-2 flex flex-wrap items-center gap-1">
+              {isWeek ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="이전 주"
+                    onClick={() => goWeek(shiftWeek(weekStart, -1))}
+                  >
+                    <ChevronLeft />
+                  </Button>
+                  <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
+                    {periodLabel}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="다음 주"
+                    onClick={() => goWeek(shiftWeek(weekStart, 1))}
+                  >
+                    <ChevronRight />
+                  </Button>
+                  {weekStart !== thisWeek && (
+                    <Button variant="ghost" size="sm" onClick={() => goWeek(thisWeek)}>
+                      이번 주
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="이전 달"
+                    onClick={() => setMonth((current) => shiftMonth(current, -1))}
+                  >
+                    <ChevronLeft />
+                  </Button>
+                  <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
+                    {monthLabel}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="다음 달"
+                    onClick={() => setMonth((current) => shiftMonth(current, 1))}
+                  >
+                    <ChevronRight />
+                  </Button>
+                  {month !== thisMonth && (
+                    <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
+                      이번 달
+                    </Button>
+                  )}
+                </>
               )}
+              <ViewToggle
+                label="기간 단위"
+                options={PERIODS}
+                value={period}
+                onChange={changePeriod}
+              />
             </div>
           )}
         </div>
@@ -522,14 +673,16 @@ export const LedgerPage = () => {
                 />
                 <SummaryCard
                   label="입금"
-                  value={formatWon(ledger.summary.income)}
-                  hint={`${monthLabel} 입금`}
+                  value={formatWon(isWeek ? periodSummary.income : ledger.summary.income)}
+                  hint={`${periodLabel} 입금`}
                   tone="success"
                 />
                 <SummaryCard
                   label="지출"
-                  value={formatWon(ledger.summary.expense)}
-                  hint={`${monthLabel} 지출`}
+                  value={formatWon(
+                    isWeek ? periodSummary.expense : ledger.summary.expense
+                  )}
+                  hint={`${periodLabel} 지출`}
                   tone="primary"
                 />
                 {totalBudget == null ? (
@@ -577,7 +730,7 @@ export const LedgerPage = () => {
         </div>
 
         <div className="mt-6">
-          {isLoading && !ledger ? (
+          {(isLoading && !ledger) || (periodPending && !otherQuery.isError) ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }, (_, index) => (
                 <div
@@ -586,17 +739,19 @@ export const LedgerPage = () => {
                 />
               ))}
             </div>
-          ) : isError && !ledger ? (
+          ) : (isError && !ledger) || (periodPending && otherQuery.isError) ? (
             <div className="rounded-2xl border border-hairline bg-surface px-6 py-10 text-center">
               <p className="text-sm font-medium text-ink">가계부를 불러오지 못했어요</p>
               <p className="mt-1 text-[12px] text-muted">
-                {error instanceof Error ? error.message : "잠시 후 다시 시도해 주세요."}
+                {loadError instanceof Error
+                  ? loadError.message
+                  : "잠시 후 다시 시도해 주세요."}
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-3"
-                onClick={() => refetch()}
+                onClick={() => (isError ? refetch() : otherQuery.refetch())}
               >
                 다시 시도
               </Button>
@@ -632,14 +787,14 @@ export const LedgerPage = () => {
                       <div className="space-y-0.5">
                         {dayGroups.length > 0 && (
                           <CategoryTotalLine
-                            monthLabel={monthLabel}
+                            periodLabel={periodLabel}
                             name={filterCategory.name}
                             entries={listEntries}
                           />
                         )}
                         {companionCategory && (
                           <CategoryTotalLine
-                            monthLabel={monthLabel}
+                            periodLabel={periodLabel}
                             name={companionCategory.name}
                             entries={companionEntries}
                           />
@@ -659,9 +814,11 @@ export const LedgerPage = () => {
                         />
                       ) : (
                         <CategoryCard
-                          total={ledger.summary.expense}
-                          byCategory={ledger.byCategory}
-                          entries={ledger.entries}
+                          total={isWeek ? periodSummary.expense : ledger.summary.expense}
+                          byCategory={
+                            isWeek ? periodSummary.byCategory : ledger.byCategory
+                          }
+                          entries={periodEntries}
                         />
                       )}
                       {topExpenses.length > 0 && (
@@ -674,7 +831,7 @@ export const LedgerPage = () => {
                               큰 지출 TOP 8
                             </h3>
                             <span className="text-[11px] text-muted">
-                              {monthLabel}
+                              {periodLabel}
                               {filterCategory && ` · ${filterCategory.name}`}
                             </span>
                           </div>
@@ -689,7 +846,7 @@ export const LedgerPage = () => {
                   ) : filterCategory && !dayGroups.length ? (
                     <div className="rounded-2xl border border-hairline bg-surface px-6 py-10 text-center">
                       <p className="text-[13px] text-muted">
-                        {monthLabel}에는 {filterCategory.name} 내역이 없어요
+                        {periodLabel}에는 {filterCategory.name} 내역이 없어요
                       </p>
                     </div>
                   ) : dayGroups.length ? (
@@ -716,7 +873,7 @@ export const LedgerPage = () => {
                         <Wallet className="size-5" />
                       </div>
                       <p className="mt-3 text-sm font-medium text-ink">
-                        아직 기록이 없어요
+                        {isWeek ? "이 주에는 기록이 없어요" : "아직 기록이 없어요"}
                       </p>
                       <p className="mt-1 text-[13px] text-muted">첫 지출을 남겨보세요</p>
                       <Button className="mt-4" size="sm" onClick={openAdd}>
@@ -730,6 +887,9 @@ export const LedgerPage = () => {
               {tab === "calendar" && (
                 <CalendarView
                   ledger={ledger}
+                  weekStart={isWeek ? weekStart : null}
+                  entries={periodEntries}
+                  calendar={periodCalendar}
                   activeDay={activeDay}
                   onSelectDay={setSelectedDay}
                   onEdit={openEdit}
@@ -744,7 +904,10 @@ export const LedgerPage = () => {
                 <StatsView
                   categories={ledger.categories}
                   month={month}
-                  onMonthChange={setMonth}
+                  onMonthChange={changeMonth}
+                  initialPeriod={period}
+                  weekStart={weekStart}
+                  onWeekChange={goWeek}
                   trips={ledger.trips}
                   expenseReference={ledger.expenseReference}
                   totalBudget={ledger.budget.totalBudget}

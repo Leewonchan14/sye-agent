@@ -15,6 +15,14 @@ export type LedgerWeeklyRecap = {
     categoryName: string | null;
   }[];
   categories: { name: string; amount: number }[];
+  /** 지난주 지출 전부, 오래된 순. 영수증에 한 줄씩 찍는다. */
+  items: {
+    id: number;
+    date: string;
+    label: string;
+    amount: number;
+    categoryName: string | null;
+  }[];
   /** 이번 달 예산 상황. 예산을 정하지 않았으면 null */
   budget: { month: string; total: number; spent: number; pace: LedgerBudgetPace } | null;
   /** 지금 합계와 맞는 하치와레 코멘트. 없거나 내역이 바뀌었으면 null */

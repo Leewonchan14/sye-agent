@@ -215,8 +215,15 @@
     {
       "idx": 31,
       "version": "7",
-      "when": 1794303155458,
-      "tag": "0031_lethal_power_man",
+      "when": 1794301533027,
+      "tag": "0031_clear_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794304041230,
+      "tag": "0032_mysterious_lady_ursula",
       "breakpoints": true
     }
   ]

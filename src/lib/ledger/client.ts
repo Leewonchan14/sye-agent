@@ -8,6 +8,7 @@ export const ledgerKeys = {
   search: (query: string) => ["ledger", "search", query] as const,
   history: ["ledger", "history"] as const,
   recap: ["ledger", "recap"] as const,
+  suggestions: ["ledger", "suggestions"] as const,
   recurringCandidates: ["ledger", "recurring-candidates"] as const,
 };
 

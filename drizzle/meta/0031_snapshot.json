@@ -1,5 +1,5 @@
 {
-  "id": "fba7a90d-3b36-4e44-a31a-496be21a22d8",
+  "id": "18c79054-7222-4dd0-9b0f-640679a68f7b",
   "prevId": "cfada08f-0089-416a-b2c7-f40d64fe2cb4",
   "version": "7",
   "dialect": "postgresql",
@@ -414,25 +414,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::text[]"
-        },
-        "photo_urls": {
-          "name": "photo_urls",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "photo_expires_at": {
-          "name": "photo_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "photo_checked_at": {
-          "name": "photo_checked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         },
         "reaction": {
           "name": "reaction",
@@ -989,6 +970,13 @@
         },
         "memo": {
           "name": "memo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "note": {
+          "name": "note",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
