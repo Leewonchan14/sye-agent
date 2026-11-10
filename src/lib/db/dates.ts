@@ -1,5 +1,18 @@
-import { and, count, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 
+import { fetchInstagramPhotos } from "@/lib/dates/photo";
 import {
   type AgentDigestInput,
   DATE_REACTIONS,
@@ -208,6 +221,7 @@ export const ingestDigest = async (input: AgentDigestInput) => {
     digestId: digest.id,
     inserted: inserted.length,
     skipped: rows.length - inserted.length,
+    insertedIds: inserted.map((row) => row.id),
   };
 };
 
@@ -239,6 +253,8 @@ const toSpotView = (row: SpotRow, dayKey: string): DateSpotView => ({
   address: row.address,
   priceHint: row.priceHint,
   tags: row.tags,
+  photos:
+    row.photoExpiresAt && row.photoExpiresAt.valueOf() > Date.now() ? row.photoUrls : [],
   reaction: (DATE_REACTIONS as readonly string[]).includes(row.reaction ?? "")
     ? (row.reaction as DateReaction)
     : null,
@@ -326,4 +342,74 @@ export const hasPendingDigest = async () => {
     .where(isNotNull(digestsT.pendingHermesRunId))
     .limit(1);
   return Boolean(row);
+};
+
+/* ───────── 게시물 사진 ───────── */
+
+/** 만료가 이만큼 남으면 미리 새 주소로 바꾼다. */
+const PHOTO_REFRESH_BEFORE_MS = 12 * 60 * 60 * 1000;
+/** 사진을 못 읽은 게시물은 이 간격이 지나야 다시 찾아본다. */
+const PHOTO_RETRY_MS = 6 * 60 * 60 * 1000;
+/** 화면 한 번 불러올 때 새로 읽는 최대 수 — 응답이 늦어지지 않게 한다. */
+const PHOTO_BATCH = 12;
+
+/**
+ * 사진이 없거나 만료가 가까운 장소의 사진 주소를 공식 임베드에서 다시 읽는다.
+ * `spotIds`를 주면 그 장소만, 아니면 고른 날(`digestId`)의 장소와 찜한 곳 중에서 고른다.
+ */
+export const refreshSpotPhotos = async (target: {
+  spotIds?: number[];
+  digestId?: number | null;
+}) => {
+  const db = getDb();
+  const now = Date.now();
+  const scope = target.spotIds
+    ? inArray(spotsT.id, target.spotIds.length ? target.spotIds : [-1])
+    : or(
+        target.digestId ? eq(spotsT.digestId, target.digestId) : undefined,
+        eq(spotsT.reaction, "like")
+      );
+  const retryBefore = new Date(now - PHOTO_RETRY_MS);
+  const hasNoPhotos = sql`cardinality(${spotsT.photoUrls}) = 0`;
+  const stale = await db
+    .select({ id: spotsT.id, instagramUrl: spotsT.instagramUrl })
+    .from(spotsT)
+    .where(
+      and(
+        scope,
+        or(
+          // 한 번도 안 찾아봤거나, 못 찾은 지 오래됐거나
+          and(
+            hasNoPhotos,
+            or(isNull(spotsT.photoCheckedAt), lt(spotsT.photoCheckedAt, retryBefore))
+          ),
+          // 주소 만료가 가까운데 최근에 다시 찾아보지 않았거나
+          and(
+            sql`not ${hasNoPhotos}`,
+            lt(spotsT.photoExpiresAt, new Date(now + PHOTO_REFRESH_BEFORE_MS)),
+            or(
+              isNull(spotsT.photoCheckedAt),
+              lt(spotsT.photoCheckedAt, new Date(now - 60 * 60 * 1000))
+            )
+          )
+        )
+      )
+    )
+    .orderBy(desc(spotsT.id))
+    .limit(PHOTO_BATCH);
+
+  await Promise.all(
+    stale.map(async (spot) => {
+      const photos = await fetchInstagramPhotos(spot.instagramUrl);
+      await db
+        .update(spotsT)
+        .set({
+          photoCheckedAt: new Date(),
+          // 못 읽었을 때 아직 쓸 수 있는 예전 주소는 그대로 둔다(만료되면 화면에서 감춘다).
+          ...(photos ? { photoUrls: photos.urls, photoExpiresAt: photos.expiresAt } : {}),
+        })
+        .where(eq(spotsT.id, spot.id));
+    })
+  );
+  return stale.length;
 };
