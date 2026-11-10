@@ -9,7 +9,16 @@ import {
   ThumbsDown,
   Wallet,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  createContext,
+  type ReactElement,
+  type Ref,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -21,7 +30,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { ImageZoom } from "@/components/ui/image-zoom";
-import { isSpotVideo } from "@/lib/dates/media";
+import { parseSpotMedia } from "@/lib/dates/media";
 import type { DateReaction, DateSpotView } from "@/lib/dates/types";
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
@@ -53,25 +62,87 @@ const mapUrl = (spot: DateSpotView) =>
     [spot.name, spot.address?.split(" ").slice(0, 3).join(" ")].filter(Boolean).join(" ")
   )}`;
 
+const usePrefersReducedMotion = () =>
+  useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  )[0];
+
+/** 확대한 화면에 띄울 영상. Image Zoom은 이미지만 확대하므로 표지 사진 자리에 영상을 바꿔 넣는다. */
+const ZoomVideoContext = createContext<{ src: string; label: string } | null>(null);
+
+const ZoomedVideo = ({
+  img,
+  buttonUnzoom,
+}: {
+  img: ReactElement | null;
+  buttonUnzoom: ReactElement;
+}) => {
+  const video = useContext(ZoomVideoContext);
+  const reducedMotion = usePrefersReducedMotion();
+  if (!img || !video) {
+    return (
+      <>
+        {img}
+        {buttonUnzoom}
+      </>
+    );
+  }
+  // 위치·크기·전환 효과와 닫기 처리는 Image Zoom이 표지 사진에 준 것을 그대로 쓴다.
+  const {
+    src: poster,
+    id,
+    style,
+    width,
+    height,
+    onTransitionEnd,
+    ref,
+  } = img.props as ComponentProps<"img"> & {
+    onTransitionEnd?: ComponentProps<"video">["onTransitionEnd"];
+  };
+  return (
+    <>
+      <video
+        data-rmiz-modal-img=""
+        id={id}
+        style={style}
+        width={width}
+        height={height}
+        onTransitionEnd={onTransitionEnd}
+        ref={ref as Ref<HTMLVideoElement>}
+        src={video.src}
+        poster={typeof poster === "string" ? poster : undefined}
+        aria-label={video.label}
+        autoPlay={!reducedMotion}
+        muted
+        loop
+        playsInline
+        disablePictureInPicture
+      />
+      {buttonUnzoom}
+    </>
+  );
+};
+
 /**
  * 게시물 영상. GIF처럼 소리 없이 반복 재생하되, 화면(캐러셀의 보이는 칸)에 들어왔을 때만 돌려
- * 데이터와 배터리를 아낀다. 동작 줄이기를 켠 기기에서는 멈춰 두고 재생 버튼을 보여 준다.
+ * 데이터와 배터리를 아낀다. 동작 줄이기를 켠 기기에서는 표지 장면에 멈춰 둔다.
+ * 사진처럼 누르면 크게 보는데, Image Zoom이 표지 사진으로 크기를 재고 확대한 화면에는 영상을 띄운다.
  */
 const SpotVideo = ({
   src,
+  poster,
   label,
   onError,
 }: {
   src: string;
+  poster: string | null;
   label: string;
   onError: () => void;
 }) => {
   const ref = useRef<HTMLVideoElement>(null);
-  const [reducedMotion] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     const video = ref.current;
@@ -91,26 +162,52 @@ const SpotVideo = ({
     return () => observer.disconnect();
   }, [reducedMotion]);
 
-  return (
+  const player = (
     <video
       ref={ref}
       src={src}
+      poster={poster ?? undefined}
       aria-label={label}
       muted
       loop
       playsInline
       preload="metadata"
       disablePictureInPicture
-      controls={reducedMotion}
       onError={onError}
-      className="size-full object-cover"
+      className="absolute inset-0 size-full object-cover"
     />
+  );
+
+  // 표지 사진이 없으면 크기를 잴 수 없어 확대 없이 재생만 한다.
+  if (!poster) return <div className="relative size-full">{player}</div>;
+
+  return (
+    <ZoomVideoContext.Provider value={{ src, label }}>
+      <ImageZoom
+        // 확대할 사진(표지)을 따로 주어야 원래 크기보다 크게, 화면에 맞춰 키운다.
+        zoomInProps={{ src: poster, referrerPolicy: "no-referrer" }}
+        rmiz={{
+          a11yNameButtonZoom: "영상 크게 보기",
+          a11yNameButtonUnzoom: "영상 작게 보기",
+          ZoomContent: ZoomedVideo,
+        }}
+      >
+        {/* Image Zoom은 [data-zoom] 요소의 배경 사진으로 확대할 크기와 위치를 잰다. */}
+        <div
+          data-zoom
+          style={{ backgroundImage: `url("${poster}")` }}
+          className="relative size-full bg-cover bg-center"
+        >
+          {player}
+        </div>
+      </ImageZoom>
+    </ZoomVideoContext.Provider>
   );
 };
 
 /**
  * 게시물 사진·영상. 인스타그램 CDN에서 바로 받고, 못 받은 것은 빼고 보여 준다.
- * 사진은 누르면 그 자리에서 화면 가득 커지고(다시 누르거나 Esc로 닫기), 영상은 GIF처럼 돈다.
+ * 사진·영상 모두 누르면 그 자리에서 화면 가득 커진다(다시 누르거나 Esc로 닫기). 영상은 GIF처럼 돈다.
  */
 const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
   const [failed, setFailed] = useState<string[]>([]);
@@ -139,38 +236,42 @@ const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
       className="group/photos relative bg-canvas-card"
     >
       <CarouselContent className="ml-0">
-        {photos.map((url, index) => (
-          <CarouselItem key={url} className="pl-0">
-            <div className="aspect-[4/3] overflow-hidden [&_[data-rmiz-content]]:size-full [&_[data-rmiz]]:size-full">
-              {isSpotVideo(url) ? (
-                <SpotVideo
-                  src={url}
-                  label={many ? `${spot.name} 영상 ${index + 1}` : `${spot.name} 영상`}
-                  onError={() => fail(url)}
-                />
-              ) : (
-                // 넘기려고 끈 것은 캐러셀이 클릭으로 치지 않아 확대되지 않는다.
-                // 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다.
-                <ImageZoom
-                  src={url}
-                  alt={many ? `${spot.name} 사진 ${index + 1}` : `${spot.name} 사진`}
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  draggable={false}
-                  referrerPolicy="no-referrer"
-                  onError={() => fail(url)}
-                  className="size-full object-cover select-none"
-                  // 확대한 사진도 같은 CDN에서 받으므로 리퍼러를 빼야 한다.
-                  zoomInProps={{ referrerPolicy: "no-referrer" }}
-                  rmiz={{
-                    a11yNameButtonZoom: "사진 크게 보기",
-                    a11yNameButtonUnzoom: "사진 작게 보기",
-                  }}
-                />
-              )}
-            </div>
-          </CarouselItem>
-        ))}
+        {photos.map((url, index) => {
+          const media = parseSpotMedia(url);
+          return (
+            <CarouselItem key={url} className="pl-0">
+              <div className="aspect-[4/3] overflow-hidden [&_[data-rmiz-content]]:size-full [&_[data-rmiz]]:size-full">
+                {media.kind === "video" ? (
+                  <SpotVideo
+                    src={media.src}
+                    poster={media.poster}
+                    label={many ? `${spot.name} 영상 ${index + 1}` : `${spot.name} 영상`}
+                    onError={() => fail(url)}
+                  />
+                ) : (
+                  // 넘기려고 끈 것은 캐러셀이 클릭으로 치지 않아 확대되지 않는다.
+                  // 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다.
+                  <ImageZoom
+                    src={media.src}
+                    alt={many ? `${spot.name} 사진 ${index + 1}` : `${spot.name} 사진`}
+                    loading={index === 0 ? "eager" : "lazy"}
+                    decoding="async"
+                    draggable={false}
+                    referrerPolicy="no-referrer"
+                    onError={() => fail(url)}
+                    className="size-full object-cover select-none"
+                    // 확대한 사진도 같은 CDN에서 받으므로 리퍼러를 빼야 한다.
+                    zoomInProps={{ referrerPolicy: "no-referrer" }}
+                    rmiz={{
+                      a11yNameButtonZoom: "사진 크게 보기",
+                      a11yNameButtonUnzoom: "사진 작게 보기",
+                    }}
+                  />
+                )}
+              </div>
+            </CarouselItem>
+          );
+        })}
       </CarouselContent>
       {many && (
         <>

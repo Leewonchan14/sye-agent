@@ -1,9 +1,11 @@
+import { spotMediaUrls, toSpotVideo } from "@/lib/dates/media";
+
 /**
  * 인스타그램 게시물 사진 주소를 공식 임베드(`/p/<코드>/embed/captioned/`)에서 읽는다.
  *
  * 여러 장 게시물은 임베드에 들어 있는 게시물 데이터(`contextJSON`)에서 사진을 순서대로 모두 꺼내고,
  * 데이터가 없으면 임베드에 보이는 대표 사진 한 장만 쓴다.
- * 영상은 영상 주소(.mp4)를 그대로 넣어 카드에서 GIF처럼 소리 없이 반복 재생한다.
+ * 영상은 영상 주소(.mp4)에 표지 사진을 붙여 넣고(`toSpotVideo`), 카드에서 GIF처럼 소리 없이 반복 재생한다.
  * 게시물 데이터에 영상 주소가 없으면 예전처럼 표지 사진을 쓴다.
  *
  * 사진 파일은 저장하지 않는다. CDN 주소에 만료 시각(`oe`, 16진수 초)이 붙어 있어 4~5일 뒤 열리지 않으므로,
@@ -67,10 +69,8 @@ interface EmbedMediaNode {
   edge_sidecar_to_children?: { edges?: { node?: EmbedMediaNode }[] };
 }
 
-/** 영상이면 영상 주소, 아니면(또는 영상 주소가 없으면) 알맞은 크기의 사진 주소 */
-const nodePhoto = (node: EmbedMediaNode | undefined): string | null => {
-  if (!node) return null;
-  if (node.is_video === true && isHttp(node.video_url)) return node.video_url;
+/** 알맞은 크기의 사진(영상이면 표지 사진) 주소 */
+const nodeImage = (node: EmbedMediaNode): string | null => {
   const sized = pickSize(
     (node.display_resources ?? []).map((r) => ({
       url: String(r.src ?? ""),
@@ -78,6 +78,16 @@ const nodePhoto = (node: EmbedMediaNode | undefined): string | null => {
     }))
   );
   return sized ?? (isHttp(node.display_url) ? node.display_url : null);
+};
+
+/** 영상이면 표지 사진을 붙인 영상 주소, 아니면(또는 영상 주소가 없으면) 사진 주소 */
+const nodePhoto = (node: EmbedMediaNode | undefined): string | null => {
+  if (!node) return null;
+  const image = nodeImage(node);
+  if (node.is_video === true && isHttp(node.video_url)) {
+    return toSpotVideo(node.video_url, image);
+  }
+  return image;
 };
 
 /** 임베드 안의 게시물 데이터. 형식이 바뀌었거나 없으면 null */
@@ -145,7 +155,7 @@ export const fetchInstagramPhotos = async (
     const urls = parseEmbedPhotos(await res.text());
     if (!urls.length) return null;
     const expiresAt = new Date(
-      Math.min(...urls.map((url) => photoExpiresAt(url).valueOf()))
+      Math.min(...urls.flatMap(spotMediaUrls).map((url) => photoExpiresAt(url).valueOf()))
     );
     return { urls, expiresAt };
   } catch {

@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 
 import { expect, type Page, test } from "@playwright/test";
 
-import { isSpotVideo } from "../src/lib/dates/media";
+import { parseSpotMedia, spotMediaUrls } from "../src/lib/dates/media";
 import { parseEmbedPhotos, photoExpiresAt } from "../src/lib/dates/photo";
 import { login, pool } from "./helpers";
 
@@ -366,7 +366,7 @@ test("임베드에서 여러 장 사진을 순서대로 읽고, 데이터가 없
   expect(parseEmbedPhotos(withContext(13))).toHaveLength(10);
   // 한 장짜리 게시물 데이터
   expect(parseEmbedPhotos(contextScript(node("single")))).toEqual([url("single", 640)]);
-  // 영상은 영상 주소를, 영상 주소가 없으면 표지 사진을 쓴다.
+  // 영상은 표지 사진을 붙인 영상 주소를, 영상 주소가 없으면 표지 사진을 쓴다.
   const video = `https://scontent.cdninstagram.com/o1/v/t16/clip.mp4?efg=a&oe=${oe}`;
   expect(
     parseEmbedPhotos(
@@ -381,9 +381,25 @@ test("임베드에서 여러 장 사진을 순서대로 읽고, 데이터가 없
         },
       })
     )
-  ).toEqual([url("p1", 640), video, url("v2", 640)]);
-  expect(isSpotVideo(video)).toBe(true);
-  expect(isSpotVideo(url("p1", 640))).toBe(false);
+  ).toEqual([
+    url("p1", 640),
+    `${video}#poster=${encodeURIComponent(url("v1", 640))}`,
+    url("v2", 640),
+  ]);
+  expect(parseSpotMedia(`${video}#poster=${encodeURIComponent(url("v1", 640))}`)).toEqual(
+    {
+      kind: "video",
+      src: video,
+      poster: url("v1", 640),
+    }
+  );
+  expect(parseSpotMedia(video)).toEqual({ kind: "video", src: video, poster: null });
+  expect(parseSpotMedia(url("p1", 640))).toEqual({ kind: "photo", src: url("p1", 640) });
+  // 만료 시각은 영상과 표지 사진 둘 다 따진다.
+  expect(spotMediaUrls(`${video}#poster=${encodeURIComponent(url("v1", 640))}`)).toEqual([
+    video,
+    url("v1", 640),
+  ]);
 
   // 데이터가 없으면 임베드에 보이는 대표 사진
   const escaped = (w: number) => url("img", w).replace(/&/g, "&amp;");
@@ -452,13 +468,36 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   await clip.getByRole("button", { name: "다음 사진" }).click();
   const video = clip.locator("video");
   await expect(video).toHaveAttribute("aria-label", "영상 섞인 카페 영상 2");
-  await expect(video).toHaveAttribute("src", /\/img\/MULTI2v-2\.mp4/);
+  await expect(video).toHaveAttribute(
+    "src",
+    /\/img\/MULTI2v-2\.mp4\?efg=v&oe=[0-9A-F]+$/
+  );
+  await expect(video).toHaveAttribute("poster", /\/img\/MULTI2v-2-640\.png/);
   expect(
     await video.evaluate((el: HTMLVideoElement) => ({ muted: el.muted, loop: el.loop }))
   ).toEqual({ muted: true, loop: true });
   await expect
     .poll(() => video.evaluate((el: HTMLVideoElement) => el.paused))
     .toBe(false);
+  // 영상도 사진처럼 누르면 크게 보고, 확대한 화면에서도 GIF처럼 돈다.
+  await video.click();
+  const zoomedVideo = page.locator(
+    "dialog[data-rmiz-modal][open] video[data-rmiz-modal-img]"
+  );
+  await expect(zoomedVideo).toBeVisible();
+  await expect(zoomedVideo).toHaveAttribute("src", /\/img\/MULTI2v-2\.mp4/);
+  await expect(zoomedVideo).toHaveAttribute("aria-label", "영상 섞인 카페 영상 2");
+  await expect
+    .poll(() =>
+      zoomedVideo.evaluate((el: HTMLVideoElement) => !el.paused && el.loop && el.muted)
+    )
+    .toBe(true);
+  // 카드에서 4:3으로 잘렸던 영상이 화면에 맞춰 다 보인다.
+  expect(
+    await zoomedVideo.evaluate((el) => el.getBoundingClientRect().height)
+  ).toBeGreaterThan((await video.boundingBox())!.height);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog[data-rmiz-modal][open]")).toHaveCount(0);
   // 보이지 않는 칸으로 넘기면 멈춘다.
   await clip.getByRole("button", { name: "이전 사진" }).click();
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
