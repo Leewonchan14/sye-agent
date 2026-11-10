@@ -2,11 +2,13 @@ import { createServer, type Server } from "node:http";
 
 import { expect, type Page, test } from "@playwright/test";
 
+import { parseEmbedPhotos, photoExpiresAt } from "../src/lib/dates/photo";
 import { login, pool } from "./helpers";
 
 /**
  * 데이트 장소 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
  * 아래 가짜 Hermes가 프롬프트에서 콜백 주소·토큰을 읽어 하치와레처럼 결과를 보낸다.
+ * `INSTAGRAM_EMBED_ORIGIN`도 같은 주소로 두면 인스타그램 임베드·사진 서버 역할까지 한다.
  */
 const FAKE_HERMES_PORT = Number(process.env.E2E_FAKE_HERMES_PORT ?? 8972);
 const ingestKey = process.env.MONITOR_INGEST_KEY ?? "";
@@ -20,6 +22,53 @@ const runs = new Map<string, FakeRun>();
 let nextSpots: (call: number) => unknown[] = () => [];
 let calls = 0;
 let server: Server;
+
+/** 테스트 시각 기준 3일 뒤 만료되는 CDN 주소처럼 `oe`를 붙인다. */
+const futureOe = () =>
+  Math.floor(Date.now() / 1000 + 3 * 86400)
+    .toString(16)
+    .toUpperCase();
+const photoBase = () => `http://127.0.0.1:${FAKE_HERMES_PORT}/img`;
+/** 1×1 PNG */
+const PIXEL = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+const photoSrc = (code: string, w: number) =>
+  `${photoBase()}/${code}-${w}.png?stp=dst&oe=${futureOe()}`;
+/** 실제 임베드처럼 게시물 데이터(contextJSON)를 JSON 문자열 안의 JSON으로 싣는다. */
+const contextScript = (media: unknown) =>
+  `<script>window.__additionalDataLoaded('extra',${JSON.stringify({
+    contextJSON: JSON.stringify({ gql_data: { shortcode_media: media } }),
+  })});</script>`;
+const mediaNode = (code: string) => ({
+  is_video: false,
+  display_url: photoSrc(code, 1080),
+  display_resources: [1080, 640, 320].map((w) => ({
+    src: photoSrc(code, w),
+    config_width: w,
+  })),
+});
+/**
+ * `MULTI<n>…`으로 시작하는 게시물은 n장짜리 게시물 데이터를 싣고,
+ * 나머지는 데이터 없이 대표 사진 태그만 둔다(데이터가 없을 때의 대체 경로).
+ */
+const embedHtml = (code: string) => {
+  const src = (w: number) => photoSrc(code, w).replace(/&/g, "&amp;");
+  const img = `<img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;seongsu_date" src="${src(1080)}" srcset="${src(1080)} 1080w,${src(640)} 640w,${src(320)} 320w" />`;
+  const count = Number(code.match(/^MULTI(\d+)/)?.[1] ?? 0);
+  const context = count
+    ? contextScript({
+        ...mediaNode(`${code}-0`),
+        edge_sidecar_to_children: {
+          edges: Array.from({ length: count }, (_, i) => ({
+            node: mediaNode(`${code}-${i + 1}`),
+          })),
+        },
+      })
+    : "";
+  return `<html><body><div class="Embed">${img}</div>${context}</body></html>`;
+};
 
 const spot = (code: string, name: string, extra: Record<string, unknown> = {}) => ({
   name,
@@ -69,6 +118,19 @@ const startFakeHermes = () =>
         }, 500);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ run_id: id }));
+        return;
+      }
+      const embedMatch = path.match(/^\/p\/([A-Za-z0-9_-]+)\/embed\/captioned\/$/);
+      if (req.method === "GET" && embedMatch) {
+        // NOPIC으로 시작하는 게시물은 비공개·삭제된 것처럼 404
+        const missing = embedMatch[1].startsWith("NOPIC");
+        res.writeHead(missing ? 404 : 200, { "Content-Type": "text/html" });
+        res.end(missing ? "" : embedHtml(embedMatch[1]));
+        return;
+      }
+      if (req.method === "GET" && path.startsWith("/img/")) {
+        res.writeHead(200, { "Content-Type": "image/png" });
+        res.end(PIXEL);
         return;
       }
       const statusMatch = path.match(/\/v1\/runs\/([^/?]+)$/);
@@ -130,7 +192,7 @@ test("지금 찾아 줘 → 하치와레가 보낸 장소가 카드로 보이고
   await expect(page.getByText("날이 추워서 실내 위주로 골랐어!")).toBeVisible();
 
   const popup = page.getByRole("article", { name: "연무장 팝업" });
-  await expect(popup.getByRole("link", { name: /인스타/ })).toHaveAttribute(
+  await expect(popup.getByRole("link", { name: /^인스타/ })).toHaveAttribute(
     "href",
     "https://www.instagram.com/p/BBB222/"
   );
@@ -259,4 +321,128 @@ test("하치와레 결과는 인스타그램 게시물만, 발급한 토큰으�
   const ok = await post({ "x-monitor-key": ingestKey }, [spot("EEE555", "진짜")]);
   expect(ok.status()).toBe(201);
   expect(await ok.json()).toMatchObject({ inserted: 1, skipped: 0 });
+});
+
+test("임베드에서 여러 장 사진을 순서대로 읽고, 데이터가 없으면 대표 사진 한 장을 쓴다", () => {
+  const oe = "6AF8A6BD";
+  const url = (name: string, w: number) =>
+    `https://scontent.cdninstagram.com/v/${name}-${w}.jpg?stp=a&oe=${oe}`;
+  const node = (name: string) => ({
+    display_url: url(name, 1080),
+    display_resources: [3024, 1080, 640, 480].map((w) => ({
+      src: url(name, w),
+      config_width: w,
+    })),
+  });
+  const withContext = (count: number) =>
+    contextScript({
+      ...node("cover"),
+      edge_sidecar_to_children: {
+        edges: Array.from({ length: count }, (_, i) => ({ node: node(`p${i + 1}`) })),
+      },
+    });
+
+  expect(parseEmbedPhotos(withContext(3))).toEqual([
+    url("p1", 640),
+    url("p2", 640),
+    url("p3", 640),
+  ]);
+  // 인스타그램은 20장까지 올릴 수 있지만 카드에는 10장까지만
+  expect(parseEmbedPhotos(withContext(13))).toHaveLength(10);
+  // 한 장짜리 게시물 데이터
+  expect(parseEmbedPhotos(contextScript(node("single")))).toEqual([url("single", 640)]);
+
+  // 데이터가 없으면 임베드에 보이는 대표 사진
+  const escaped = (w: number) => url("img", w).replace(/&/g, "&amp;");
+  const img = `<img class="EmbeddedMediaImage" alt="x" src="${escaped(1080)}" srcset="${escaped(3024)} 3024w,${escaped(1080)} 1080w,${escaped(640)} 640w,${escaped(480)} 480w" />`;
+  const [picked] = parseEmbedPhotos(img);
+  expect(picked).toBe(url("img", 640));
+  expect(photoExpiresAt(picked).toISOString()).toBe(
+    new Date(parseInt(oe, 16) * 1000).toISOString()
+  );
+  expect(parseEmbedPhotos("<html>로그인이 필요해요</html>")).toEqual([]);
+});
+
+test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 수 있다", async ({
+  page,
+  request,
+}) => {
+  nextSpots = () => [
+    spot("MULTI3a", "여러 장 카페"),
+    spot("PIC111", "한 장 카페"),
+    spot("NOPIC2", "사진 없는 공방"),
+  ];
+  const token = await login(request);
+  await openDates(page, token);
+  await page.getByRole("button", { name: "지금 찾아 줘" }).click();
+
+  const multi = page.getByRole("article", { name: "여러 장 카페" });
+  const first = multi.getByRole("img", { name: "여러 장 카페 사진 1" });
+  await expect(first).toBeVisible({ timeout: 20_000 });
+  await expect(first).toHaveAttribute("src", /\/img\/MULTI3a-1-640\.png\?stp=dst&oe=/);
+  await expect
+    .poll(() => first.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(multi.getByRole("img")).toHaveCount(3);
+  await expect(multi.getByText("1 / 3")).toBeVisible();
+  await expect(multi.getByRole("button", { name: "이전 사진" })).toBeDisabled();
+
+  await multi.getByRole("button", { name: "다음 사진" }).click();
+  await expect(multi.getByText("2 / 3")).toBeVisible();
+  await expect(multi.getByRole("img", { name: "여러 장 카페 사진 2" })).toBeInViewport();
+  await multi.getByRole("button", { name: "다음 사진" }).click();
+  await expect(multi.getByText("3 / 3")).toBeVisible();
+  await expect(multi.getByRole("button", { name: "다음 사진" })).toBeDisabled();
+  await expect(
+    multi.getByRole("link", { name: "여러 장 카페 인스타그램 게시물" }).first()
+  ).toHaveAttribute("href", "https://www.instagram.com/p/MULTI3a/");
+
+  // 한 장이면 넘기기·장수 표시 없이 사진만
+  const single = page.getByRole("article", { name: "한 장 카페" });
+  await expect(single.getByRole("img", { name: "한 장 카페 사진" })).toHaveAttribute(
+    "src",
+    /\/img\/PIC111-640\.png/
+  );
+  await expect(single.getByRole("button", { name: "다음 사진" })).toHaveCount(0);
+  await expect(
+    page.getByRole("article", { name: "사진 없는 공방" }).getByRole("img")
+  ).toHaveCount(0);
+
+  const { rows } = await pool.query(
+    "select name, cardinality(photo_urls) as photos, photo_checked_at is not null as checked from date_spots order by id"
+  );
+  expect(rows).toEqual([
+    { name: "여러 장 카페", photos: 3, checked: true },
+    { name: "한 장 카페", photos: 1, checked: true },
+    { name: "사진 없는 공방", photos: 0, checked: true },
+  ]);
+});
+
+test("만료된 사진은 감추고, 만료가 가까우면 새 주소로 바꾼다", async ({
+  page,
+  request,
+}) => {
+  nextSpots = () => [spot("MULTI2b", "사진 있는 카페")];
+  const token = await login(request);
+  await openDates(page, token);
+  await page.getByRole("button", { name: "지금 찾아 줘" }).click();
+  const card = page.getByRole("article", { name: "사진 있는 카페" });
+  await expect(card.getByRole("img")).toHaveCount(2, { timeout: 20_000 });
+
+  // 만료된 주소는 화면에 내보내지 않는다(방금 찾아봤으면 다시 읽지 않음).
+  await pool.query(
+    "update date_spots set photo_urls = array['http://127.0.0.1:1/old.png'], photo_expires_at = now() - interval '1 hour', photo_checked_at = now()"
+  );
+  await page.reload();
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("img")).toHaveCount(0);
+
+  // 마지막 확인이 오래됐으면 화면을 불러올 때 새 주소를 읽어 온다.
+  await pool.query("update date_spots set photo_checked_at = now() - interval '2 hours'");
+  await page.reload();
+  await expect(card.getByRole("img")).toHaveCount(2);
+  await expect(card.getByRole("img", { name: "사진 있는 카페 사진 1" })).toHaveAttribute(
+    "src",
+    /MULTI2b-1-640/
+  );
 });

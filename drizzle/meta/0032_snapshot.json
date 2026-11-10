@@ -1,5 +1,5 @@
 {
-  "id": "b22be7bb-7d28-40ff-a927-74e8d253ed3c",
+  "id": "c84f27aa-beea-44a7-8fd0-a9622b159120",
   "prevId": "18c79054-7222-4dd0-9b0f-640679a68f7b",
   "version": "7",
   "dialect": "postgresql",
@@ -414,6 +414,25 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::text[]"
+        },
+        "photo_urls": {
+          "name": "photo_urls",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "photo_expires_at": {
+          "name": "photo_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_checked_at": {
+          "name": "photo_checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "reaction": {
           "name": "reaction",
@@ -1699,12 +1718,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "sentiment": {
-          "name": "sentiment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -2111,18 +2124,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
-        },
-        "sentiment": {
-          "name": "sentiment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "importance": {
-          "name": "importance",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "sort_order": {
           "name": "sort_order",
