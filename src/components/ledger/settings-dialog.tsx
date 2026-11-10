@@ -498,7 +498,7 @@ export const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   );
 
   return (
-    <div className="grid items-start gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 [&>*]:min-w-0">
       <section className="rounded-2xl border border-hairline bg-surface p-4">
         <h3 className="text-[12px] font-medium text-muted">여행</h3>
         {tripList}
