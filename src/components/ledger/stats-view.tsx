@@ -3,7 +3,18 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Label,
+  Pie,
+  PieChart,
+  Sector,
+  XAxis,
+  YAxis,
+  type PieSectorShapeProps,
+} from "recharts";
 
 import {
   categoryChipClass,
@@ -493,18 +504,30 @@ export const CategoryCard = ({
   const entriesOf = (match: (entry: LedgerEntryView) => boolean) =>
     expenses.filter(match);
 
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const arcs = slices.map((slice, index) => {
-    const length = total === 0 ? 0 : (slice.amount / total) * circumference;
-    const offset = slices
-      .slice(0, index)
-      .reduce(
-        (sum, item) => sum + (total === 0 ? 0 : (item.amount / total) * circumference),
-        0
-      );
-    return { slice, length, dashOffset: -offset };
-  });
+  const toggle = (key: string) => setOpenKey((current) => (current === key ? null : key));
+
+  // 합계(total)가 조각 합보다 크면 남는 몫을 회색 조각으로 채워 비율을 그대로 둔다.
+  const sliceSum = slices.reduce((sum, slice) => sum + slice.amount, 0);
+  const pieData = [
+    ...slices.map((slice) => ({
+      key: slice.key,
+      name: slice.name,
+      amount: slice.amount,
+      pct: slice.pct,
+      color: slice.color,
+    })),
+    ...(total > sliceSum
+      ? [
+          {
+            key: "",
+            name: "",
+            amount: total - sliceSum,
+            pct: 0,
+            color: "var(--color-canvas-soft)",
+          },
+        ]
+      : []),
+  ];
 
   return (
     <StatCard className={className}>
@@ -517,60 +540,87 @@ export const CategoryCard = ({
       {slices.length ? (
         <div className="mt-3 flex flex-col items-center gap-4 sm:flex-row">
           <div className="w-36 shrink-0">
-            <svg
-              viewBox="0 0 200 200"
-              className="w-full"
+            <ChartContainer
+              config={{}}
               role="img"
               aria-label="분류별 지출 비중"
+              className="aspect-square w-full"
             >
-              <title>분류별 지출 비중</title>
-              <circle
-                cx={100}
-                cy={100}
-                r={radius}
-                fill="none"
-                stroke="var(--color-canvas-soft)"
-                strokeWidth={22}
-              />
-              {arcs.map(({ slice, length, dashOffset }) => (
-                <circle
-                  key={slice.key}
-                  cx={100}
-                  cy={100}
-                  r={radius}
-                  fill="none"
-                  stroke={slice.color}
-                  strokeOpacity={openKey && openKey !== slice.key ? 0.25 : 1}
-                  strokeWidth={22}
-                  strokeDasharray={`${length} ${circumference - length}`}
-                  strokeDashoffset={dashOffset}
-                  transform="rotate(-90 100 100)"
+              <PieChart>
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      hideLabel
+                      formatter={(_, __, item) => {
+                        const slice = item.payload as (typeof pieData)[number];
+                        if (!slice.key) return null;
+                        return (
+                          <div className="flex w-full items-center gap-2 whitespace-nowrap">
+                            <span
+                              className="size-2.5 shrink-0 rounded-[2px]"
+                              style={{ background: slice.color }}
+                            />
+                            <span className="text-muted-foreground">{slice.name}</span>
+                            <span className="ml-auto font-medium text-foreground tabular-nums">
+                              {formatWon(slice.amount)} · {slice.pct}%
+                            </span>
+                          </div>
+                        );
+                      }}
+                    />
+                  }
+                />
+                <Pie
+                  data={pieData}
+                  dataKey="amount"
+                  nameKey="name"
+                  innerRadius="59%"
+                  outerRadius="81%"
+                  startAngle={90}
+                  endAngle={-270}
+                  stroke="none"
+                  isAnimationActive={false}
+                  onClick={(sector) => {
+                    const key = (sector.payload as (typeof pieData)[number]).key;
+                    if (key) toggle(key);
+                  }}
+                  shape={(props: PieSectorShapeProps) => {
+                    const slice = props.payload as (typeof pieData)[number];
+                    return (
+                      <Sector
+                        {...props}
+                        fill={slice.color}
+                        fillOpacity={openKey && openKey !== slice.key ? 0.25 : 1}
+                        className={cn(slice.key && "cursor-pointer")}
+                      />
+                    );
+                  }}
                 >
-                  <title>
-                    {slice.name} {formatWon(slice.amount)} ({slice.pct}%)
-                  </title>
-                </circle>
-              ))}
-              <text
-                x={100}
-                y={95}
-                textAnchor="middle"
-                fontSize={10}
-                fill="var(--color-muted)"
-              >
-                총 지출
-              </text>
-              <text
-                x={100}
-                y={114}
-                textAnchor="middle"
-                fontSize={15}
-                fontWeight={600}
-                fill="var(--color-ink)"
-              >
-                {formatWon(total)}
-              </text>
-            </svg>
+                  <Label
+                    content={({ viewBox }) => {
+                      if (!viewBox || !("cx" in viewBox)) return null;
+                      const { cx, cy } = viewBox;
+                      return (
+                        <text x={cx} y={cy} textAnchor="middle">
+                          <tspan x={cx} dy={-6} fontSize={10} fill="var(--color-muted)">
+                            총 지출
+                          </tspan>
+                          <tspan
+                            x={cx}
+                            dy={19}
+                            fontSize={15}
+                            fontWeight={600}
+                            fill="var(--color-ink)"
+                          >
+                            {formatWon(total)}
+                          </tspan>
+                        </text>
+                      );
+                    }}
+                  />
+                </Pie>
+              </PieChart>
+            </ChartContainer>
           </div>
 
           <ul className="w-full min-w-0 flex-1 space-y-2">
@@ -579,9 +629,7 @@ export const CategoryCard = ({
                 <button
                   type="button"
                   aria-expanded={openKey === slice.key}
-                  onClick={() =>
-                    setOpenKey((current) => (current === slice.key ? null : slice.key))
-                  }
+                  onClick={() => toggle(slice.key)}
                   className="block w-full rounded-md text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   <div className="flex items-center justify-between gap-2 text-[12px]">
@@ -853,7 +901,7 @@ const MonthlyCard = ({ monthly: rawMonthly }: { monthly: LedgerStats["monthly"] 
                 <ChartTooltipContent
                   labelFormatter={(month) => kst(`${month}-01`).format("YYYY년 M월")}
                   formatter={(value, name) => (
-                    <div className="flex w-full items-center gap-2">
+                    <div className="flex w-full items-center gap-2 whitespace-nowrap">
                       <span
                         className="size-2.5 shrink-0 rounded-[2px]"
                         style={{ background: `var(--color-${name})` }}
