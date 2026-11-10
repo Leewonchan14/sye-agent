@@ -22,10 +22,6 @@ test.beforeEach(async ({ request }) => {
   token = await login(request);
 });
 
-test.afterAll(async () => {
-  await pool.end();
-});
-
 test("자주 쓰는 내역 칩으로 채우고 메모를 남긴다", async ({ page, request }) => {
   const categoryId = await getCategories(request, token);
   await addEntry(request, token, {

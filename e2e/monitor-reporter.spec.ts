@@ -60,7 +60,7 @@ const articleRow = (
 
 test.describe("모니터링 기자 확인 상태", () => {
   test.beforeEach(async ({ request }) => {
-    // helpers의 pool은 가계부 스펙이 afterAll에서 닫으므로 따로 연결한다.
+    // monitor 테이블만 비우는 짧은 연결이라 helpers의 pool과 따로 연다.
     const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL });
     await db.connect();
     await db.query(`

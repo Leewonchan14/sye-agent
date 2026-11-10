@@ -33,6 +33,7 @@ import {
   CategoryIcon,
   EntryIcon,
 } from "@/components/ledger/category-icon";
+import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
 import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
 import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import {
 } from "@/components/ui/chart";
 import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerEntryView, LedgerMonthPayload } from "@/lib/db/ledger";
+import type { LedgerInsights } from "@/lib/db/ledger-insights";
 import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
@@ -116,6 +118,20 @@ const fetchStats = async (
     `/api/ledger/stats${query ? `?${query}` : ""}`
   );
   return stats;
+};
+
+const fetchInsights = async (
+  token: string,
+  month: string,
+  excludeTrips: boolean
+): Promise<LedgerInsights> => {
+  const params = new URLSearchParams({ month });
+  if (excludeTrips) params.set("excludeTrips", "1");
+  const { insights } = await ledgerRequest<{ insights: LedgerInsights }>(
+    token,
+    `/api/ledger/insights?${params}`
+  );
+  return insights;
 };
 
 const StatCard = ({
@@ -1344,6 +1360,16 @@ export const StatsView = ({
     ...LEDGER_LIVE_QUERY,
   });
 
+  // 평소와 비교하는 인사이트는 달 단위로만 본다.
+  const insightsQuery = useQuery({
+    queryKey: ledgerKeys.insights(month, statsScope),
+    queryFn: () => fetchInsights(token, month, shouldExclude),
+    enabled: Boolean(token) && range === "month",
+    placeholderData: keepPreviousData,
+    ...LEDGER_LIVE_QUERY,
+  });
+  const insights = range === "month" ? insightsQuery.data : undefined;
+
   const hasActivity = stats
     ? stats.summary.income !== 0 || stats.summary.expense !== 0
     : false;
@@ -1574,6 +1600,14 @@ export const StatsView = ({
               totalBudget={shouldExclude ? null : totalBudget}
             />
           )}
+          {hasActivity && insights && insights.unusual.month === month && (
+            <UnusualSpendCard
+              unusual={insights.unusual}
+              categories={categories}
+              entries={stats.entries}
+              onEdit={onEdit}
+            />
+          )}
           {/* 큰 지출은 요약 바로 아래에서 먼저 보이게 하고, 분류 카드와 한 줄을 이룬다. */}
           {hasActivity && (
             <>
@@ -1584,6 +1618,9 @@ export const StatsView = ({
                 entries={stats.entries}
               />
             </>
+          )}
+          {insights && insights.fixedCost.month === month && (
+            <FixedCostCard fixedCost={insights.fixedCost} />
           )}
           {!isTripReport && <AllTimeCard allTime={stats.allTime} />}
           {hasActivity ? (
