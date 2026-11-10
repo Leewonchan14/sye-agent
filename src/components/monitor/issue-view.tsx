@@ -9,6 +9,17 @@ import {
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  LabelList,
+  Line,
+  Rectangle,
+  XAxis,
+  YAxis,
+  type BarShapeProps,
+} from "recharts";
 import { toast } from "sonner";
 
 import { HermesProgress } from "@/components/monitor/hermes-progress";
@@ -18,6 +29,12 @@ import {
   IssueScheduleEditor,
 } from "@/components/monitor/schedule-editors";
 import { Button } from "@/components/ui/button";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
 import { formatUsage } from "@/lib/monitor/progress-stages";
@@ -25,124 +42,111 @@ import { useIssueMutations, useMonitorIssue } from "@/lib/monitor/queries";
 import type { MonitorIssueSnapshotView } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
-/** 보고 시점별 추가 건수(막대) + 누적(점선). 눈금은 데이터 최대값에 맞춰 반올림한다. */
-const SnapshotChart = ({ snapshots }: { snapshots: MonitorIssueSnapshotView[] }) => {
-  const W = 640;
-  const H = 240;
-  const L = 44;
-  const R = 56;
-  const T = 24;
-  const B = 36;
-  const maxAdded = Math.max(...snapshots.map((s) => s.added), 1);
-  const step = Math.pow(10, Math.floor(Math.log10(maxAdded)));
-  const top = Math.ceil(maxAdded / step) * step;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((r) => Math.round(top * r));
-  const bw = (W - L - R) / snapshots.length;
-  const y = (v: number) => T + (H - T - B) * (1 - v / top);
+const snapshotChartConfig = {
+  added: { label: "추가", color: "var(--color-primary)" },
+  cumulative: { label: "누적", color: "var(--color-body)" },
+} satisfies ChartConfig;
 
-  const cumulative = snapshots.map((_, i) =>
-    snapshots.slice(0, i + 1).reduce((sum, s) => sum + s.added, 0)
-  );
-  const running = cumulative.at(-1) ?? 0;
-  const cTop = Math.max(running, 1);
-  const yc = (v: number) => T + (H - T - B) * (1 - v / cTop);
-  const cx = (i: number) => L + bw * i + bw / 2;
+/** 보고 시점별 추가 건수(막대) + 누적(점선). 누적은 오른쪽 숨은 축을 따로 쓴다. */
+const SnapshotChart = ({ snapshots }: { snapshots: MonitorIssueSnapshotView[] }) => {
+  const data = snapshots.map((snapshot, index) => ({
+    label: snapshot.label,
+    added: snapshot.added,
+    cumulative: snapshots.slice(0, index + 1).reduce((sum, s) => sum + s.added, 0),
+  }));
+  const lastIndex = data.length - 1;
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
+    <ChartContainer
+      config={snapshotChartConfig}
       role="img"
       aria-label="보고 시점별 추가 기사 수와 누적 기사 수"
-      className="block h-auto w-full min-w-[480px]"
+      className="aspect-auto h-[240px] w-full min-w-[480px]"
     >
-      {ticks.map((t) => (
-        <g key={t}>
-          <line
-            x1={L}
-            x2={W - R}
-            y1={y(t)}
-            y2={y(t)}
-            stroke="var(--color-hairline)"
-            strokeWidth={1}
-          />
-          <text
-            x={L - 8}
-            y={y(t) + 4}
-            textAnchor="end"
-            fontSize={11}
-            fill="var(--color-muted-soft)"
-            className="font-mono"
-          >
-            {t}
-          </text>
-        </g>
-      ))}
-      {snapshots.map((s, i) => {
-        const w = bw * 0.56;
-        const x = cx(i) - w / 2;
-        const last = i === snapshots.length - 1;
-        return (
-          <g key={s.id}>
-            <rect
-              x={x}
-              y={y(s.added)}
-              width={w}
-              height={Math.max(0, y(0) - y(s.added))}
-              rx={3}
+      <ComposedChart data={data} margin={{ top: 24, right: 56, bottom: 0, left: 0 }}>
+        <CartesianGrid vertical={false} stroke="var(--color-hairline)" />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          interval="preserveStartEnd"
+          minTickGap={12}
+          fontSize={11.5}
+        />
+        <YAxis
+          yAxisId="added"
+          allowDecimals={false}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          fontSize={11}
+          className="font-mono"
+        />
+        <YAxis yAxisId="cumulative" orientation="right" hide domain={[0, "dataMax"]} />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Bar
+          yAxisId="added"
+          dataKey="added"
+          radius={3}
+          maxBarSize={48}
+          isAnimationActive={false}
+          shape={(props: BarShapeProps) => (
+            <Rectangle
+              {...props}
+              // 마지막 보고만 진하게, 이전 보고는 옅게 보여 준다.
               fill={
-                last
-                  ? "var(--color-primary)"
-                  : "color-mix(in oklab, var(--color-primary) 35%, transparent)"
+                props.index === lastIndex
+                  ? "var(--color-added)"
+                  : "color-mix(in oklab, var(--color-added) 35%, transparent)"
               }
             />
-            <text
-              x={cx(i)}
-              y={y(s.added) - 6}
-              textAnchor="middle"
-              fontSize={12}
-              fill="var(--color-ink)"
-              className="font-mono"
-            >
-              {s.added}
-            </text>
-            <text
-              x={cx(i)}
-              y={H - B + 18}
-              textAnchor="middle"
-              fontSize={11.5}
-              fill="var(--color-body)"
-            >
-              {s.label}
-            </text>
-          </g>
-        );
-      })}
-      <polyline
-        points={cumulative.map((v, i) => `${cx(i)},${yc(v)}`).join(" ")}
-        fill="none"
-        stroke="var(--color-body)"
-        strokeWidth={1.5}
-        strokeDasharray="4 3"
-      />
-      {cumulative.map((v, i) => (
-        <circle
-          key={i}
-          cx={cx(i)}
-          cy={yc(v)}
-          r={i === cumulative.length - 1 ? 4 : 2.5}
-          fill="var(--color-body)"
-        />
-      ))}
-      <text
-        x={cx(cumulative.length - 1) + 8}
-        y={yc(running) + 4}
-        fontSize={11.5}
-        fill="var(--color-body)"
-        className="font-mono"
-      >
-        누적 {running}
-      </text>
-    </svg>
+          )}
+        >
+          <LabelList
+            dataKey="added"
+            position="top"
+            fontSize={12}
+            fill="var(--color-ink)"
+            className="font-mono"
+          />
+        </Bar>
+        <Line
+          yAxisId="cumulative"
+          dataKey="cumulative"
+          type="linear"
+          stroke="var(--color-cumulative)"
+          strokeWidth={1.5}
+          strokeDasharray="4 3"
+          isAnimationActive={false}
+          dot={({ cx, cy, index }) => (
+            <circle
+              key={index}
+              cx={cx}
+              cy={cy}
+              r={index === lastIndex ? 4 : 2.5}
+              fill="var(--color-cumulative)"
+            />
+          )}
+        >
+          <LabelList
+            dataKey="cumulative"
+            content={({ x, y, index, value }) =>
+              index === lastIndex ? (
+                <text
+                  x={Number(x) + 8}
+                  y={Number(y) + 4}
+                  fontSize={11.5}
+                  fill="var(--color-cumulative)"
+                  className="font-mono"
+                >
+                  누적 {value}
+                </text>
+              ) : null
+            }
+          />
+        </Line>
+      </ComposedChart>
+    </ChartContainer>
   );
 };
 
