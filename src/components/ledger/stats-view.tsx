@@ -34,6 +34,7 @@ import {
   EntryIcon,
 } from "@/components/ledger/category-icon";
 import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
+import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
 import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
 import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
 import { Button } from "@/components/ui/button";
@@ -51,13 +52,7 @@ import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
 import { comparableMonthRange, compareLedgerPeriods } from "@/lib/ledger/compare";
-import {
-  currentMonthKst,
-  formatMonthKo,
-  formatWon,
-  shiftMonth,
-  todayKst,
-} from "@/lib/ledger/format";
+import { currentMonthKst, formatWon, shiftMonth, todayKst } from "@/lib/ledger/format";
 import {
   CATEGORY_COLOR_OPTIONS,
   type LedgerCategoryColorKey,
@@ -66,7 +61,6 @@ import {
 import { projectMonthExpense } from "@/lib/ledger/pace";
 import {
   comparableWeekRange,
-  formatWeekKo,
   shiftWeek,
   weekRange,
   weekStartOf,
@@ -1447,9 +1441,7 @@ export const StatsView = ({
               >
                 <ChevronLeft />
               </Button>
-              <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
-                {formatMonthKo(month)}
-              </span>
+              <MonthPicker month={month} onChange={onMonthChange} max={thisMonth} />
               <Button
                 variant="ghost"
                 size="icon"
@@ -1481,9 +1473,7 @@ export const StatsView = ({
               >
                 <ChevronLeft />
               </Button>
-              <span className="min-w-24 text-center text-sm font-medium text-ink tabular-nums">
-                {formatWeekKo(weekStart, todayKst())}
-              </span>
+              <WeekPicker weekStart={weekStart} onChange={onWeekChange} max={thisWeek} />
               <Button
                 variant="ghost"
                 size="icon"
