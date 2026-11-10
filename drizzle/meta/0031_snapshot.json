@@ -1,5 +1,5 @@
 {
-  "id": "938b2dcd-20f6-45c7-a07e-db67125d2f10",
+  "id": "18c79054-7222-4dd0-9b0f-640679a68f7b",
   "prevId": "cfada08f-0089-416a-b2c7-f40d64fe2cb4",
   "version": "7",
   "dialect": "postgresql",
@@ -975,6 +975,13 @@
           "notNull": true,
           "default": "''"
         },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
         "tags": {
           "name": "tags",
           "type": "text",
@@ -1692,12 +1699,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "sentiment": {
-          "name": "sentiment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -2104,18 +2105,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
-        },
-        "sentiment": {
-          "name": "sentiment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "importance": {
-          "name": "importance",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "sort_order": {
           "name": "sort_order",

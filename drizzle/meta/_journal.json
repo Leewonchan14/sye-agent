@@ -215,8 +215,15 @@
     {
       "idx": 31,
       "version": "7",
-      "when": 1794303939584,
-      "tag": "0031_monitor_insights",
+      "when": 1794301533027,
+      "tag": "0031_clear_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794304263147,
+      "tag": "0032_monitor_insights",
       "breakpoints": true
     }
   ]

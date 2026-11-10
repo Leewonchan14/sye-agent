@@ -33,6 +33,11 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium text-ink">{title}</span>
         <span className="mt-0.5 block truncate text-[11px] text-muted">{meta}</span>
+        {entry.note && (
+          <span className="mt-0.5 block truncate text-[11px] text-muted/80">
+            {entry.note}
+          </span>
+        )}
       </span>
       <span
         className={`shrink-0 text-[13px] font-medium tabular-nums ${
