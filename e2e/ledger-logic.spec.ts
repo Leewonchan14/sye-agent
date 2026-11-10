@@ -17,7 +17,11 @@ import {
   suggestLedgerCategoryName,
 } from "../src/lib/ledger/notification";
 import { getBudgetPace, projectMonthExpense } from "../src/lib/ledger/pace";
-import { lastCompletedWeek, parseRecapComment } from "../src/lib/ledger/recap";
+import {
+  lastCompletedRecapKey,
+  parseRecapComment,
+  recapRange,
+} from "../src/lib/ledger/recap";
 
 test.describe("은행 알림 해석", () => {
   const today = "2026-11-08";
@@ -238,18 +242,48 @@ test("항공과 렌터카는 각각의 분류로 추측한다", () => {
   expect(suggestLedgerCategoryName("토스페이_렌터카_나이스", "expense")).toBe("렌트");
 });
 
-test("주간 리캡 기간: 월요일과 일요일 모두 끝난 월~일 주를 고른다", () => {
-  expect(lastCompletedWeek("2026-11-09")).toEqual({
+test("리캡 코멘트는 가장 최근에 끝난 주(월~일)와 달에만 단다", () => {
+  expect(lastCompletedRecapKey("week", "2026-11-09")).toBe("2026-11-02");
+  expect(lastCompletedRecapKey("week", "2026-11-08")).toBe("2026-10-26");
+  expect(lastCompletedRecapKey("month", "2026-11-01")).toBe("2026-10");
+  expect(lastCompletedRecapKey("month", "2026-01-15")).toBe("2025-12");
+});
+
+test("주간 리캡 기간: 끝난 주는 앞 주 전체와, 진행 중인 주는 같은 요일까지와 비교한다", () => {
+  expect(recapRange("week", "2026-11-02", "2026-11-10")).toEqual({
     from: "2026-11-02",
     to: "2026-11-08",
     previousFrom: "2026-10-26",
     previousTo: "2026-11-01",
+    inProgress: false,
   });
-  expect(lastCompletedWeek("2026-11-08").from).toBe("2026-10-26");
-  expect(lastCompletedWeek("2026-11-08").to).toBe("2026-11-01");
+  expect(recapRange("week", "2026-11-09", "2026-11-10")).toEqual({
+    from: "2026-11-09",
+    to: "2026-11-10",
+    previousFrom: "2026-11-02",
+    previousTo: "2026-11-03",
+    inProgress: true,
+  });
 });
 
-test("주간 리캡 코멘트: 숫자가 있거나 너무 길면 버린다", () => {
+test("월간 리캡 기간: 끝난 달은 앞 달 전체와, 진행 중인 달은 같은 날까지와 비교한다", () => {
+  expect(recapRange("month", "2026-10", "2026-11-10")).toEqual({
+    from: "2026-10-01",
+    to: "2026-10-31",
+    previousFrom: "2026-09-01",
+    previousTo: "2026-09-30",
+    inProgress: false,
+  });
+  expect(recapRange("month", "2026-03", "2026-03-31")).toEqual({
+    from: "2026-03-01",
+    to: "2026-03-31",
+    previousFrom: "2026-02-01",
+    previousTo: "2026-02-28",
+    inProgress: true,
+  });
+});
+
+test("리캡 코멘트: 숫자가 있거나 너무 길면 버린다", () => {
   expect(parseRecapComment('  "이번 주는 카페를\n많이 갔네!"  ')).toBe(
     "이번 주는 카페를 많이 갔네!"
   );

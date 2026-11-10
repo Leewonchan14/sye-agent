@@ -1,5 +1,5 @@
 import { kst } from "@/lib/kst";
-import type { LedgerWeeklyRecap } from "@/lib/ledger/recap";
+import type { LedgerRecap } from "@/lib/ledger/recap";
 
 /** 영수증 한 줄. 그리는 쪽(캔버스)과 화면 읽기용 텍스트가 같은 목록을 쓴다. */
 export type ReceiptLine =
@@ -23,8 +23,21 @@ const diffText = (expense: number, previous: number) => {
   return `${diff > 0 ? "+" : "-"}${won(Math.abs(diff))}`;
 };
 
+const RECEIPT_TEXT = {
+  week: {
+    title: "모임통장 주간 영수증",
+    compare: "전주 대비",
+    closing: "이번 주도 수고했어요 :)",
+  },
+  month: {
+    title: "모임통장 월간 영수증",
+    compare: "전월 대비",
+    closing: "이번 달도 수고했어요 :)",
+  },
+} as const;
+
 export const buildReceiptLines = (
-  recap: LedgerWeeklyRecap,
+  recap: LedgerRecap,
   options: { printedAt: string; budgetLine?: string | null }
 ): ReceiptLine[] => {
   const from = kst(recap.from);
@@ -43,10 +56,11 @@ export const buildReceiptLines = (
   const topCategory = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0];
   const spendDays = new Set(recap.items.map((item) => item.date)).size;
   const days = to.diff(from, "day") + 1;
+  const text = RECEIPT_TEXT[recap.period];
 
   return [
     { kind: "title", text: "HACHIWARE MATE" },
-    { kind: "center", text: "모임통장 주간 영수증" },
+    { kind: "center", text: text.title },
     {
       kind: "center",
       text: `${from.format("YYYY.MM.DD (ddd)")} ~ ${to.format("MM.DD (ddd)")}`,
@@ -73,7 +87,7 @@ export const buildReceiptLines = (
     { kind: "total", left: "합계", right: `${won(recap.expense)}원` },
     {
       kind: "row",
-      left: "전주 대비",
+      left: recap.inProgress ? `${text.compare}(같은 기간)` : text.compare,
       right: diffText(recap.expense, recap.previousExpense),
       muted: true,
     },
@@ -97,7 +111,7 @@ export const buildReceiptLines = (
       seed: `${recap.from}:${recap.expense}`,
       text: `SYE-${from.format("YYYYMMDD")}-${String(recap.expenseCount).padStart(3, "0")}`,
     },
-    { kind: "center", text: "이번 주도 수고했어요 :)" },
+    { kind: "center", text: text.closing },
     { kind: "center", text: `출력 ${options.printedAt}`, muted: true },
   ];
 };

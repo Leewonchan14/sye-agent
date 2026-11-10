@@ -22,6 +22,7 @@ import { EntryDialog } from "@/components/ledger/entry-dialog";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { LedgerEntryList } from "@/components/ledger/entry-list";
 import { PasteDialog } from "@/components/ledger/paste-dialog";
+import { RecapCard } from "@/components/ledger/recap-card";
 import { RecurringTab } from "@/components/ledger/recurring-tab";
 import {
   SettingsDialog,
@@ -31,7 +32,6 @@ import {
 import { CategoryCard, StatsView } from "@/components/ledger/stats-view";
 import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
 import { ViewToggle } from "@/components/ledger/view-toggle";
-import { WeeklyRecapCard } from "@/components/ledger/weekly-recap-card";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -649,7 +649,7 @@ export const LedgerPage = () => {
         </div>
 
         <div className={cn("mt-4", hidesMonthSummary && "hidden")}>
-          <WeeklyRecapCard />
+          <RecapCard period={period} weekStart={weekStart} month={month} />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
               Array.from({ length: 4 }, (_, index) => (

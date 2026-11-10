@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { lastCompletedWeek } from "../src/lib/ledger/recap";
+import { lastCompletedRecapKey, recapRange } from "../src/lib/ledger/recap";
 import { shiftWeek, weekStartOf } from "../src/lib/ledger/week";
 import {
   addEntry,
@@ -10,6 +10,7 @@ import {
   openLedger,
   pool,
   resetLedger,
+  showLastWeek,
   today,
 } from "./helpers";
 
@@ -189,7 +190,8 @@ test("달력을 3D 도시로 보고 이 달의 여행을 함께 보여 준다", 
 });
 
 test("지난주 리캡에서 영수증을 뽑는다", async ({ page, request }) => {
-  const week = lastCompletedWeek(today());
+  const key = lastCompletedRecapKey("week", today());
+  const week = recapRange("week", key, today());
   await addEntry(request, token, {
     entryDate: week.from,
     amount: 4_500,
@@ -198,8 +200,9 @@ test("지난주 리캡에서 영수증을 뽑는다", async ({ page, request }) 
   await addEntry(request, token, { entryDate: week.to, amount: 15_500, memo: "떡볶이" });
 
   await openLedger(page, token);
+  await showLastWeek(page);
   await page
-    .getByRole("region", { name: "지난주 리캡" })
+    .getByRole("region", { name: "주간 리캡 지난주" })
     .getByRole("button", { name: "영수증 뽑기" })
     .click();
   const dialog = page.getByRole("dialog");
@@ -217,6 +220,6 @@ test("지난주 리캡에서 영수증을 뽑는다", async ({ page, request }) 
   await expect(lines.filter({ hasText: "합계 20,000원" })).toHaveCount(1);
   await expect(dialog.getByRole("button", { name: "이미지 저장" })).toHaveAttribute(
     "download",
-    `모임통장-영수증-${week.from}.png`
+    `모임통장-영수증-${key}.png`
   );
 });

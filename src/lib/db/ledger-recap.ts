@@ -5,24 +5,31 @@ import { compareLedgerEntries, getLedgerMonth } from "@/lib/db/ledger";
 import { getLedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { getBudgetPace } from "@/lib/ledger/pace";
-import { lastCompletedWeek, type LedgerWeeklyRecap } from "@/lib/ledger/recap";
+import { type LedgerRecap, type LedgerRecapPeriod, recapRange } from "@/lib/ledger/recap";
+import { weekMonth } from "@/lib/ledger/week";
 
 const TOP_EXPENSES = 3;
 const TOP_CATEGORIES = 5;
 
 const comments = schema.ledgerWeeklyComments;
 
-/** 수치는 전부 여기서 계산한다. 하치와레는 이 결과에 코멘트만 단다. */
-export const getLedgerWeeklyRecap = async (): Promise<LedgerWeeklyRecap> => {
+/**
+ * 주(key = 월요일) 또는 달(key = YYYY-MM)의 리캡. 수치는 전부 여기서 계산하고,
+ * 하치와레는 이 결과에 코멘트만 단다. 예산은 그 기간이 속한 달 것을 쓴다.
+ */
+export const getLedgerRecap = async (
+  period: LedgerRecapPeriod,
+  key: string
+): Promise<LedgerRecap> => {
   const today = kst().format("YYYY-MM-DD");
-  const month = today.slice(0, 7);
-  const week = lastCompletedWeek(today);
+  const month = period === "month" ? key : weekMonth(key);
+  const range = recapRange(period, key, today);
 
   const [current, previous, ledger, [stored]] = await Promise.all([
-    getLedgerStats(week.from, week.to),
-    getLedgerStats(week.previousFrom, week.previousTo),
+    getLedgerStats(range.from, range.to),
+    getLedgerStats(range.previousFrom, range.previousTo),
     getLedgerMonth(month),
-    getDb().select().from(comments).where(eq(comments.weekStart, week.from)).limit(1),
+    getDb().select().from(comments).where(eq(comments.weekStart, key)).limit(1),
   ]);
 
   const expense = current.summary.expense;
@@ -35,8 +42,11 @@ export const getLedgerWeeklyRecap = async (): Promise<LedgerWeeklyRecap> => {
   });
 
   return {
-    from: week.from,
-    to: week.to,
+    period,
+    key,
+    from: range.from,
+    to: range.to,
+    inProgress: range.inProgress,
     expense,
     expenseCount: current.summary.expenseCount,
     previousExpense: previous.summary.expense,
@@ -68,7 +78,7 @@ export const getLedgerWeeklyRecap = async (): Promise<LedgerWeeklyRecap> => {
       total != null && pace
         ? { month, total, spent: ledger.summary.expense, pace }
         : null,
-    comment: stored?.expense === expense ? stored.comment : null,
+    comment: !range.inProgress && stored?.expense === expense ? stored.comment : null,
   };
 };
 
@@ -78,13 +88,13 @@ const RETRY_HOURS = 6;
  * 코멘트를 쓸 차례인지 한 문장으로 정한다. 합계가 바뀌었으면 바로,
  * 같은 합계로 실패했으면 몇 시간 뒤에만 다시 시도해 하치와레를 반복 호출하지 않는다.
  */
-export const claimWeeklyRecapComment = async (
-  weekStart: string,
+export const claimRecapComment = async (
+  key: string,
   expense: number
 ): Promise<boolean> => {
   const rows = await getDb()
     .insert(comments)
-    .values({ weekStart, expense })
+    .values({ weekStart: key, expense })
     .onConflictDoUpdate({
       target: comments.weekStart,
       set: { expense, comment: null, attemptedAt: sql`now()` },
@@ -97,13 +107,9 @@ export const claimWeeklyRecapComment = async (
 };
 
 /** 쓰는 동안 합계가 또 바뀌었으면 저장하지 않는다. */
-export const saveWeeklyRecapComment = async (
-  weekStart: string,
-  expense: number,
-  comment: string
-) => {
+export const saveRecapComment = async (key: string, expense: number, comment: string) => {
   await getDb()
     .update(comments)
     .set({ comment })
-    .where(and(eq(comments.weekStart, weekStart), eq(comments.expense, expense)));
+    .where(and(eq(comments.weekStart, key), eq(comments.expense, expense)));
 };
