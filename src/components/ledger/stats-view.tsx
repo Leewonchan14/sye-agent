@@ -14,6 +14,7 @@ import {
   CategoryIcon,
   EntryIcon,
 } from "@/components/ledger/category-icon";
+import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
 import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -693,27 +694,6 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
   );
 };
 
-const groupTopExpenses = (entries: LedgerEntryView[], selected: CategoryFilter) => {
-  const totals = new Map<string, { amount: number; count: number }>();
-
-  for (const entry of entries) {
-    if (entry.kind !== "expense") continue;
-    if (selected !== "all" && entry.categoryId !== selected) continue;
-    const name = entry.memo.trim() || entry.categoryName || "지출";
-    const total = totals.get(name) ?? { amount: 0, count: 0 };
-    total.amount += entry.amount;
-    total.count += 1;
-    totals.set(name, total);
-  }
-
-  return [...totals.entries()]
-    .map(([name, total]) => ({ name, ...total }))
-    .sort(
-      (a, b) => b.amount - a.amount || b.count - a.count || a.name.localeCompare(b.name)
-    )
-    .slice(0, 8);
-};
-
 const TopExpensesCard = ({
   entries,
   categories,
@@ -723,7 +703,6 @@ const TopExpensesCard = ({
 }) => {
   const [selected, setSelected] = useState<CategoryFilter>("all");
   const merchants = groupTopExpenses(entries, selected);
-  const max = Math.max(1, ...merchants.map((merchant) => merchant.amount));
 
   return (
     <StatCard>
@@ -736,29 +715,7 @@ const TopExpensesCard = ({
         onSelect={setSelected}
       />
       {merchants.length ? (
-        <ul aria-label="큰 지출 목록" className="mt-2 space-y-2.5">
-          {merchants.map((merchant) => (
-            <li key={merchant.name}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-[12px] text-body">{merchant.name}</span>
-                <span className="shrink-0 text-[12px] font-medium text-ink tabular-nums">
-                  {formatWon(merchant.amount)}
-                </span>
-              </div>
-              <div className="mt-1 flex items-center gap-2">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-canvas-soft">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${(merchant.amount / max) * 100}%` }}
-                  />
-                </div>
-                <span className="w-6 shrink-0 text-right text-[10px] text-muted-soft tabular-nums">
-                  {merchant.count}건
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <TopExpensesList items={merchants} className="mt-2" />
       ) : (
         <p className="mt-2 text-[12px] text-muted">기간 내 지출이 없어요</p>
       )}
@@ -1225,12 +1182,18 @@ export const StatsView = ({
               totalBudget={shouldExclude ? null : totalBudget}
             />
           )}
+          {/* 큰 지출은 요약 바로 아래에서 먼저 보이게 하고, 분류 카드와 한 줄을 이룬다. */}
+          {hasActivity && (
+            <>
+              <TopExpensesCard entries={stats.entries} categories={categories} />
+              <CategoryCard stats={stats} />
+            </>
+          )}
           {!isTripReport && <AllTimeCard allTime={stats.allTime} />}
           {hasActivity ? (
             <>
               {!isTripReport && <BalanceCard daily={stats.daily} />}
               {!isTripReport && <SpendCard daily={stats.daily} />}
-              <CategoryCard stats={stats} />
               <PeriodEntriesCard
                 entries={stats.entries}
                 categories={categories}
@@ -1239,7 +1202,6 @@ export const StatsView = ({
               {!isTripReport && stats.monthly.length > 1 && (
                 <MonthlyCard monthly={stats.monthly} />
               )}
-              <TopExpensesCard entries={stats.entries} categories={categories} />
             </>
           ) : (
             <StatCard className="md:col-span-2">
