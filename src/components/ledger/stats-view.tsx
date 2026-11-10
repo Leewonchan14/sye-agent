@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import {
   categoryChipClass,
@@ -18,6 +19,12 @@ import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expen
 import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerEntryView, LedgerMonthPayload } from "@/lib/db/ledger";
 import type { LedgerStats } from "@/lib/db/ledger-stats";
@@ -778,55 +785,26 @@ const PeriodEntriesCard = ({
 const fillMonths = (monthly: LedgerStats["monthly"]) => {
   if (monthly.length < 2) return monthly;
   const byMonth = new Map(monthly.map((month) => [month.month, month]));
-  const [startYear, startMonth] = monthly[0].month.split("-").map(Number);
-  const last = monthly[monthly.length - 1].month;
-  const filled: LedgerStats["monthly"] = [];
-  for (let index = 0; ; index += 1) {
-    const total = startMonth - 1 + index;
-    const key = `${startYear + Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
-    filled.push(byMonth.get(key) ?? { month: key, income: 0, expense: 0 });
-    if (key >= last) return filled;
-  }
+  const start = kst(`${monthly[0].month}-01`);
+  const count = kst(`${monthly[monthly.length - 1].month}-01`).diff(start, "month") + 1;
+  return Array.from({ length: count }, (_, index) => {
+    const key = start.add(index, "month").format("YYYY-MM");
+    return byMonth.get(key) ?? { month: key, income: 0, expense: 0 };
+  });
 };
 
-const MONTH_LABEL_STEPS = [1, 2, 3, 6, 12, 24, 60];
-const MAX_MONTH_LABELS = 8;
+const monthlyChartConfig = {
+  income: { label: "입금", color: "var(--color-success)" },
+  expense: { label: "지출", color: "var(--color-primary)" },
+} satisfies ChartConfig;
 
 const MonthlyCard = ({ monthly: rawMonthly }: { monthly: LedgerStats["monthly"] }) => {
   const monthly = fillMonths(rawMonthly);
-  const width = 360;
-  const height = 180;
-  const left = 36;
-  const right = 6;
-  const top = 12;
-  const bottom = 24;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
-  const max =
-    Math.max(1, ...monthly.flatMap((month) => [month.income, month.expense])) * 1.1;
-  const groupWidth = monthly.length ? plotWidth / monthly.length : plotWidth;
-  // 달이 많으면 입금·지출 막대가 한 칸 안에 들어가도록 칸 너비에 맞춰 줄인다.
-  const barWidth = Math.min(16, groupWidth * 0.36);
-  const barGap = Math.min(1, groupWidth * 0.06);
-  const labelStep =
-    MONTH_LABEL_STEPS.find((step) => monthly.length / step <= MAX_MONTH_LABELS) ?? 60;
   const multiYear =
     monthly.length > 0 &&
     monthly[0].month.slice(0, 4) !== monthly.at(-1)?.month.slice(0, 4);
-  const monthLabel = (key: string) => {
-    const month = Number(key.slice(5));
-    if (labelStep >= 12) return `${key.slice(0, 4)}년`;
-    return multiYear ? `${key.slice(2, 4)}.${month}` : `${month}월`;
-  };
-  const showLabel = (key: string) => {
-    if (labelStep === 1) return true;
-    const month = Number(key.slice(5));
-    // 1월·7월처럼 달 경계에 맞춰 찍어서 라벨 간격이 일정하게 보이게 한다.
-    if (labelStep >= 12) {
-      return month === 1 && Number(key.slice(0, 4)) % (labelStep / 12) === 0;
-    }
-    return (month - 1) % labelStep === 0;
-  };
+  const monthTick = (month: string) =>
+    multiYear ? kst(`${month}-01`).format("YY.M") : kst(`${month}-01`).format("M월");
 
   return (
     <StatCard>
@@ -845,85 +823,71 @@ const MonthlyCard = ({ monthly: rawMonthly }: { monthly: LedgerStats["monthly"] 
       </div>
 
       {monthly.length ? (
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="mt-3 w-full"
+        <ChartContainer
+          config={monthlyChartConfig}
           role="img"
           aria-label="월별 입출금"
+          className="mt-3 aspect-auto h-[180px] w-full"
         >
-          <title>월별 입출금</title>
-          {[0, 1, 2].map((index) => {
-            const y = top + (index / 2) * plotHeight;
-            const value = max - (index / 2) * max;
-            return (
-              <g key={index}>
-                <line
-                  x1={left}
-                  x2={left + plotWidth}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--color-hairline-soft)"
-                  strokeWidth={1}
+          <BarChart data={monthly} margin={{ top: 8, right: 6, bottom: 0, left: 0 }}>
+            <CartesianGrid vertical={false} stroke="var(--color-hairline-soft)" />
+            <XAxis
+              dataKey="month"
+              tickFormatter={monthTick}
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+              minTickGap={16}
+              fontSize={10}
+            />
+            <YAxis
+              tickFormatter={compactWon}
+              tickLine={false}
+              axisLine={false}
+              tickCount={3}
+              width={40}
+              fontSize={10}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(month) => kst(`${month}-01`).format("YYYY년 M월")}
+                  formatter={(value, name) => (
+                    <div className="flex w-full items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-[2px]"
+                        style={{ background: `var(--color-${name})` }}
+                      />
+                      <span className="text-muted-foreground">
+                        {
+                          monthlyChartConfig[name as keyof typeof monthlyChartConfig]
+                            ?.label
+                        }
+                      </span>
+                      <span className="ml-auto font-medium text-foreground tabular-nums">
+                        {formatWon(Number(value))}
+                      </span>
+                    </div>
+                  )}
                 />
-                <text
-                  x={left - 5}
-                  y={y}
-                  textAnchor="end"
-                  dominantBaseline="middle"
-                  fontSize={8}
-                  fill="var(--color-muted-soft)"
-                >
-                  {compactWon(value)}
-                </text>
-              </g>
-            );
-          })}
-
-          {monthly.map((month, index) => {
-            const center = left + groupWidth * (index + 0.5);
-            const incomeHeight = (month.income / max) * plotHeight;
-            const expenseHeight = (month.expense / max) * plotHeight;
-            return (
-              <g key={month.month}>
-                <rect
-                  x={center - barWidth - barGap}
-                  y={top + plotHeight - incomeHeight}
-                  width={barWidth}
-                  height={incomeHeight}
-                  rx={Math.min(2, barWidth / 2)}
-                  fill="var(--color-success)"
-                >
-                  <title>
-                    {month.month} 입금 {formatWon(month.income)}
-                  </title>
-                </rect>
-                <rect
-                  x={center + barGap}
-                  y={top + plotHeight - expenseHeight}
-                  width={barWidth}
-                  height={expenseHeight}
-                  rx={Math.min(2, barWidth / 2)}
-                  fill="var(--color-primary)"
-                >
-                  <title>
-                    {month.month} 지출 {formatWon(month.expense)}
-                  </title>
-                </rect>
-                {showLabel(month.month) && (
-                  <text
-                    x={center}
-                    y={height - 8}
-                    textAnchor="middle"
-                    fontSize={9}
-                    fill="var(--color-muted-soft)"
-                  >
-                    {monthLabel(month.month)}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+              }
+            />
+            <Bar
+              dataKey="income"
+              fill="var(--color-income)"
+              radius={[2, 2, 0, 0]}
+              maxBarSize={16}
+              isAnimationActive={false}
+            />
+            <Bar
+              dataKey="expense"
+              fill="var(--color-expense)"
+              radius={[2, 2, 0, 0]}
+              maxBarSize={16}
+              isAnimationActive={false}
+            />
+          </BarChart>
+        </ChartContainer>
       ) : (
         <p className="mt-2 text-[12px] text-muted">기간 내 기록이 없어요</p>
       )}
