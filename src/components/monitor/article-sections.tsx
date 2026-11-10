@@ -1,8 +1,16 @@
 "use client";
 
-import { Ban, ChevronRight, ExternalLink, Sparkles, X } from "lucide-react";
+import {
+  Ban,
+  ChevronRight,
+  ExternalLink,
+  Sparkles,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 
+import { ToneMenu } from "@/components/monitor/tone-badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -14,7 +22,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { kst } from "@/lib/kst";
 import type { useMonitorMutations } from "@/lib/monitor/queries";
-import { preferredLink } from "@/lib/monitor/report";
+import { preferredLink, reporterLabel } from "@/lib/monitor/report";
 import type {
   MonitorCategory,
   MonitorClientView,
@@ -127,7 +135,12 @@ const ItemRow = ({
         </a>
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted">
           <span className="font-medium text-body">{item.media}</span>
-          <span>{item.reporter ? `${item.reporter} 기자` : "기자 미확인"}</span>
+          <span>{item.reporter ? reporterLabel(item.reporter) : "기자 미확인"}</span>
+          <ToneMenu
+            sentiment={item.sentiment}
+            importance={item.importance}
+            onChange={(patch) => mutations.updateItem.mutate({ id: item.id, ...patch })}
+          />
           {item.subcategory && <span>{item.subcategory}</span>}
           {group.length > 0 && (
             <Pill className="bg-primary/10 text-primary">
@@ -304,7 +317,12 @@ const GoalMeter = ({ count, goal }: { count: number; goal: number | null }) => {
   );
 };
 
+/** 부정 논조이거나 중요도가 높은 기사 — 먼저 확인해야 할 기사 */
+const needsAttention = (item: MonitorItemView) =>
+  item.sentiment === "negative" || item.importance === "high";
+
 export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Props) => {
+  const [attentionOnly, setAttentionOnly] = useState(false);
   // 카테고리를 지우면 그 안의 기사는 제외 후보로 보여서 다시 분류할 수 있게 한다.
   const categoryKeys = new Set(client.categories.map((c) => c.key));
   const excluded = items.filter((i) => !i.category || !categoryKeys.has(i.category));
@@ -312,6 +330,12 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
   const reportedCount = items.filter(
     (i) => i.flags.includes("reported") && !i.included
   ).length;
+  const picked = items.filter(
+    (i) => i.category && categoryKeys.has(i.category) && (i.isLead || !i.dupGroup)
+  );
+  const negative = picked.filter((i) => i.sentiment === "negative").length;
+  const important = picked.filter((i) => i.importance === "high").length;
+  const attention = picked.filter(needsAttention).length;
 
   return (
     <div className="flex flex-col gap-8">
@@ -321,10 +345,32 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
           체크해 주세요.
         </p>
       )}
+      {attention > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-error/20 bg-error/5 px-4 py-2.5 text-[13px] text-body">
+          <TriangleAlert className="size-4 shrink-0 text-error" />
+          <span>
+            먼저 볼 기사{" "}
+            {[negative && `부정 ${negative}건`, important && `중요 ${important}건`]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="flex-1" />
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={attentionOnly}
+            onClick={() => setAttentionOnly((v) => !v)}
+          >
+            {attentionOnly ? "전체 보기" : "부정·중요만 보기"}
+          </Button>
+        </div>
+      )}
       {client.categories.map((category) => {
         const all = items.filter((i) => i.category === category.key);
-        const leads = all.filter((i) => i.isLead || !i.dupGroup);
-        const included = leads.filter((i) => i.included).length;
+        const allLeads = all.filter((i) => i.isLead || !i.dupGroup);
+        const leads =
+          attentionOnly && attention > 0 ? allLeads.filter(needsAttention) : allLeads;
+        const included = allLeads.filter((i) => i.included).length;
         const total = all.length;
 
         return (
@@ -334,7 +380,7 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
                 {category.name}
               </h2>
               <GoalMeter count={included} goal={category.goal} />
-              {category.goal === null && total > leads.length && (
+              {category.goal === null && total > allLeads.length && (
                 <span className="text-[13px] text-muted">전재 포함 총 {total}건</span>
               )}
               <span className="flex-1" />
@@ -370,7 +416,9 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-hairline px-4 py-6 text-center text-sm text-muted">
-                이 카테고리로 분류된 기사가 아직 없어요.
+                {allLeads.length
+                  ? "이 카테고리에는 부정·중요 기사가 없어요."
+                  : "이 카테고리로 분류된 기사가 아직 없어요."}
               </p>
             )}
           </section>

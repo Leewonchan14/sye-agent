@@ -14,6 +14,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import { ArticleSections } from "@/components/monitor/article-sections";
 import { HermesProgress } from "@/components/monitor/hermes-progress";
+import { MediaStats } from "@/components/monitor/media-stats";
 import { ReportPanel } from "@/components/monitor/report-panel";
 import { ReportSteps } from "@/components/monitor/report-steps";
 import { RulesPanel } from "@/components/monitor/rules-panel";
@@ -30,9 +31,12 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { id: "articles", label: "기사 선별" },
   { id: "report", label: "리포트 미리보기" },
+  { id: "stats", label: "매체·기자 통계" },
   { id: "rules", label: "고객사 규칙" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
+/** 그날 수집과 상관없는 탭 — 수집 기록·진행 단계를 숨긴다. */
+const STANDALONE_TABS: Tab[] = ["stats", "rules"];
 
 const windowLabel = (since: string, until: string) =>
   `${kst(since).format("MM.DD HH:mm")} → ${kst(until).format("MM.DD HH:mm")}`;
@@ -172,7 +176,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             isPlaceholderData && "pointer-events-none opacity-60"
           )}
         >
-          {tab !== "rules" && (
+          {!STANDALONE_TABS.includes(tab) && (
             <RunHistory
               runs={runs}
               activeId={runId ?? run.id}
@@ -180,7 +184,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               onSelect={setRunId}
             />
           )}
-          {tab !== "rules" && (
+          {!STANDALONE_TABS.includes(tab) && (
             <ReportSteps
               pending={Boolean(run.pendingSince)}
               failed={Boolean(run.lastError) && !items.length}
@@ -360,9 +364,11 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               run={run}
               items={items}
               mutations={mutations}
+              mailReady={data.mailReady}
               onCopied={() => setCopiedRuns((list) => [run.id, ...list].slice(0, 30))}
             />
           )}
+          {tab === "stats" && <MediaStats key={client.id} client={client} />}
           {tab === "rules" && (
             <RulesPanel
               key={client.id}

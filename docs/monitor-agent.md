@@ -122,6 +122,8 @@ Content-Type: application/json
 | `dupGroup`       |      | 같은 보도자료 묶음 키 (예: `"hk-gourmet-month"`)                                           |
 | `isLead`         |      | 묶음의 대표 기사면 true(기본). 나머지 전재 기사는 false                                    |
 | `blocked`        |      | 원문 접근이 막혔으면 true                                                                  |
+| `sentiment`      |      | 고객사 입장에서 본 논조 `positive` / `neutral` / `negative`. 화면·통계·엑셀에 표시         |
+| `importance`     |      | 고객사에 미칠 영향 `high` / `normal` / `low`. `high`는 화면에 "중요"로 표시                |
 
 - 같은 URL을 같은 런에 두 번 보내면 무시된다.
 - **나눠 보내기**: runId로 붙이는 결과를 여러 번에 나눠 보내면 마지막을 뺀 묶음에 `"final": false`를 넣는다.
@@ -160,6 +162,7 @@ POST /api/monitor/agent/issues/{issueId}/snapshots
       "title": "...",
       "publishedAt": "2026-11-06 14:42", // KST
       "brandMention": false,
+      "sentiment": "negative", // 선택. positive | neutral | negative
     },
   ],
 }
@@ -235,3 +238,13 @@ POST /api/dates/agent/digests   // x-monitor-token(프롬프트에 들어 있음
 - 하트(가 보고 싶어)·다녀왔어·별로 표시와 지금까지 추천한 곳이 다음 조사 프롬프트에 들어간다.
 - 지역·테마·하루 개수·시각·부탁은 화면의 "조건"에서 고친다. 결과 없이 끝나면 한 번 다시 시도하고, 완료·실패는 Discord로 알린다.
 - 로그인 없이 공개 임베드만 읽는다. 로그인 페이지를 열거나 다른 브라우저인 척하는 우회는 프롬프트에서 막아 둔다.
+
+## 6. 리포트 공유 링크 · 메일 · 엑셀
+
+- **공유 링크**: 리포트 탭에서 켜면 `/r/{token}` 읽기 전용 페이지가 생긴다. 로그인 없이 열리고,
+  리포트에 넣은 대표 기사만 보인다. 링크를 끄면 바로 열리지 않는다.
+- **메일 보내기**: 고객사마다 받는 사람 주소를 저장해 두고 리포트 탭에서 보낸다. 보내면 보고 완료로 표시된다.
+  앱 env가 필요하다.
+  - `MONITOR_SMTP_URL` 예: `smtps://계정%40gmail.com:앱비밀번호@smtp.gmail.com:465`
+  - `MONITOR_MAIL_FROM` 예: `웰컴 성예은 <계정@gmail.com>`
+- **엑셀(CSV)**: 리포트에 넣은 기사를 같은 보도자료 전재까지 포함해 내려받는다. 한글이 깨지지 않게 BOM을 붙인다.

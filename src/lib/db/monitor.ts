@@ -15,6 +15,7 @@ import {
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs, kst } from "@/lib/kst";
+import { isMailReady } from "@/lib/monitor/mail";
 import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
 import {
@@ -22,6 +23,7 @@ import {
   issueCollectSlot,
   nextCollectAt,
 } from "@/lib/monitor/schedule";
+import { aggregateStats } from "@/lib/monitor/stats";
 import type {
   AgentRunInput,
   AgentSnapshotInput,
@@ -36,9 +38,18 @@ import type {
   MonitorRule,
   MonitorRunStats,
   MonitorRunView,
+  MonitorStatsPayload,
   MonitorUsage,
+  StatsDays,
+  StatsScope,
 } from "@/lib/monitor/types";
-import { REPORTER_GAPS } from "@/lib/monitor/types";
+import {
+  asImportance,
+  asSentiment,
+  REPORTER_GAPS,
+  type MonitorImportance,
+  type MonitorSentiment,
+} from "@/lib/monitor/types";
 
 const {
   monitorClients: clientsT,
@@ -191,6 +202,7 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   autoCollect: row.autoCollect,
   collectTime: row.collectTime,
   weekdaysOnly: row.weekdaysOnly,
+  reportEmails: row.reportEmails ?? [],
 });
 
 /** 기본 고객사(홍콩관광청·파나소닉코리아)를 만든다. 이미 있는 slug는 건너뛴다. */
@@ -251,6 +263,7 @@ export const updateMonitorClient = async (
       | "autoCollect"
       | "collectTime"
       | "weekdaysOnly"
+      | "reportEmails"
     >
   >
 ) => {
@@ -275,12 +288,53 @@ const toRunView = (row: typeof runsT.$inferSelect): MonitorRunView => ({
   pendingSince: row.pendingHermesRunId ? iso(row.pendingSince) : null,
   lastError: row.lastError,
   createdAt: iso(row.createdAt),
+  shareToken: row.shareToken,
+  mailedAt: iso(row.mailedAt),
+  mailedTo: row.mailedTo ?? [],
 });
 
 export const getRunRow = async (runId: number) => {
   const db = getDb();
   const [row] = await db.select().from(runsT).where(eq(runsT.id, runId)).limit(1);
   return row ?? null;
+};
+
+/** 런 하나의 기사 판정 목록 — 표 순서(sortOrder) 그대로 */
+const loadRunItems = async (runId: number): Promise<MonitorItemView[]> => {
+  const rows = await getDb()
+    .select({
+      id: itemsT.id,
+      articleId: itemsT.articleId,
+      category: itemsT.category,
+      subcategory: itemsT.subcategory,
+      score: itemsT.score,
+      reason: itemsT.reason,
+      excludedReason: itemsT.excludedReason,
+      excludedRule: itemsT.excludedRule,
+      included: itemsT.included,
+      dupGroup: itemsT.dupGroup,
+      isLead: itemsT.isLead,
+      flags: itemsT.flags,
+      sentiment: itemsT.sentiment,
+      importance: itemsT.importance,
+      url: articlesT.url,
+      naverUrl: articlesT.naverUrl,
+      media: articlesT.media,
+      title: articlesT.title,
+      reporter: articlesT.reporter,
+      publishedAt: articlesT.publishedAt,
+      summary: articlesT.summary,
+    })
+    .from(itemsT)
+    .innerJoin(articlesT, eq(itemsT.articleId, articlesT.id))
+    .where(eq(itemsT.runId, runId))
+    .orderBy(asc(itemsT.sortOrder), desc(articlesT.publishedAt));
+  return rows.map((i) => ({
+    ...i,
+    sentiment: asSentiment(i.sentiment),
+    importance: asImportance(i.importance),
+    publishedAt: iso(i.publishedAt),
+  }));
 };
 
 /** 고객사 화면 데이터. runId가 없으면 가장 최근 런을 보여준다. */
@@ -350,36 +404,7 @@ export const getMonitorClientPayload = async (
   if (run && run.clientId !== clientId)
     throw new MonitorError("다른 고객사의 수집 결과예요.");
 
-  const items: MonitorItemView[] = run
-    ? (
-        await db
-          .select({
-            id: itemsT.id,
-            articleId: itemsT.articleId,
-            category: itemsT.category,
-            subcategory: itemsT.subcategory,
-            score: itemsT.score,
-            reason: itemsT.reason,
-            excludedReason: itemsT.excludedReason,
-            excludedRule: itemsT.excludedRule,
-            included: itemsT.included,
-            dupGroup: itemsT.dupGroup,
-            isLead: itemsT.isLead,
-            flags: itemsT.flags,
-            url: articlesT.url,
-            naverUrl: articlesT.naverUrl,
-            media: articlesT.media,
-            title: articlesT.title,
-            reporter: articlesT.reporter,
-            publishedAt: articlesT.publishedAt,
-            summary: articlesT.summary,
-          })
-          .from(itemsT)
-          .innerJoin(articlesT, eq(itemsT.articleId, articlesT.id))
-          .where(eq(itemsT.runId, run.id))
-          .orderBy(asc(itemsT.sortOrder), desc(articlesT.publishedAt))
-      ).map((i) => ({ ...i, publishedAt: iso(i.publishedAt) }))
-    : [];
+  const items = run ? await loadRunItems(run.id) : [];
 
   return {
     client: toClientView(client),
@@ -395,6 +420,7 @@ export const getMonitorClientPayload = async (
       failed: Boolean(r.lastError) && !runItemCounts.has(r.id),
     })),
     collectedToday: runs.some((r) => r.collectKey === kst().format("YYYY-MM-DD")),
+    mailReady: isMailReady(),
   };
 };
 
@@ -552,7 +578,13 @@ export const releaseDailyRun = async (runId: number) => {
 
 export const updateMonitorItem = async (
   id: number,
-  patch: { included?: boolean; category?: string | null; subcategory?: string | null }
+  patch: {
+    included?: boolean;
+    category?: string | null;
+    subcategory?: string | null;
+    sentiment?: MonitorSentiment | null;
+    importance?: MonitorImportance | null;
+  }
 ) => {
   const db = getDb();
   const set: Partial<typeof itemsT.$inferInsert> = { ...patch };
@@ -605,6 +637,112 @@ export const markRunReported = async (runId: number, reportText: string) => {
     .update(runsT)
     .set({ reportText, reportedAt: new Date() })
     .where(eq(runsT.id, runId));
+};
+
+/* ───────────────────────── 공유 링크 · 메일 ───────────────────────── */
+
+/** 공유 링크를 켜거나(token) 끈다(null). */
+export const setRunShareToken = async (runId: number, token: string | null) => {
+  const [row] = await getDb()
+    .update(runsT)
+    .set({ shareToken: token })
+    .where(eq(runsT.id, runId))
+    .returning();
+  if (!row) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
+};
+
+/** 공유 링크로 여는 리포트. 링크가 꺼졌거나 없으면 null. */
+export const getSharedReport = async (token: string) => {
+  const db = getDb();
+  const [run] = await db.select().from(runsT).where(eq(runsT.shareToken, token)).limit(1);
+  if (!run) return null;
+  const [client] = await db
+    .select()
+    .from(clientsT)
+    .where(eq(clientsT.id, run.clientId))
+    .limit(1);
+  if (!client) return null;
+  return {
+    client: toClientView(client),
+    run: toRunView(run),
+    items: await loadRunItems(run.id),
+  };
+};
+
+/** 메일로 보낼 때 쓰는 런·고객사·기사 */
+export const getRunForReport = async (runId: number) => {
+  const run = await getRunRow(runId);
+  if (!run) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
+  return {
+    client: await getClientView(run.clientId),
+    run: toRunView(run),
+    items: await loadRunItems(run.id),
+  };
+};
+
+/** 메일을 보냈다고 기록하고 보고 완료로 표시한다. */
+export const markRunMailed = async (runId: number, to: string[], reportText: string) => {
+  const now = new Date();
+  await getDb()
+    .update(runsT)
+    .set({ mailedAt: now, mailedTo: to, reportText, reportedAt: now })
+    .where(eq(runsT.id, runId));
+};
+
+/* ───────────────────────── 매체·기자 통계 ───────────────────────── */
+
+/**
+ * 최근 days일 동안 끝난 수집에서 고른 기사를 매체·기자별로 센다.
+ * 같은 기사가 여러 수집에 나오면 가장 최근 판정 하나만 센다.
+ */
+export const getClientStats = async (
+  clientId: number,
+  options: { days: StatsDays; scope: StatsScope; category: string | null }
+): Promise<MonitorStatsPayload> => {
+  const db = getDb();
+  const to = kst();
+  const from = to.subtract(options.days - 1, "day").startOf("day");
+
+  const rows = await db
+    .select({
+      articleId: itemsT.articleId,
+      url: articlesT.url,
+      title: articlesT.title,
+      media: articlesT.media,
+      reporter: articlesT.reporter,
+      publishedAt: articlesT.publishedAt,
+      category: itemsT.category,
+      sentiment: itemsT.sentiment,
+    })
+    .from(itemsT)
+    .innerJoin(runsT, eq(itemsT.runId, runsT.id))
+    .innerJoin(articlesT, eq(itemsT.articleId, articlesT.id))
+    .where(
+      and(
+        eq(runsT.clientId, clientId),
+        gte(runsT.until, from.toDate()),
+        isNotNull(itemsT.category),
+        options.scope === "included" ? eq(itemsT.included, true) : undefined,
+        options.category ? eq(itemsT.category, options.category) : undefined
+      )
+    )
+    // 뒤에 오는 판정이 남도록 오래된 수집부터 읽는다.
+    .orderBy(asc(runsT.until), asc(itemsT.id));
+
+  return aggregateStats(
+    {
+      days: options.days,
+      scope: options.scope,
+      category: options.category,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    },
+    rows.map((r) => ({
+      ...r,
+      publishedAt: iso(r.publishedAt),
+      sentiment: asSentiment(r.sentiment),
+    }))
+  );
 };
 
 /**
@@ -900,6 +1038,8 @@ export const ingestAgentRun = async (
         dupGroup: item.dupGroup ?? null,
         isLead: item.isLead,
         flags,
+        sentiment: item.sentiment ?? null,
+        importance: item.importance ?? null,
         sortOrder: maxOrder + index + 1,
       })
       .onConflictDoNothing({ target: [itemsT.runId, itemsT.articleId] })
@@ -1112,6 +1252,7 @@ export const getIssueArticles = async (
     title: a.title,
     publishedAt: iso(a.publishedAt),
     brandMention: a.brandMention,
+    sentiment: asSentiment(a.sentiment),
   }));
 };
 
@@ -1174,6 +1315,7 @@ export const addIssueSnapshot = async (
             ? dayjs.tz(a.publishedAt, "Asia/Seoul").toDate()
             : null,
           brandMention: a.brandMention,
+          sentiment: a.sentiment ?? null,
         }))
       )
       .catch((error) => console.error("이슈 기사 목록을 저장하지 못했어요.", error));

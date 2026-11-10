@@ -324,6 +324,8 @@ export const monitorClients = pgTable(
     collectTime: text("collect_time"),
     /** 평일에만 수집한다. 월요일에는 지난 금요일부터 모은다. */
     weekdaysOnly: boolean("weekdays_only").notNull().default(true),
+    /** 리포트를 메일로 받을 주소 목록 */
+    reportEmails: jsonb("report_emails").$type<string[]>().notNull().default([]),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -358,10 +360,16 @@ export const monitorRuns = pgTable(
     collectKey: text("collect_key"),
     /** 자동 수집 진행 — running → (실패 시 retried) → done. 재시도와 알림을 한 번만 하게 막는다. */
     autoState: text("auto_state"),
+    /** 고객사에 공유하는 읽기 전용 리포트 링크(/r/{token}). 비우면 링크가 꺼진다. */
+    shareToken: text("share_token"),
+    /** 마지막으로 리포트 메일을 보낸 시각과 받는 사람 */
+    mailedAt: timestamp("mailed_at", { withTimezone: true }),
+    mailedTo: jsonb("mailed_to").$type<string[]>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (t) => ({
     clientIdx: index("monitor_runs_client_idx").on(t.clientId, t.until),
+    shareTokenUniq: uniqueIndex("monitor_runs_share_token_uniq").on(t.shareToken),
     collectKeyUniq: uniqueIndex("monitor_runs_collect_key_uniq").on(
       t.clientId,
       t.collectKey
@@ -409,6 +417,10 @@ export const monitorItems = pgTable(
     isLead: boolean("is_lead").notNull().default(true),
     /** dup | blocked | reported | new */
     flags: jsonb("flags").$type<string[]>().notNull().default([]),
+    /** 고객사 입장에서 본 논조 — positive | neutral | negative. 모르면 null */
+    sentiment: text("sentiment"),
+    /** 고객사에 미칠 영향 — high | normal | low. 모르면 null */
+    importance: text("importance"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -494,6 +506,8 @@ export const monitorIssueArticles = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** 감시어가 제목·본문에 나온 기사 */
     brandMention: boolean("brand_mention").notNull().default(false),
+    /** 고객사 입장에서 본 논조 — positive | neutral | negative. 모르면 null */
+    sentiment: text("sentiment"),
   },
   (t) => ({
     snapshotIdx: index("monitor_issue_articles_snapshot_idx").on(

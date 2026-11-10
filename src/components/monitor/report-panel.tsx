@@ -5,10 +5,11 @@ import { useMemo, useRef } from "react";
 import { toast } from "sonner";
 import useLocalStorageState from "use-local-storage-state";
 
+import { ReportShare } from "@/components/monitor/report-share";
 import { Button } from "@/components/ui/button";
 import { kst } from "@/lib/kst";
 import type { useMonitorMutations } from "@/lib/monitor/queries";
-import { buildMonitorReport, type ReportFormat } from "@/lib/monitor/report";
+import { buildMonitorReport, reportLeads, type ReportFormat } from "@/lib/monitor/report";
 import type {
   MonitorClientView,
   MonitorItemView,
@@ -21,6 +22,7 @@ interface Props {
   run: MonitorRunView;
   items: MonitorItemView[];
   mutations: ReturnType<typeof useMonitorMutations>;
+  mailReady: boolean;
   onCopied: () => void;
 }
 
@@ -29,7 +31,14 @@ const FORMATS: { id: ReportFormat; label: string }[] = [
   { id: "plain", label: "리포트만" },
 ];
 
-export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) => {
+export const ReportPanel = ({
+  client,
+  run,
+  items,
+  mutations,
+  mailReady,
+  onCopied,
+}: Props) => {
   const [format, setFormat] = useLocalStorageState<ReportFormat>("monitor.reportFormat", {
     defaultValue: "email",
   });
@@ -39,10 +48,10 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
     [client, run, items, format]
   );
 
-  const leads = items.filter(
-    (i) => i.category && i.included && (i.isLead || !i.dupGroup)
-  );
+  const leads = reportLeads(items);
   const missing = leads.filter((i) => !i.reporter || !i.publishedAt).length;
+  const negative = leads.filter((i) => i.sentiment === "negative").length;
+  const important = leads.filter((i) => i.importance === "high").length;
   const skipReported = client.rules.some(
     (r) => r.id === "skip-reported" && r.value === true
   );
@@ -90,7 +99,7 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
         </pre>
       </div>
 
-      <aside className="flex flex-col gap-4 rounded-xl border border-hairline bg-canvas-soft p-4 lg:sticky lg:top-4">
+      <aside className="flex flex-col gap-4 rounded-xl border border-hairline bg-canvas-soft p-4 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
         <h3 className="text-sm font-medium text-ink">보내기 전에</h3>
         <div
           className="inline-flex rounded-full bg-canvas-card p-1"
@@ -135,6 +144,24 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
           >
             {missing}건
           </dd>
+          <dt className="text-muted">부정 기사</dt>
+          <dd
+            className={cn(
+              "text-right font-mono text-muted tabular-nums",
+              negative > 0 && "text-error"
+            )}
+          >
+            {negative}건
+          </dd>
+          <dt className="text-muted">중요 기사</dt>
+          <dd
+            className={cn(
+              "text-right font-mono text-muted tabular-nums",
+              important > 0 && "text-warning"
+            )}
+          >
+            {important}건
+          </dd>
         </dl>
         <Button onClick={copy} disabled={!leads.length}>
           <Copy /> 리포트 복사
@@ -172,6 +199,13 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
             </>
           )}
         </div>
+        <ReportShare
+          client={client}
+          run={run}
+          items={items}
+          mutations={mutations}
+          mailReady={mailReady}
+        />
       </aside>
     </div>
   );
