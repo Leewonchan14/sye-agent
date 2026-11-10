@@ -276,6 +276,11 @@ export const agentRunSchema = z
       })
       .optional(),
     items: z.array(agentItemSchema).max(500),
+    /**
+     * 결과를 여러 번 나눠 보낼 때 마지막이 아닌 묶음은 false.
+     * 생략하면 마지막 묶음으로 보고 대기 상태를 푼다(화면 갱신·완료 알림이 이때 일어난다).
+     */
+    final: z.boolean().optional(),
   })
   .refine((v) => v.runId || (v.client && v.since && v.until), {
     message: "runId 또는 client·since·until 중 하나는 있어야 해요.",
