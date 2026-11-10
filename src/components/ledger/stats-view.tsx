@@ -774,7 +774,26 @@ const PeriodEntriesCard = ({
   );
 };
 
-const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
+/** 기록이 없는 달도 빈 막대로 채워 시간 간격이 일정하게 보이게 한다. */
+const fillMonths = (monthly: LedgerStats["monthly"]) => {
+  if (monthly.length < 2) return monthly;
+  const byMonth = new Map(monthly.map((month) => [month.month, month]));
+  const [startYear, startMonth] = monthly[0].month.split("-").map(Number);
+  const last = monthly[monthly.length - 1].month;
+  const filled: LedgerStats["monthly"] = [];
+  for (let index = 0; ; index += 1) {
+    const total = startMonth - 1 + index;
+    const key = `${startYear + Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+    filled.push(byMonth.get(key) ?? { month: key, income: 0, expense: 0 });
+    if (key >= last) return filled;
+  }
+};
+
+const MONTH_LABEL_STEPS = [1, 2, 3, 6, 12, 24, 60];
+const MAX_MONTH_LABELS = 8;
+
+const MonthlyCard = ({ monthly: rawMonthly }: { monthly: LedgerStats["monthly"] }) => {
+  const monthly = fillMonths(rawMonthly);
   const width = 360;
   const height = 180;
   const left = 36;
@@ -786,7 +805,28 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
   const max =
     Math.max(1, ...monthly.flatMap((month) => [month.income, month.expense])) * 1.1;
   const groupWidth = monthly.length ? plotWidth / monthly.length : plotWidth;
-  const barWidth = Math.min(16, Math.max(4, groupWidth * 0.26));
+  // 달이 많으면 입금·지출 막대가 한 칸 안에 들어가도록 칸 너비에 맞춰 줄인다.
+  const barWidth = Math.min(16, groupWidth * 0.36);
+  const barGap = Math.min(1, groupWidth * 0.06);
+  const labelStep =
+    MONTH_LABEL_STEPS.find((step) => monthly.length / step <= MAX_MONTH_LABELS) ?? 60;
+  const multiYear =
+    monthly.length > 0 &&
+    monthly[0].month.slice(0, 4) !== monthly.at(-1)?.month.slice(0, 4);
+  const monthLabel = (key: string) => {
+    const month = Number(key.slice(5));
+    if (labelStep >= 12) return `${key.slice(0, 4)}년`;
+    return multiYear ? `${key.slice(2, 4)}.${month}` : `${month}월`;
+  };
+  const showLabel = (key: string) => {
+    if (labelStep === 1) return true;
+    const month = Number(key.slice(5));
+    // 1월·7월처럼 달 경계에 맞춰 찍어서 라벨 간격이 일정하게 보이게 한다.
+    if (labelStep >= 12) {
+      return month === 1 && Number(key.slice(0, 4)) % (labelStep / 12) === 0;
+    }
+    return (month - 1) % labelStep === 0;
+  };
 
   return (
     <StatCard>
@@ -846,11 +886,11 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
             return (
               <g key={month.month}>
                 <rect
-                  x={center - barWidth - 1}
+                  x={center - barWidth - barGap}
                   y={top + plotHeight - incomeHeight}
                   width={barWidth}
                   height={incomeHeight}
-                  rx={2}
+                  rx={Math.min(2, barWidth / 2)}
                   fill="var(--color-success)"
                 >
                   <title>
@@ -858,26 +898,28 @@ const MonthlyCard = ({ monthly }: { monthly: LedgerStats["monthly"] }) => {
                   </title>
                 </rect>
                 <rect
-                  x={center + 1}
+                  x={center + barGap}
                   y={top + plotHeight - expenseHeight}
                   width={barWidth}
                   height={expenseHeight}
-                  rx={2}
+                  rx={Math.min(2, barWidth / 2)}
                   fill="var(--color-primary)"
                 >
                   <title>
                     {month.month} 지출 {formatWon(month.expense)}
                   </title>
                 </rect>
-                <text
-                  x={center}
-                  y={height - 8}
-                  textAnchor="middle"
-                  fontSize={9}
-                  fill="var(--color-muted-soft)"
-                >
-                  {Number(month.month.slice(5))}월
-                </text>
+                {showLabel(month.month) && (
+                  <text
+                    x={center}
+                    y={height - 8}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fill="var(--color-muted-soft)"
+                  >
+                    {monthLabel(month.month)}
+                  </text>
+                )}
               </g>
             );
           })}
