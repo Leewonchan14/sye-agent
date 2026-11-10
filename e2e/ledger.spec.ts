@@ -461,15 +461,15 @@ test("내역 탭에서 분류로 거르고 달을 옮겨도 유지된다", async
   );
 
   await chips.getByRole("button", { name: "식비", exact: true }).click();
-  await expect(page.getByRole("button", { name: /점심/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /저녁/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /점심 식비/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /저녁 식비/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /커피/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /충전/ })).toHaveCount(0);
   await expect(page.getByText(/식비 2건 · 지출 17,000원/)).toBeVisible();
   await expect(page.getByText("지출 17,000원", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "이전 달" }).click();
-  await expect(page.getByRole("button", { name: /지난달 밥/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /지난달 밥 식비/ })).toBeVisible();
   await expect(page.getByText(/식비 1건 · 지출 7,000원/)).toBeVisible();
 
   await chips.getByRole("button", { name: "카페", exact: true }).click();
@@ -506,7 +506,7 @@ test("식비를 고르면 같은 달 카페 합계도 함께 보여 준다", asy
   await chips.getByRole("button", { name: "식비", exact: true }).click();
   await expect(page.getByText(/식비 1건 · 지출 9,000원/)).toBeVisible();
   await expect(page.getByText(/카페 2건 · 지출 8,000원/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /점심/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /점심 식비/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /커피/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "이전 달" }).click();
@@ -1310,7 +1310,7 @@ test("CSV 내보내기: Excel용 BOM, 수식 이스케이프, 삭제 내역 제�
   const bytes = await res.body();
   expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
   const csv = bytes.toString("utf-8");
-  expect(csv).toContain("날짜,시각,구분,금액,분류,내용,태그");
+  expect(csv).toContain("날짜,시각,구분,금액,분류,내용,메모,태그");
   expect(csv).toContain("'=SUM(A1)");
   expect(csv).not.toContain("지운 기록");
 });

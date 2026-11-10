@@ -214,6 +214,7 @@ export const ledgerEntries = pgTable(
       onDelete: "set null",
     }),
     memo: text("memo").notNull().default(""),
+    note: text("note").notNull().default(""), // 자세히 남기고 싶은 메모
     tags: text("tags").notNull().default(""),
     member: text("member").notNull().default("wonchan"), // wonchan | yeeun
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
