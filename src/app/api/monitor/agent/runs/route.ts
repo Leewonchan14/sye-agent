@@ -24,9 +24,11 @@ export const POST = async (req: Request) => {
       : requireAgentKey(req);
     if (authError) return authError;
 
-    const pendingRunId = input.runId
-      ? (await getRunRow(input.runId))?.pendingHermesRunId
-      : null;
+    // 사용량은 런 전체 누계라 마지막 묶음에서 한 번만 더한다 (묶음마다 더하면 두 배가 된다).
+    const pendingRunId =
+      input.runId && input.final !== false
+        ? (await getRunRow(input.runId))?.pendingHermesRunId
+        : null;
     const usage = pendingRunId
       ? await readRunUsage(pendingRunId).catch(() => null)
       : null;

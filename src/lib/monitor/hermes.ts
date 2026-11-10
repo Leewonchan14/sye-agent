@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import {
+  countRunItemsSince,
   getIssueRow,
   getRunRow,
   setCallbackToken,
@@ -73,6 +74,7 @@ const curlExample = (url: string, token: string, body: string) =>
     `curl -sS -X POST '${url}' -H 'Content-Type: application/json' -H 'x-monitor-token: ${token}' --data @/tmp/monitor_result.json`,
     `파일 본문 예: ${body}`,
     "응답이 201이면 성공이야. 실패하면 응답 메시지를 보고 고쳐서 다시 보내.",
+    '여러 번 나눠 보내야 하면 마지막 묶음을 뺀 나머지 본문에 "final": false를 넣어. 마지막 묶음에는 넣지 마 — 그걸 받아야 화면과 알림이 끝난 걸로 바뀌어.',
   ].join("\n");
 
 export const startMoreSearch = async (options: {
@@ -110,7 +112,7 @@ export const startMoreSearch = async (options: {
     ...(options.daily
       ? [
           "이 고객사 전용 모니터링 스킬이 있으면 그 스킬의 수집·검증 절차를 그대로 따라.",
-          "결과는 나눠 보내지 말고 다 모아서 한 번에 보내. 찾은 기사가 없어도 빈 items로 꼭 보내.",
+          "결과는 다 모은 뒤에 보내. 찾은 기사가 없어도 빈 items로 꼭 보내.",
         ]
       : []),
     "결과는 채팅으로 길게 답하지 말고 아래 API로 보내. 다 보낸 뒤 채팅에는 몇 건 보냈는지만 한 줄로 말해.",
@@ -243,14 +245,20 @@ const checkFinished = async (hermesRunId: string) => {
     : status.error || "하치와레 작업이 중간에 실패했어요.";
 };
 
-/** 대기 중인 "더 찾기" 런이 결과 없이 끝났으면 대기를 풀고 오류를 남긴다. */
+/**
+ * 대기 중인 런의 Hermes 작업이 끝났는데 대기가 남아 있으면 푼다.
+ * 결과가 일부라도 왔으면(마지막 묶음만 못 보냈거나 `final`을 빠뜨린 경우) 받은 만큼으로 마감하고,
+ * 하나도 안 왔으면 오류를 남긴다.
+ */
 export const reconcileRunPending = async (runId: number) => {
   const run = await getRunRow(runId);
   if (!run?.pendingHermesRunId || !run.pendingSince) return;
   if (Date.now() - run.pendingSince.valueOf() < GRACE_MS) return;
   if (missingHermesEnv().length) return;
   const error = await checkFinished(run.pendingHermesRunId);
-  if (error) await setRunPending(runId, null, error);
+  if (!error) return;
+  const received = await countRunItemsSince(runId, run.pendingSince);
+  await setRunPending(runId, null, received > 0 ? null : error);
 };
 
 export const reconcileIssuePending = async (issueId: number) => {

@@ -505,6 +505,16 @@ export const advanceIssueAutoState = async (
 };
 
 /** 리포트에 담기는 대표 기사 수 */
+/** `since` 이후 이 런에 새로 들어온 기사 수 — 대기 중 결과가 일부라도 왔는지 판단한다. */
+export const countRunItemsSince = async (runId: number, since: Date) => {
+  const db = getDb();
+  const [row] = await db
+    .select({ n: count() })
+    .from(itemsT)
+    .where(and(eq(itemsT.runId, runId), gte(itemsT.createdAt, since)));
+  return row.n;
+};
+
 export const countRunLeads = async (runId: number) => {
   const db = getDb();
   const [row] = await db
@@ -900,10 +910,13 @@ export const ingestAgentRun = async (
   if (!flagNew) await applyCategoryLimits(run.id, client.categories as MonitorCategory[]);
 
   if (appending) {
-    await setRunPending(run.id, null, null);
+    // 나눠 보내는 중간 묶음은 대기를 유지한다 — 여기서 풀면 화면 폴링과 완료 알림이
+    // 첫 묶음만 보고 끝나 버린다. 마지막 묶음(final 생략 포함)에서만 푼다.
+    const final = input.final !== false;
+    if (final) await setRunPending(run.id, null, null);
     // 소요 시간은 하치와레가 적어 보낸 값 대신 앱이 잰다. "더 찾기"는 본 수집 시간을 덮지 않는다.
     const measured =
-      !flagNew && run.pendingSince
+      final && !flagNew && run.pendingSince
         ? { measuredSec: Math.round((Date.now() - run.pendingSince.valueOf()) / 1000) }
         : {};
     if (input.stats || usage || "measuredSec" in measured) {

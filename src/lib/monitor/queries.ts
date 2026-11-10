@@ -22,6 +22,12 @@ import type {
 } from "@/lib/monitor/types";
 
 /** 쿼리 키 — 무효화를 한 곳에서 관리한다. */
+/**
+ * 작업이 없을 때의 확인 간격. 화면을 열어 둔 사이 자동 수집이 시작·완료돼도 따라 바뀌게 한다.
+ * (앱 기본값은 창 포커스 때 다시 불러오지 않으므로 모니터링 쿼리만 켠다.)
+ */
+const IDLE_REFETCH_MS = 60_000;
+
 export const monitorKeys = {
   all: ["monitor"] as const,
   overview: () => [...monitorKeys.all, "overview"] as const,
@@ -61,15 +67,17 @@ export const useMonitorOverview = () => {
     queryKey: monitorKeys.overview(),
     queryFn: () => api<MonitorOverview>("/api/monitor"),
     // 수집·집계가 돌고 있으면 첫 화면 요약도 따라 바뀌게 한다.
+    // 쉬는 동안에도 자동 수집(Oracle 시계)이 언제든 시작하므로 1분마다 확인한다.
     refetchInterval: (query) =>
       query.state.data?.clients.some((c) => c.latestRun?.pending) ||
       query.state.data?.issues.some((i) => i.pending)
         ? 15_000
-        : false,
+        : IDLE_REFETCH_MS,
+    refetchOnWindowFocus: true,
   });
 };
 
-/** 대기 중인 Hermes 작업이 있으면 10초마다 다시 불러온다. */
+/** 대기 중인 Hermes 작업이 있으면 10초마다, 없어도 1분마다 다시 불러온다. */
 export const useMonitorClient = (clientId: number, runId?: number) => {
   const api = useApi();
   return useQuery({
@@ -80,7 +88,9 @@ export const useMonitorClient = (clientId: number, runId?: number) => {
       ),
     // 다른 날짜로 넘어갈 때 화면이 비지 않게 이전 내용을 유지한다.
     placeholderData: keepPreviousData,
-    refetchInterval: (query) => (query.state.data?.run?.pendingSince ? 10_000 : false),
+    refetchInterval: (query) =>
+      query.state.data?.run?.pendingSince ? 10_000 : IDLE_REFETCH_MS,
+    refetchOnWindowFocus: true,
   });
 };
 
@@ -89,7 +99,9 @@ export const useMonitorIssue = (issueId: number) => {
   return useQuery({
     queryKey: monitorKeys.issue(issueId),
     queryFn: () => api<MonitorIssuePayload>(`/api/monitor/issues/${issueId}`),
-    refetchInterval: (query) => (query.state.data?.issue.pendingSince ? 10_000 : false),
+    refetchInterval: (query) =>
+      query.state.data?.issue.pendingSince ? 10_000 : IDLE_REFETCH_MS,
+    refetchOnWindowFocus: true,
   });
 };
 
