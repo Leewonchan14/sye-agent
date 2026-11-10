@@ -69,6 +69,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - schema 변경 후에는 반드시 아래 명령어를 순서대로 실행하세요.
   1. `npm run db:generate` — `drizzle/`에 마이그레이션 파일 자동 생성
   2. `npm run db:migrate` — 변경사항을 데이터베이스에 적용
+- Vercel에서는 **운영(Production) 배포에서만** `vercel-build`가 마이그레이션을 실행합니다. 미리보기(Preview) 배포는 운영 DB를 같이 쓰므로 마이그레이션을 건너뜁니다.
+  머지 전 브랜치의 마이그레이션이 운영 DB에 먼저 들어가면, drizzle이 그보다 먼저 만든 마이그레이션을 건너뛰어 운영 스키마가 어긋납니다.
 
 # Formatting & Linting
 
