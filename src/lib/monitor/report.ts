@@ -35,14 +35,6 @@ export const reporterLabel = (reporter: string) =>
 export const reportLeads = (items: MonitorItemView[]) =>
   items.filter((i) => i.category && i.included && (i.isLead || !i.dupGroup));
 
-/** 메일 제목. 리포트 제목 서식이 없으면 고객사 이름으로 만든다. */
-export const reportSubject = (client: MonitorClientView, run: MonitorRunView) => {
-  const date = kst(run.until).format("YYYY.MM.DD");
-  return client.reportTitle
-    ? fillDate(client.reportTitle, date)
-    : `[${client.name}] 모니터링 리포트 ${date}`;
-};
-
 /**
  * 엑셀에서 바로 열리는 CSV. 한글이 깨지지 않게 BOM을 붙인다.
  * 리포트에 넣은 기사(같은 보도자료 전재 포함)를 카테고리 순서대로 담는다.

@@ -15,7 +15,6 @@ import {
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs, kst } from "@/lib/kst";
-import { isMailReady } from "@/lib/monitor/mail";
 import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
 import {
@@ -202,7 +201,6 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   autoCollect: row.autoCollect,
   collectTime: row.collectTime,
   weekdaysOnly: row.weekdaysOnly,
-  reportEmails: row.reportEmails ?? [],
 });
 
 /** 기본 고객사(홍콩관광청·파나소닉코리아)를 만든다. 이미 있는 slug는 건너뛴다. */
@@ -263,7 +261,6 @@ export const updateMonitorClient = async (
       | "autoCollect"
       | "collectTime"
       | "weekdaysOnly"
-      | "reportEmails"
     >
   >
 ) => {
@@ -288,9 +285,6 @@ const toRunView = (row: typeof runsT.$inferSelect): MonitorRunView => ({
   pendingSince: row.pendingHermesRunId ? iso(row.pendingSince) : null,
   lastError: row.lastError,
   createdAt: iso(row.createdAt),
-  shareToken: row.shareToken,
-  mailedAt: iso(row.mailedAt),
-  mailedTo: row.mailedTo ?? [],
 });
 
 export const getRunRow = async (runId: number) => {
@@ -420,7 +414,6 @@ export const getMonitorClientPayload = async (
       failed: Boolean(r.lastError) && !runItemCounts.has(r.id),
     })),
     collectedToday: runs.some((r) => r.collectKey === kst().format("YYYY-MM-DD")),
-    mailReady: isMailReady(),
   };
 };
 
@@ -636,56 +629,6 @@ export const markRunReported = async (runId: number, reportText: string) => {
   await db
     .update(runsT)
     .set({ reportText, reportedAt: new Date() })
-    .where(eq(runsT.id, runId));
-};
-
-/* ───────────────────────── 공유 링크 · 메일 ───────────────────────── */
-
-/** 공유 링크를 켜거나(token) 끈다(null). */
-export const setRunShareToken = async (runId: number, token: string | null) => {
-  const [row] = await getDb()
-    .update(runsT)
-    .set({ shareToken: token })
-    .where(eq(runsT.id, runId))
-    .returning();
-  if (!row) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
-};
-
-/** 공유 링크로 여는 리포트. 링크가 꺼졌거나 없으면 null. */
-export const getSharedReport = async (token: string) => {
-  const db = getDb();
-  const [run] = await db.select().from(runsT).where(eq(runsT.shareToken, token)).limit(1);
-  if (!run) return null;
-  const [client] = await db
-    .select()
-    .from(clientsT)
-    .where(eq(clientsT.id, run.clientId))
-    .limit(1);
-  if (!client) return null;
-  return {
-    client: toClientView(client),
-    run: toRunView(run),
-    items: await loadRunItems(run.id),
-  };
-};
-
-/** 메일로 보낼 때 쓰는 런·고객사·기사 */
-export const getRunForReport = async (runId: number) => {
-  const run = await getRunRow(runId);
-  if (!run) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
-  return {
-    client: await getClientView(run.clientId),
-    run: toRunView(run),
-    items: await loadRunItems(run.id),
-  };
-};
-
-/** 메일을 보냈다고 기록하고 보고 완료로 표시한다. */
-export const markRunMailed = async (runId: number, to: string[], reportText: string) => {
-  const now = new Date();
-  await getDb()
-    .update(runsT)
-    .set({ mailedAt: now, mailedTo: to, reportText, reportedAt: now })
     .where(eq(runsT.id, runId));
 };
 

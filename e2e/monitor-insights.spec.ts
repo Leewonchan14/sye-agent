@@ -6,13 +6,9 @@ import pg from "pg";
 import { kst } from "../src/lib/kst";
 import { authHeaders, login } from "./helpers";
 
-/**
- * 논조·중요도 태그, 매체·기자 통계, 공유 링크·메일·엑셀.
- * 메일은 SMTP_SINK_FILE에 받은 메일을 JSON 줄로 남기는 테스트용 SMTP 서버로 확인한다.
- */
+/** 논조·중요도 태그, 매체·기자 통계, 엑셀(CSV) 내려받기 */
 
 const ingestKey = process.env.MONITOR_INGEST_KEY ?? "";
-const sinkFile = process.env.SMTP_SINK_FILE ?? "";
 
 const today9 = kst().startOf("day").add(9, "hour");
 const window = (daysAgo: number) => ({
@@ -52,26 +48,6 @@ const openMonitor = async (page: Page, token: string) => {
 const articleRow = (page: Page, title: string) =>
   page.locator("div.grid", { has: page.getByRole("link", { name: title }) }).first();
 
-/** 테스트 SMTP가 받은 원문에서 text/plain 본문을 꺼낸다(base64·quoted-printable 해제). */
-const plainBody = (raw: string) => {
-  const part = raw
-    .split(/\n--[^\n]+\n/)
-    .find((p) => /Content-Type: text\/plain/i.test(p));
-  if (!part) return "";
-  const [head, ...rest] = part.split("\n\n");
-  const body = rest.join("\n\n");
-  if (/Content-Transfer-Encoding: base64/i.test(head)) {
-    return Buffer.from(body.replace(/\s+/g, ""), "base64").toString("utf8");
-  }
-  if (/Content-Transfer-Encoding: quoted-printable/i.test(head)) {
-    const bytes = body
-      .replace(/=\n/g, "")
-      .replace(/=([0-9A-F]{2})/gi, (_m, hex: string) => `%${hex}`);
-    return decodeURIComponent(bytes);
-  }
-  return body;
-};
-
 const clientPayload = async (request: APIRequestContext, token: string) => {
   const overview = await (
     await request.get("/api/monitor", { headers: authHeaders(token) })
@@ -91,7 +67,6 @@ test.describe("모니터링 인사이트", () => {
       restart identity cascade
     `);
     await db.end();
-    if (sinkFile) fs.writeFileSync(sinkFile, "");
     const token = await login(request);
     expect(
       (await request.post("/api/monitor", { headers: authHeaders(token) })).status()
@@ -233,11 +208,16 @@ test.describe("모니터링 인사이트", () => {
     await expect(reporters.getByRole("button", { name: /박서진/ })).toBeVisible();
   });
 
-  test("공유 링크·CSV·메일로 리포트를 내보낸다", async ({ page, request, browser }) => {
+  test("리포트에 넣은 기사를 CSV로 내려받는다", async ({ page, request }) => {
     expect(
       (
         await postRun(request, 0, [
-          article("s1", { title: "홍콩 미식 축제 개막", reporter: "김보나 기자" }),
+          article("s1", {
+            title: "홍콩 미식 축제 개막",
+            reporter: "김보나 기자",
+            sentiment: "positive",
+            importance: "high",
+          }),
           article("s2", { title: "리포트에서 뺄 기사", media: "새벽신문" }),
         ])
       ).status()
@@ -255,74 +235,21 @@ test.describe("모니터링 인사이트", () => {
 
     await openMonitor(page, token);
     await page.getByRole("tab", { name: /리포트 미리보기/ }).click();
+    await expect(page.getByRole("button", { name: "공유 링크 만들기" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "메일 보내기" })).toHaveCount(0);
 
-    // 공유 링크 — 로그인 없이 열리고 리포트에 넣은 기사만 보인다.
-    await page.getByRole("button", { name: "공유 링크 만들기" }).click();
-    const linkInput = page.getByRole("textbox", { name: "공유 링크 주소" });
-    await expect(linkInput).toHaveValue(/\/r\/[\w-]{16,}$/);
-    const shareUrl = await linkInput.inputValue();
-
-    const guest = await browser.newContext();
-    const guestPage = await guest.newPage();
-    await guestPage.goto(shareUrl);
-    await expect(
-      guestPage.getByRole("link", { name: "홍콩 미식 축제 개막" })
-    ).toBeVisible();
-    await expect(guestPage.getByText("리포트에서 뺄 기사")).toHaveCount(0);
-    await expect(guestPage.getByText("김보나 기자")).toBeVisible();
-
-    // CSV — BOM과 헤더, 포함한 기사만
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "CSV 내려받기" }).click(),
+      page.getByRole("button", { name: "엑셀(CSV)로 받기" }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/^홍콩관광청_모니터링_\d{8}\.csv$/);
-    const csv = fs.readFileSync(await download.path(), "utf8");
+    const csv = fs.readFileSync((await download.path())!, "utf8");
     expect(csv.charCodeAt(0)).toBe(0xfeff);
-    expect(csv).toContain("카테고리,세부분류,구분,제목,매체,기자");
-    expect(csv).toContain("홍콩 미식 축제 개막");
-    expect(csv).not.toContain("리포트에서 뺄 기사");
-
-    // 메일 — 받는 사람을 넣고 보내면 보고 완료가 된다.
-    const recipient = page.getByRole("textbox", { name: "받는 사람 메일 추가" });
-    await recipient.fill("not-an-email");
-    await recipient.press("Enter");
-    await expect(page.getByText("메일 주소 형식이 아니에요")).toBeVisible();
-    await recipient.fill("manager@client.co.kr");
-    await recipient.press("Enter");
-    await expect(page.getByRole("list", { name: "받는 사람" })).toContainText(
-      "manager@client.co.kr"
+    expect(csv).toContain(
+      "카테고리,세부분류,구분,제목,매체,기자,게재일시,논조,중요도,링크,핵심내용"
     );
-
-    await page.getByRole("button", { name: "메일 보내기" }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText("manager@client.co.kr");
-    await dialog.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText(/1명에게 보냈고 보고 완료로 표시했어요/)).toBeVisible();
-    await expect(page.getByText(/manager@client\.co\.kr에게 보냄/)).toBeVisible();
-    await expect(page.getByText(/보고 완료$/).first()).toBeVisible();
-
-    if (sinkFile) {
-      const mails = fs
-        .readFileSync(sinkFile, "utf8")
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((l) => JSON.parse(l) as { to: string[]; body: string });
-      expect(mails).toHaveLength(1);
-      expect(mails[0].to).toEqual(["manager@client.co.kr"]);
-      expect(mails[0].body).toMatch(/^Subject: /m);
-      const text = plainBody(mails[0].body);
-      expect(text).toContain("홍콩 미식 축제 개막");
-      expect(text).not.toContain("리포트에서 뺄 기사");
-      expect(text).toContain(`웹에서 보기: ${shareUrl}`);
-    }
-
-    // 공유 링크를 끄면 더 열리지 않는다.
-    await page.getByRole("button", { name: "끄기" }).click();
-    await expect(page.getByRole("button", { name: "공유 링크 만들기" })).toBeVisible();
-    const gone = await guestPage.goto(shareUrl);
-    expect(gone?.status()).toBe(404);
-    await guest.close();
+    expect(csv).toContain("홍콩 미식 축제 개막");
+    expect(csv).toContain(",긍정,중요,");
+    expect(csv).not.toContain("리포트에서 뺄 기사");
   });
 });

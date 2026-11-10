@@ -129,8 +129,6 @@ export interface MonitorClientView {
   /** 수집 시작 시각(HH:mm). null이면 모니터링 기간이 끝나는 시각 */
   collectTime: string | null;
   weekdaysOnly: boolean;
-  /** 리포트를 메일로 받을 주소 */
-  reportEmails: string[];
 }
 
 export interface MonitorItemView {
@@ -168,10 +166,6 @@ export interface MonitorRunView {
   pendingSince: string | null;
   lastError: string | null;
   createdAt: string | null;
-  /** 공유 링크 토큰. 링크를 끄면 null */
-  shareToken: string | null;
-  mailedAt: string | null;
-  mailedTo: string[];
 }
 
 export interface MonitorRunSummary {
@@ -194,8 +188,6 @@ export interface MonitorClientPayload {
   runs: MonitorRunSummary[];
   /** 오늘 자동 수집을 이미 시작했는지 */
   collectedToday: boolean;
-  /** 서버에 메일 발송(SMTP) 설정이 있는지 */
-  mailReady: boolean;
 }
 
 export interface MonitorIssueEvent {

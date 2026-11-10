@@ -1,5 +1,5 @@
 {
-  "id": "36df8a7a-3ed1-4b4c-9b3f-962592895256",
+  "id": "938b2dcd-20f6-45c7-a07e-db67125d2f10",
   "prevId": "cfada08f-0089-416a-b2c7-f40d64fe2cb4",
   "version": "7",
   "dialect": "postgresql",
@@ -1606,13 +1606,6 @@
           "notNull": true,
           "default": true
         },
-        "report_emails": {
-          "name": "report_emails",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
@@ -2306,24 +2299,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "share_token": {
-          "name": "share_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mailed_at": {
-          "name": "mailed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mailed_to": {
-          "name": "mailed_to",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2350,21 +2325,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "monitor_runs_share_token_uniq": {
-          "name": "monitor_runs_share_token_uniq",
-          "columns": [
-            {
-              "expression": "share_token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

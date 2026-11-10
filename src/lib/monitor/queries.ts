@@ -263,29 +263,6 @@ export const useMonitorMutations = (clientId?: number) => {
     onSettled: refreshClient,
   });
 
-  const shareLink = useMutation({
-    mutationFn: (v: { runId: number; on: boolean }) =>
-      api<{ token?: string }>(`/api/monitor/runs/${v.runId}/share`, {
-        method: v.on ? "POST" : "DELETE",
-      }),
-    onSuccess: (_d, v) =>
-      toast.success(
-        v.on ? "공유 링크를 켰어요." : "공유 링크를 껐어요. 보낸 링크는 더 열리지 않아요."
-      ),
-    onError,
-    onSettled: refreshClient,
-  });
-
-  const sendMail = useMutation({
-    mutationFn: (v: { runId: number; includeLink: boolean }) =>
-      api<{ to: string[] }>(`/api/monitor/runs/${v.runId}/mail`, {
-        method: "POST",
-        body: { includeLink: v.includeLink },
-      }),
-    onError,
-    onSettled: refreshClient,
-  });
-
   const collectNow = useMutation({
     mutationFn: (id: number) =>
       api(`/api/monitor/clients/${id}/collect`, { method: "POST" }),
@@ -316,7 +293,6 @@ export const useMonitorMutations = (clientId?: number) => {
       autoCollect?: boolean;
       collectTime?: string | null;
       weekdaysOnly?: boolean;
-      reportEmails?: string[];
     }) => {
       const { id, ...body } = v;
       return api(`/api/monitor/clients/${id}`, { method: "PATCH", body });
@@ -351,8 +327,6 @@ export const useMonitorMutations = (clientId?: number) => {
     banMedia,
     markReported,
     unmarkReported,
-    shareLink,
-    sendMail,
     collectNow,
     askMore,
     updateClient,

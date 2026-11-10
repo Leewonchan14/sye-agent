@@ -364,7 +364,6 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               run={run}
               items={items}
               mutations={mutations}
-              mailReady={data.mailReady}
               onCopied={() => setCopiedRuns((list) => [run.id, ...list].slice(0, 30))}
             />
           )}

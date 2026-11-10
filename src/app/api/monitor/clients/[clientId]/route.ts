@@ -66,13 +66,6 @@ const patchSchema = z.object({
   closing: z.string().max(500).optional(),
   autoCollect: z.boolean().optional(),
   weekdaysOnly: z.boolean().optional(),
-  reportEmails: z
-    .array(z.email("메일 주소 형식이 올바르지 않아요.").max(200))
-    .max(20)
-    .refine((list) => new Set(list).size === list.length, {
-      message: "같은 메일 주소가 두 번 들어 있어요.",
-    })
-    .optional(),
   collectTime: z
     .string()
     .regex(TIME, "시각 형식이 올바르지 않아요.")
