@@ -238,7 +238,7 @@ export const RecurringTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     );
 
   return (
-    <div className="grid items-start gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 [&>*]:min-w-0">
       <div className={cn(CARD, "space-y-4")}>
         <section>
           <h3 className="text-[12px] font-medium text-muted">등록된 반복 거래</h3>

@@ -1191,7 +1191,7 @@ export const StatsView = ({
     : "기간 확인 중…";
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
       <div className="flex flex-col gap-2 md:col-span-2">
         <p className="text-[12px] font-medium text-muted">기간별 리포트</p>
         <div className="flex w-full flex-col items-start gap-1.5">

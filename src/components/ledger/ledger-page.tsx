@@ -648,7 +648,7 @@ export const LedgerPage = () => {
                     )}
 
                   {!deferredSearch && topExpenses.length > 0 && (
-                    <div className="grid items-start gap-3 md:grid-cols-2">
+                    <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 [&>*]:min-w-0">
                       {/* 내역 필터를 따른다: 분류를 고르면 그 분류의 사용처별 지출. */}
                       {filterCategory ? (
                         <CategoryCard
