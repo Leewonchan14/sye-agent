@@ -21,6 +21,7 @@ import { RulesPanel } from "@/components/monitor/rules-panel";
 import { RunHistory } from "@/components/monitor/run-history";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { kst } from "@/lib/kst";
 import { formatUsage } from "@/lib/monitor/progress-stages";
 import { useMonitorClient, useMonitorMutations } from "@/lib/monitor/queries";
@@ -28,15 +29,19 @@ import { DAILY_COLLECT_REQUEST, nextCollectLabel } from "@/lib/monitor/schedule"
 import type { MonitorCategory } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { id: "articles", label: "기사 선별" },
-  { id: "report", label: "리포트 미리보기" },
+/** 고객사 단위 화면. 통계·규칙은 그날 수집과 상관없으므로 하루치 화면과 같은 높이에 둔다. */
+const CLIENT_TABS = [
+  { id: "daily", label: "오늘의 기사" },
   { id: "stats", label: "매체·기자 통계" },
   { id: "rules", label: "고객사 규칙" },
 ] as const;
-type Tab = (typeof TABS)[number]["id"];
-/** 그날 수집과 상관없는 탭 — 수집 기록·진행 단계를 숨긴다. */
-const STANDALONE_TABS: Tab[] = ["stats", "rules"];
+type ClientTab = (typeof CLIENT_TABS)[number]["id"];
+/** 오늘의 기사 안에서 그날 수집을 다루는 화면. */
+const RUN_TABS = [
+  { id: "articles", label: "기사 선별" },
+  { id: "report", label: "리포트 미리보기" },
+] as const;
+type RunTab = (typeof RUN_TABS)[number]["id"];
 
 const windowLabel = (since: string, until: string) =>
   `${kst(since).format("MM.DD HH:mm")} → ${kst(until).format("MM.DD HH:mm")}`;
@@ -64,7 +69,8 @@ const LoadingDots = () => (
 
 export const ClientView = ({ clientId }: { clientId: number }) => {
   const [runId, setRunId] = useState<number | undefined>();
-  const [tab, setTab] = useState<Tab>("articles");
+  const [view, setView] = useState<ClientTab>("daily");
+  const [tab, setTab] = useState<RunTab>("articles");
   const [request, setRequest] = useState("");
   const [askCategory, setAskCategory] = useState<MonitorCategory | null>(null);
   const { data, isLoading, isPlaceholderData, error } = useMonitorClient(clientId, runId);
@@ -95,6 +101,10 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
   const leadsIncluded = items.filter(
     (i) => i.category && i.included && (i.isLead || !i.dupGroup)
   ).length;
+  const counts: Partial<Record<ClientTab, number>> = {
+    daily: run ? leadsIncluded : undefined,
+    rules: client.rules.length,
+  };
 
   const submitAsk = (text: string, category: MonitorCategory | null) => {
     if (!run || !text.trim()) return;
@@ -117,28 +127,53 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0">
-          <p className="text-[12px] font-medium tracking-[0.12em] text-primary uppercase">
-            데일리 모니터링{run && ` · ${kst(run.until).format("YYYY.MM.DD ddd")}`}
-          </p>
-          <h1 className="mt-1 text-2xl font-medium tracking-tight text-balance text-ink">
-            {client.name}{" "}
-            {run && !kst(run.until).isSame(kst(), "day")
-              ? `${kst(run.until).format("M월 D일")} 기사`
-              : "오늘의 기사"}
-          </h1>
-        </div>
-        {run && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="lg" onClick={() => setTab("report")}>
-              <Copy /> 리포트 만들기
-            </Button>
-          </div>
-        )}
+      <header className="min-w-0">
+        <p className="text-[12px] font-medium tracking-[0.12em] text-primary uppercase">
+          데일리 모니터링
+        </p>
+        <h1 className="mt-1 text-2xl font-medium tracking-tight text-balance text-ink">
+          {client.name}
+        </h1>
       </header>
 
-      {!run ? (
+      <div
+        className="flex [scrollbar-width:none] gap-1 overflow-x-auto overflow-y-hidden border-b border-hairline"
+        role="tablist"
+        aria-label="고객사 화면"
+      >
+        {CLIENT_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={view === t.id}
+            onClick={() => setView(t.id)}
+            className={cn(
+              "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3.5 text-sm whitespace-nowrap text-muted hover:text-ink",
+              view === t.id && "border-primary font-medium text-ink"
+            )}
+          >
+            {t.label}
+            {counts[t.id] !== undefined && (
+              <span className="rounded-full bg-canvas-card px-1.5 font-mono text-[11px] text-muted">
+                {counts[t.id]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {view === "stats" && <MediaStats key={client.id} client={client} />}
+      {view === "rules" && (
+        <RulesPanel
+          key={client.id}
+          client={client}
+          mutations={mutations}
+          collectedToday={collectedToday}
+        />
+      )}
+
+      {view === "daily" && !run && (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-hairline px-6 py-14 text-center">
           <Newspaper className="size-6 text-primary" />
           <h2 className="text-lg font-medium text-ink">아직 수집 결과가 없어요</h2>
@@ -154,46 +189,53 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             >
               <Sparkles /> 지금 한 번 수집
             </Button>
-            <Button variant="outline" onClick={() => setTab("rules")}>
+            <Button variant="outline" onClick={() => setView("rules")}>
               규칙 먼저 정리하기
             </Button>
           </div>
-          {tab === "rules" && (
-            <div className="mt-6 w-full text-left">
-              <RulesPanel
-                key={client.id}
-                client={client}
-                mutations={mutations}
-                collectedToday={collectedToday}
-              />
-            </div>
-          )}
         </div>
-      ) : (
+      )}
+
+      {view === "daily" && run && (
         <div
           className={cn(
             "flex flex-col gap-5 transition-opacity",
             isPlaceholderData && "pointer-events-none opacity-60"
           )}
         >
-          {!STANDALONE_TABS.includes(tab) && (
-            <RunHistory
-              runs={runs}
-              activeId={runId ?? run.id}
-              activeCount={isPlaceholderData ? undefined : leadsIncluded}
-              onSelect={setRunId}
-            />
-          )}
-          {!STANDALONE_TABS.includes(tab) && (
-            <ReportSteps
-              pending={Boolean(run.pendingSince)}
-              failed={Boolean(run.lastError) && !items.length}
-              tab={tab}
-              copied={copiedRuns.includes(run.id)}
-              reported={Boolean(run.reportedAt)}
-              onGo={setTab}
-            />
-          )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[12px] text-muted tabular-nums">
+                {kst(run.until).format("YYYY.MM.DD ddd")}
+              </p>
+              <h2 className="mt-0.5 text-lg font-medium tracking-tight text-ink">
+                {kst(run.until).isSame(kst(), "day")
+                  ? "오늘의 기사"
+                  : `${kst(run.until).format("M월 D일")} 기사`}
+              </h2>
+            </div>
+            <Button
+              size="lg"
+              className="self-start sm:self-auto"
+              onClick={() => setTab("report")}
+            >
+              <Copy /> 리포트 만들기
+            </Button>
+          </div>
+          <RunHistory
+            runs={runs}
+            activeId={runId ?? run.id}
+            activeCount={isPlaceholderData ? undefined : leadsIncluded}
+            onSelect={setRunId}
+          />
+          <ReportSteps
+            pending={Boolean(run.pendingSince)}
+            failed={Boolean(run.lastError) && !items.length}
+            tab={tab}
+            copied={copiedRuns.includes(run.id)}
+            reported={Boolean(run.reportedAt)}
+            onGo={setTab}
+          />
           <div
             role="status"
             className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-hairline bg-canvas-soft px-4 py-3 text-[13px] text-body"
@@ -265,36 +307,24 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             />
           )}
 
-          <div
-            className="flex [scrollbar-width:none] gap-1 overflow-x-auto overflow-y-hidden border-b border-hairline"
-            role="tablist"
-          >
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.id}
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3.5 text-sm whitespace-nowrap text-muted hover:text-ink",
-                  tab === t.id && "border-primary font-medium text-ink"
-                )}
-              >
-                {t.label}
-                {t.id === "articles" && (
-                  <span className="rounded-full bg-canvas-card px-1.5 font-mono text-[11px] text-muted">
-                    {leadsIncluded}
-                  </span>
-                )}
-                {t.id === "rules" && (
-                  <span className="rounded-full bg-canvas-card px-1.5 font-mono text-[11px] text-muted">
-                    {client.rules.length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+          <Tabs value={tab} onValueChange={(value) => setTab(value as RunTab)}>
+            <TabsList aria-label="오늘의 기사 화면" className="h-9 bg-canvas-soft">
+              {RUN_TABS.map((t) => (
+                <TabsTrigger
+                  key={t.id}
+                  value={t.id}
+                  className="px-3 text-[13px] text-muted data-active:bg-surface data-active:text-ink"
+                >
+                  {t.label}
+                  {t.id === "articles" && (
+                    <span className="rounded-full bg-canvas-card px-1.5 font-mono text-[11px] text-muted">
+                      {leadsIncluded}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
           {tab === "articles" && (
             <>
@@ -365,15 +395,6 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               items={items}
               mutations={mutations}
               onCopied={() => setCopiedRuns((list) => [run.id, ...list].slice(0, 30))}
-            />
-          )}
-          {tab === "stats" && <MediaStats key={client.id} client={client} />}
-          {tab === "rules" && (
-            <RulesPanel
-              key={client.id}
-              client={client}
-              mutations={mutations}
-              collectedToday={collectedToday}
             />
           )}
         </div>

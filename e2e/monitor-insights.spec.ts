@@ -208,6 +208,51 @@ test.describe("모니터링 인사이트", () => {
     await expect(reporters.getByRole("button", { name: /박서진/ })).toBeVisible();
   });
 
+  test("통계·규칙은 고객사 이름 아래 탭에 있고 하루치 화면과 섞이지 않는다", async ({
+    page,
+    request,
+  }) => {
+    expect((await postRun(request, 0, [article("t1", {})])).status()).toBe(201);
+    const token = await login(request);
+    await openMonitor(page, token);
+
+    const clientTabs = page.getByRole("tablist", { name: "고객사 화면" });
+    const runTabs = page.getByRole("tablist", { name: "오늘의 기사 화면" });
+    await expect(clientTabs.getByRole("tab")).toHaveText([
+      /오늘의 기사/,
+      /매체·기자 통계/,
+      /고객사 규칙/,
+    ]);
+    await expect(runTabs.getByRole("tab")).toHaveText([/기사 선별/, /리포트 미리보기/]);
+    await expect(
+      page.getByRole("heading", { level: 2, name: "오늘의 기사" })
+    ).toBeVisible();
+
+    // 고객사 탭은 날짜·보고 순서보다 위에 있다.
+    const tabsBox = await clientTabs.boundingBox();
+    const historyBox = await page
+      .getByRole("navigation", { name: "수집 기록" })
+      .boundingBox();
+    expect(tabsBox!.y).toBeLessThan(historyBox!.y);
+
+    await runTabs.getByRole("tab", { name: /리포트 미리보기/ }).click();
+    await clientTabs.getByRole("tab", { name: /매체·기자 통계/ }).click();
+    await expect(page.getByRole("navigation", { name: "수집 기록" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "보고 순서" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "오늘의 기사" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /리포트 만들기/ })).toHaveCount(0);
+
+    await clientTabs.getByRole("tab", { name: /고객사 규칙/ }).click();
+    await expect(page.getByRole("navigation", { name: "수집 기록" })).toHaveCount(0);
+
+    // 오늘의 기사로 돌아오면 고르던 하위 탭이 남아 있다.
+    await clientTabs.getByRole("tab", { name: /오늘의 기사/ }).click();
+    await expect(runTabs.getByRole("tab", { name: /리포트 미리보기/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
   test("리포트에 넣은 기사를 CSV로 내려받는다", async ({ page, request }) => {
     expect(
       (
