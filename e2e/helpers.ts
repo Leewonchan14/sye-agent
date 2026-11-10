@@ -8,7 +8,15 @@ if (!/\/[^/?]*e2e[^/?]*(\?|$)/.test(databaseUrl)) {
   throw new Error("E2E_DATABASE_URL은 이름에 e2e가 들어간 임시 DB여야 합니다.");
 }
 
-export const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+/**
+ * 모든 스펙 파일이 같은 워커에서 이 pool을 함께 쓴다. 파일마다 afterAll에서 닫으면
+ * 다음 파일이 닫힌 pool을 쓰게 되므로 닫지 않고, 쉬는 연결이 프로세스 종료를 막지 않게 한다.
+ */
+export const pool = new pg.Pool({
+  connectionString: databaseUrl,
+  max: 2,
+  allowExitOnIdle: true,
+});
 
 export const today = () => kst().format("YYYY-MM-DD");
 export const thisMonth = () => today().slice(0, 7);

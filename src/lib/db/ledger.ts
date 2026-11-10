@@ -326,7 +326,7 @@ const normalizeBalance = (value: unknown): number => {
   return value;
 };
 
-const normalizeMonth = (value: unknown): string => {
+export const normalizeMonth = (value: unknown): string => {
   if (typeof value !== "string" || !MONTH_RE.test(value)) {
     throw new LedgerError("월 형식이 올바르지 않아요.");
   }

@@ -7,6 +7,12 @@ import {
 } from "../src/lib/auth-rate-limit";
 import { comparableMonthRange, compareLedgerPeriods } from "../src/lib/ledger/compare";
 import {
+  buildFixedCostInsight,
+  detectFixedMemos,
+  findUnusualSpending,
+  type InsightEntry,
+} from "../src/lib/ledger/insights";
+import {
   parseLedgerNotifications,
   suggestLedgerCategoryName,
 } from "../src/lib/ledger/notification";
@@ -250,4 +256,194 @@ test("주간 리캡 코멘트: 숫자가 있거나 너무 길면 버린다", () 
   expect(parseRecapComment("이번 주는 3만원 썼어")).toBeNull();
   expect(parseRecapComment("   ")).toBeNull();
   expect(parseRecapComment("가".repeat(201))).toBeNull();
+});
+
+test.describe("인사이트", () => {
+  let nextId = 1;
+  const entry = (
+    entryDate: string,
+    amount: number,
+    fields: Partial<InsightEntry> = {}
+  ): InsightEntry => ({
+    id: nextId++,
+    entryDate,
+    kind: "expense",
+    amount,
+    categoryId: 1,
+    recurringId: null,
+    tripId: null,
+    memo: "",
+    ...fields,
+  });
+  const categories = [
+    { id: 1, name: "식비" },
+    { id: 2, name: "쇼핑" },
+    { id: 3, name: "의료" },
+  ];
+  const months = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+
+  test("분류 지출을 최근 6개월 중앙값과 비교해 크게 늘거나 준 곳만 고른다", () => {
+    const entries = [
+      ...months.flatMap((m) => [
+        entry(`${m}-03`, 200_000, { categoryId: 1 }),
+        entry(`${m}-05`, 100_000, { categoryId: 2 }),
+      ]),
+      entry("2026-10-03", 420_000, { categoryId: 1 }),
+      entry("2026-10-05", 20_000, { categoryId: 2 }),
+      entry("2026-10-07", 80_000, { categoryId: 3 }),
+      // 입금은 지출 비교에 들어가지 않는다
+      entry("2026-10-08", 1_000_000, { kind: "income", categoryId: null }),
+    ];
+    const result = findUnusualSpending({
+      month: "2026-10",
+      today: "2026-11-10",
+      entries,
+      categories,
+    });
+
+    expect(result.throughDay).toBeNull();
+    expect(result.baselineMonths).toEqual(months);
+    expect(result.total).toEqual({
+      current: 520_000,
+      usual: 300_000,
+      diff: 220_000,
+      ratio: 1.73,
+    });
+    expect(result.categories.map((c) => [c.name, c.direction, c.diff, c.ratio])).toEqual([
+      ["식비", "up", 220_000, 2.1],
+      ["의료", "up", 80_000, null],
+      ["쇼핑", "down", -80_000, 0.2],
+    ]);
+  });
+
+  test("진행 중인 달은 지난 달들도 같은 날까지만 비교하고, 기록 전 달은 빼며 3개월 미만이면 비교하지 않는다", () => {
+    const entries = [
+      ...["2026-08", "2026-09", "2026-10"].flatMap((m) => [
+        entry(`${m}-02`, 100_000),
+        entry(`${m}-25`, 500_000),
+      ]),
+      entry("2026-11-03", 110_000),
+    ];
+    const result = findUnusualSpending({
+      month: "2026-11",
+      today: "2026-11-10",
+      entries,
+      categories,
+    });
+    expect(result.throughDay).toBe(10);
+    expect(result.baselineMonths).toEqual(["2026-08", "2026-09", "2026-10"]);
+    expect(result.total?.usual).toBe(100_000);
+    expect(result.categories).toEqual([]);
+
+    const short = findUnusualSpending({
+      month: "2026-11",
+      today: "2026-11-10",
+      entries: entries.filter((e) => e.entryDate >= "2026-09"),
+      categories,
+    });
+    expect(short.total).toBeNull();
+    expect(short.baselineMonths).toEqual([]);
+  });
+
+  test("같은 분류의 과거 내역보다 유난히 큰 내역을 고른다", () => {
+    const history = months.flatMap((m) => [
+      entry(`${m}-01`, 9_000),
+      entry(`${m}-02`, 10_000),
+    ]);
+    const big = entry("2026-10-15", 48_000, { memo: "회식", tripId: 3 });
+    const normal = entry("2026-10-16", 11_000);
+    const small = entry("2026-10-17", 25_000, { categoryId: 2, memo: "기록 적은 분류" });
+    const result = findUnusualSpending({
+      month: "2026-10",
+      today: "2026-11-10",
+      entries: [...history, big, normal, small],
+      categories,
+    });
+    expect(result.entries).toEqual([
+      {
+        id: big.id,
+        entryDate: "2026-10-15",
+        memo: "회식",
+        amount: 48_000,
+        categoryId: 1,
+        groupName: "식비",
+        usual: 9_500,
+        ratio: 5.1,
+        historyCount: 12,
+        onTrip: true,
+      },
+    ]);
+  });
+
+  test("고정비: 반복 거래와, 연속 3개월 한 달 한 번 비슷한 금액인 내용", () => {
+    const entries = [
+      // 요금이 바뀌어도 연속 3개월 비슷했던 적이 있으면 고정비
+      entry("2026-01-21", 90_000, { memo: "통신비" }),
+      entry("2026-03-21", 55_000, { memo: "통신비" }),
+      entry("2026-04-21", 55_000, { memo: "통신비" }),
+      entry("2026-05-21", 56_000, { memo: "통신비 " }),
+      // 한 달에 여러 번 사면 고정비가 아니다
+      ...["2026-03", "2026-04", "2026-05"].flatMap((m) => [
+        entry(`${m}-01`, 5_000, { memo: "커피" }),
+        entry(`${m}-09`, 5_000, { memo: "커피" }),
+      ]),
+      // 금액이 들쭉날쭉하면 고정비가 아니다
+      entry("2026-03-10", 10_000, { memo: "쿠팡" }),
+      entry("2026-04-10", 80_000, { memo: "쿠팡" }),
+      entry("2026-05-10", 30_000, { memo: "쿠팡" }),
+      // 두 달 띄엄띄엄이면 아니다
+      entry("2026-01-05", 20_000, { memo: "미용실" }),
+      entry("2026-03-05", 20_000, { memo: "미용실" }),
+      entry("2026-05-05", 20_000, { memo: "미용실" }),
+      entry("2026-05-06", 9_900, { memo: "자동 생성", recurringId: 7 }),
+      // 매달 들어오는 입금은 고정비가 아니다
+      ...["2026-03", "2026-04", "2026-05"].map((m) =>
+        entry(`${m}-25`, 300_000, { kind: "income", memo: "회비" })
+      ),
+    ];
+    expect([...detectFixedMemos(entries, ["넷플릭스"])].sort()).toEqual([
+      ["넷플릭스", "recurring"],
+      ["자동 생성", "recurring"],
+      ["통신비", "pattern"],
+    ]);
+  });
+
+  test("고정비 비중은 지출 중 고정비 몫, 남긴 비율은 입금이 있을 때만", () => {
+    const entries = [
+      entry("2026-09-10", 1_000_000, { kind: "income", categoryId: null }),
+      entry("2026-09-13", 600_000),
+      entry("2026-10-21", 55_000, { memo: "통신비" }),
+      entry("2026-10-22", 345_000),
+      entry("2026-11-01", 13_500, { memo: "넷플릭스" }),
+      entry("2026-11-02", 200_000, { kind: "income", categoryId: null }),
+      entry("2026-11-03", 286_500),
+    ];
+    const result = buildFixedCostInsight({
+      month: "2026-11",
+      entries,
+      recurringMemos: ["통신비", "넷플릭스"],
+    });
+
+    // 첫 기록 달부터만 센다
+    expect(result.months.map((m) => m.month)).toEqual(["2026-09", "2026-10", "2026-11"]);
+    expect(result.months[0]).toMatchObject({
+      income: 1_000_000,
+      expense: 600_000,
+      fixed: 0,
+      fixedShare: 0,
+      keptRate: 40,
+    });
+    expect(result.months[1]).toMatchObject({
+      income: 0,
+      expense: 400_000,
+      fixed: 55_000,
+      fixedShare: 13.8,
+      keptRate: null,
+    });
+    // 입금보다 더 쓰면 음수
+    expect(result.months[2]).toMatchObject({ fixed: 13_500, keptRate: -50 });
+    expect(result.fixedItems).toEqual([
+      { memo: "넷플릭스", amount: 13_500, count: 1, reason: "recurring" },
+    ]);
+  });
 });

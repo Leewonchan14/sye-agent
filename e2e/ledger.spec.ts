@@ -26,10 +26,6 @@ test.beforeEach(async ({ request }) => {
   token = await login(request);
 });
 
-test.afterAll(async () => {
-  await pool.end();
-});
-
 const fillNewEntry = async (
   page: Page,
   values: { amount: string; memo: string; category?: string; time?: string }
