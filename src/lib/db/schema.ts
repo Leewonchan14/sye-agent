@@ -502,3 +502,74 @@ export const monitorIssueArticles = pgTable(
     ),
   })
 );
+
+/* ───────────────────────── 데이트 장소 (하치와레 매일 조사) ───────────────────────── */
+
+/** 조사 조건 — 한 행(id = 1)만 쓴다. */
+export const dateSpotSettings = pgTable("date_spot_settings", {
+  id: integer("id").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  /** 매일 조사를 시작하는 시각 (HH:mm, KST) */
+  collectTime: text("collect_time").notNull().default("09:00"),
+  /** 하루에 받을 장소 수 */
+  count: integer("count").notNull().default(5),
+  areas: text("areas")
+    .array()
+    .notNull()
+    .default(sql`ARRAY['서울']::text[]`),
+  themes: text("themes")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  /** 하치와레에게 따로 전할 말 (예: "웨이팅 긴 곳은 빼 줘") */
+  memo: text("memo").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+/** 하루치 조사. 매일 자동 조사와 "더 찾아 줘"가 같은 날짜 행에 장소를 쌓는다. */
+export const dateSpotDigests = pgTable("date_spot_digests", {
+  id: serial("id").primaryKey(),
+  /** YYYY-MM-DD (KST) */
+  dayKey: text("day_key").notNull().unique(),
+  /** 하치와레 한마디 */
+  note: text("note"),
+  pendingHermesRunId: text("pending_hermes_run_id"),
+  pendingSince: timestamp("pending_since", { withTimezone: true }),
+  callbackTokenHash: text("callback_token_hash"),
+  callbackTokenExpiresAt: timestamp("callback_token_expires_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  /** 자동 조사 진행 — running → (실패 시 retried) → done */
+  autoState: text("auto_state"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const dateSpots = pgTable(
+  "date_spots",
+  {
+    id: serial("id").primaryKey(),
+    digestId: integer("digest_id")
+      .notNull()
+      .references(() => dateSpotDigests.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    area: text("area").notNull().default(""),
+    category: text("category").notNull().default(""),
+    summary: text("summary").notNull().default(""),
+    reason: text("reason").notNull().default(""),
+    /** 근거가 된 인스타그램 게시물. 같은 게시물은 두 번 추천하지 않는다. */
+    instagramUrl: text("instagram_url").notNull().unique(),
+    instagramAuthor: text("instagram_author"),
+    postedAt: timestamp("posted_at", { withTimezone: true }),
+    address: text("address"),
+    priceHint: text("price_hint"),
+    tags: text("tags")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** like(가 보고 싶어) | pass(별로) | visited(다녀왔어) — 다음 조사의 취향 힌트가 된다. */
+    reaction: text("reaction"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    digestIdx: index("date_spots_digest_idx").on(t.digestId),
+  })
+);

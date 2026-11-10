@@ -59,7 +59,7 @@ export const requireAgentKey = (req: Request): Response | null => {
   return null;
 };
 
-const safeEqual = (given: string, expected: string) => {
+export const safeEqual = (given: string, expected: string) => {
   const a = Buffer.from(given);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);

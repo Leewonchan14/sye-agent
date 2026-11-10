@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  CalendarHeart,
   FileText,
   LogOut,
   MessageCircle,
@@ -31,7 +32,7 @@ interface Session {
 
 interface Props {
   activeSessionId: string;
-  activeNav?: "ledger" | "monitor";
+  activeNav?: "ledger" | "monitor" | "dates";
   onSelect: (id: string) => void;
   onNew: () => void;
   isOpen: boolean;
@@ -141,6 +142,14 @@ export const SessionSidebar = ({
             >
               <Newspaper className="h-4 w-4" />
               언론 모니터링
+            </Button>
+            <Button
+              variant="ghost"
+              className={`w-full justify-start ${activeNav === "dates" && "bg-canvas-card text-ink"}`}
+              onClick={() => router.push("/dates")}
+            >
+              <CalendarHeart className="h-4 w-4" />
+              데이트 장소
             </Button>
             <Button
               variant="ghost"
@@ -271,6 +280,17 @@ export const SessionSidebar = ({
             className={activeNav === "monitor" ? "bg-canvas-card text-ink" : ""}
           >
             <Newspaper className="h-5 w-5" />
+          </Button>
+
+          {/* Date spots */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            onClick={() => router.push("/dates")}
+            aria-label="데이트 장소"
+            className={activeNav === "dates" ? "bg-canvas-card text-ink" : ""}
+          >
+            <CalendarHeart className="h-5 w-5" />
           </Button>
 
           {/* Spacer */}

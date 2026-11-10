@@ -196,3 +196,42 @@ cp scripts/monitor-tick.py ~/.hermes/scripts/monitor_tick.py
 hermes cron create "every 1m" --name "모니터링 자동 수집 시계" \
   --script monitor_tick.py --no-agent --deliver discord
 ```
+
+## 5. 데이트 장소 매일 조사
+
+`/dates` 화면. 같은 시계(`/api/monitor/agent/tick`)가 정한 시각(기본 09:00, KST)에 하루 한 번
+하치와레에게 인스타그램 데이트 장소 조사를 맡긴다. Oracle 쪽 추가 설정은 없다.
+
+```
+tick ─▶ date_spot_digests(오늘) 선점(auto_state) ─▶ Hermes 런 (일회성 토큰)
+          └▶ 하치와레: web_search로 인스타 게시물 찾기 → /p/<코드>/embed/captioned/로 캡션 읽기
+                       → naver-search-api local로 주소·영업 확인 → POST /api/dates/agent/digests
+```
+
+```jsonc
+POST /api/dates/agent/digests   // x-monitor-token(프롬프트에 들어 있음) 또는 x-monitor-key
+{
+  "digestId": 3,
+  "note": "날이 추워져서 실내 위주로 골랐어!",
+  "spots": [
+    {
+      "name": "장소 이름",
+      "area": "성수",
+      "category": "카페",
+      "summary": "어떤 곳인지",
+      "reason": "우리 둘에게 왜 좋을지",
+      "instagramUrl": "https://www.instagram.com/p/<코드>/", // 필수. /reel/도 받고 /p/로 맞춘다
+      "instagramAuthor": "계정",
+      "postedAt": null,
+      "address": "도로명 주소",
+      "priceHint": "1인 2만원대",
+      "tags": ["실내", "디저트"],
+    },
+  ],
+}
+```
+
+- 인스타그램 게시물 주소가 없는 장소는 400으로 거절한다. 같은 게시물은 다른 날에도 다시 저장하지 않는다.
+- 하트(가 보고 싶어)·다녀왔어·별로 표시와 지금까지 추천한 곳이 다음 조사 프롬프트에 들어간다.
+- 지역·테마·하루 개수·시각·부탁은 화면의 "조건"에서 고친다. 결과 없이 끝나면 한 번 다시 시도하고, 완료·실패는 Discord로 알린다.
+- 로그인 없이 공개 임베드만 읽는다. 로그인 페이지를 열거나 다른 브라우저인 척하는 우회는 프롬프트에서 막아 둔다.
