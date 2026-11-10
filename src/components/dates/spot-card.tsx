@@ -8,17 +8,9 @@ import {
   Sparkles,
   ThumbsDown,
   Wallet,
+  X,
 } from "lucide-react";
-import {
-  type ComponentProps,
-  createContext,
-  type ReactElement,
-  type Ref,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -29,8 +21,8 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { ImageZoom } from "@/components/ui/image-zoom";
-import { parseSpotMedia } from "@/lib/dates/media";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { parseSpotMedia, type SpotMedia } from "@/lib/dates/media";
 import type { DateReaction, DateSpotView } from "@/lib/dates/types";
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
@@ -69,66 +61,9 @@ const usePrefersReducedMotion = () =>
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
   )[0];
 
-/** 확대한 화면에 띄울 영상. Image Zoom은 이미지만 확대하므로 표지 사진 자리에 영상을 바꿔 넣는다. */
-const ZoomVideoContext = createContext<{ src: string; label: string } | null>(null);
-
-const ZoomedVideo = ({
-  img,
-  buttonUnzoom,
-}: {
-  img: ReactElement | null;
-  buttonUnzoom: ReactElement;
-}) => {
-  const video = useContext(ZoomVideoContext);
-  const reducedMotion = usePrefersReducedMotion();
-  if (!img || !video) {
-    return (
-      <>
-        {img}
-        {buttonUnzoom}
-      </>
-    );
-  }
-  // 위치·크기·전환 효과와 닫기 처리는 Image Zoom이 표지 사진에 준 것을 그대로 쓴다.
-  const {
-    src: poster,
-    id,
-    style,
-    width,
-    height,
-    onTransitionEnd,
-    ref,
-  } = img.props as ComponentProps<"img"> & {
-    onTransitionEnd?: ComponentProps<"video">["onTransitionEnd"];
-  };
-  return (
-    <>
-      <video
-        data-rmiz-modal-img=""
-        id={id}
-        style={style}
-        width={width}
-        height={height}
-        onTransitionEnd={onTransitionEnd}
-        ref={ref as Ref<HTMLVideoElement>}
-        src={video.src}
-        poster={typeof poster === "string" ? poster : undefined}
-        aria-label={video.label}
-        autoPlay={!reducedMotion}
-        muted
-        loop
-        playsInline
-        disablePictureInPicture
-      />
-      {buttonUnzoom}
-    </>
-  );
-};
-
 /**
  * 게시물 영상. GIF처럼 소리 없이 반복 재생하되, 화면(캐러셀의 보이는 칸)에 들어왔을 때만 돌려
  * 데이터와 배터리를 아낀다. 동작 줄이기를 켠 기기에서는 표지 장면에 멈춰 둔다.
- * 사진처럼 누르면 크게 보는데, Image Zoom이 표지 사진으로 크기를 재고 확대한 화면에는 영상을 띄운다.
  */
 const SpotVideo = ({
   src,
@@ -162,7 +97,7 @@ const SpotVideo = ({
     return () => observer.disconnect();
   }, [reducedMotion]);
 
-  const player = (
+  return (
     <video
       ref={ref}
       src={src}
@@ -174,47 +109,189 @@ const SpotVideo = ({
       preload="metadata"
       disablePictureInPicture
       onError={onError}
-      className="absolute inset-0 size-full object-cover"
+      className="size-full object-cover"
     />
   );
+};
 
-  // 표지 사진이 없으면 크기를 잴 수 없어 확대 없이 재생만 한다.
-  if (!poster) return <div className="relative size-full">{player}</div>;
+type SpotSlide = { url: string; media: SpotMedia; label: string };
+
+/** 크게 본 화면의 영상. 지금 보고 있는 칸일 때만 GIF처럼 돈다. */
+const ZoomedVideo = ({
+  src,
+  poster,
+  label,
+  active,
+}: {
+  src: string;
+  poster: string | null;
+  label: string;
+  active: boolean;
+}) => {
+  const ref = useRef<HTMLVideoElement>(null);
+  const reducedMotion = usePrefersReducedMotion();
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    if (active && !reducedMotion) video.play().catch(() => {});
+    else video.pause();
+  }, [active, reducedMotion]);
 
   return (
-    <ZoomVideoContext.Provider value={{ src, label }}>
-      <ImageZoom
-        // 확대할 사진(표지)을 따로 주어야 원래 크기보다 크게, 화면에 맞춰 키운다.
-        zoomInProps={{ src: poster, referrerPolicy: "no-referrer" }}
-        rmiz={{
-          a11yNameButtonZoom: "영상 크게 보기",
-          a11yNameButtonUnzoom: "영상 작게 보기",
-          ZoomContent: ZoomedVideo,
-        }}
+    <video
+      ref={ref}
+      src={src}
+      poster={poster ?? undefined}
+      aria-label={label}
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      disablePictureInPicture
+      className="size-full object-contain"
+    />
+  );
+};
+
+/**
+ * 사진·영상을 화면 가득 크게 보는 갤러리. 크게 본 채로 밀거나 화살표(키보드 ←·→ 포함)로 넘긴다.
+ * 넘긴 칸은 카드 캐러셀도 따라가서, 닫으면 마지막에 본 사진이 카드에 남는다.
+ * 사진을 한 번 누르거나 Esc로 닫는다(밀어서 넘긴 것은 캐러셀이 누름으로 치지 않는다).
+ */
+const ZoomedGallery = ({
+  slides,
+  start,
+  onSelect,
+  onClose,
+}: {
+  slides: SpotSlide[];
+  start: number;
+  onSelect: (index: number) => void;
+  onClose: () => void;
+}) => {
+  const [api, setApi] = useState<CarouselApi>();
+  const [current, setCurrent] = useState(start);
+  const many = slides.length > 1;
+
+  useEffect(() => {
+    if (!api) return;
+    const sync = () => {
+      const index = api.selectedScrollSnap();
+      setCurrent(index);
+      onSelect(index);
+    };
+    // 포커스가 캐러셀 밖(창 자체)에 있어도 ←·→로 넘긴다. 캐러셀 안에서 이미 처리한 키는 건너뛴다.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key === "ArrowLeft") api.scrollPrev();
+      else if (event.key === "ArrowRight") api.scrollNext();
+      else return;
+      event.preventDefault();
+    };
+    api.on("select", sync);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      api.off("select", sync);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [api, onSelect]);
+
+  return (
+    <Carousel
+      setApi={setApi}
+      opts={{ startIndex: start }}
+      aria-label="크게 본 사진"
+      className="size-full [&_[data-slot=carousel-content]]:h-full"
+    >
+      <CarouselContent className="ml-0 h-full">
+        {slides.map(({ url, media, label }, index) => (
+          <CarouselItem key={url} className="h-full pl-0">
+            <div
+              className="size-full cursor-zoom-out p-5 pt-14 pb-10 select-none"
+              onClick={onClose}
+            >
+              {media.kind === "video" ? (
+                <ZoomedVideo
+                  src={media.src}
+                  poster={media.poster}
+                  label={label}
+                  active={index === current}
+                />
+              ) : (
+                // 인스타그램 CDN은 다른 사이트의 리퍼러가 붙으면 거절할 수 있다.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={media.src}
+                  alt={label}
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                  className="size-full object-contain"
+                />
+              )}
+            </div>
+          </CarouselItem>
+        ))}
+      </CarouselContent>
+      {many && (
+        <>
+          <span
+            aria-live="polite"
+            className="pointer-events-none absolute top-4 left-4 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white tabular-nums"
+          >
+            {current + 1} / {slides.length}
+          </span>
+          <CarouselPrevious
+            aria-label="이전 사진"
+            variant="secondary"
+            size="icon"
+            className="left-3 border-0 bg-surface/90 shadow-md hover:bg-surface disabled:opacity-0"
+          />
+          <CarouselNext
+            aria-label="다음 사진"
+            variant="secondary"
+            size="icon"
+            className="right-3 border-0 bg-surface/90 shadow-md hover:bg-surface disabled:opacity-0"
+          />
+        </>
+      )}
+      <DialogClose
+        render={
+          <Button
+            variant="secondary"
+            size="icon"
+            className="absolute top-3 right-3 rounded-full border-0 bg-surface/90 shadow-md hover:bg-surface"
+          />
+        }
       >
-        {/* Image Zoom은 [data-zoom] 요소의 배경 사진으로 확대할 크기와 위치를 잰다. */}
-        <div
-          data-zoom
-          style={{ backgroundImage: `url("${poster}")` }}
-          className="relative size-full bg-cover bg-center"
-        >
-          {player}
-        </div>
-      </ImageZoom>
-    </ZoomVideoContext.Provider>
+        <X />
+        <span className="sr-only">닫기</span>
+      </DialogClose>
+    </Carousel>
   );
 };
 
 /**
  * 게시물 사진·영상. 인스타그램 CDN에서 바로 받고, 못 받은 것은 빼고 보여 준다.
- * 사진·영상 모두 누르면 그 자리에서 화면 가득 커진다(다시 누르거나 Esc로 닫기). 영상은 GIF처럼 돈다.
+ * 누르면 화면 가득 크게 보고, 크게 본 채로도 넘길 수 있다. 영상은 GIF처럼 돈다.
  */
 const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
   const [failed, setFailed] = useState<string[]>([]);
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
+  const [zoomed, setZoomed] = useState<number | null>(null);
   const photos = spot.photos.filter((url) => !failed.includes(url));
   const fail = (url: string) => setFailed((list) => [...list, url]);
+  const many = photos.length > 1;
+  const slides: SpotSlide[] = photos.map((url, index) => {
+    const media = parseSpotMedia(url);
+    const kind = media.kind === "video" ? "영상" : "사진";
+    return {
+      url,
+      media,
+      label: many ? `${spot.name} ${kind} ${index + 1}` : `${spot.name} ${kind}`,
+    };
+  });
 
   useEffect(() => {
     if (!api) return;
@@ -226,88 +303,106 @@ const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
     };
   }, [api]);
 
+  // 크게 본 화면에서 넘기면 카드도 같은 칸으로 옮겨 둔다(가려져 있으니 바로 건너뛴다).
+  const follow = useCallback((index: number) => api?.scrollTo(index, true), [api]);
+
   if (!photos.length) return null;
-  const many = photos.length > 1;
 
   return (
-    <Carousel
-      setApi={setApi}
-      aria-label={`${spot.name} 사진 ${photos.length}장`}
-      className="group/photos relative bg-canvas-card"
-    >
-      <CarouselContent className="ml-0">
-        {photos.map((url, index) => {
-          const media = parseSpotMedia(url);
-          return (
+    <>
+      <Carousel
+        setApi={setApi}
+        aria-label={`${spot.name} 사진 ${photos.length}장`}
+        className="group/photos relative bg-canvas-card"
+      >
+        <CarouselContent className="ml-0">
+          {slides.map(({ url, media, label }, index) => (
             <CarouselItem key={url} className="pl-0">
-              <div className="aspect-[4/3] overflow-hidden [&_[data-rmiz-content]]:size-full [&_[data-rmiz]]:size-full">
+              <div className="relative aspect-[4/3] overflow-hidden">
                 {media.kind === "video" ? (
                   <SpotVideo
                     src={media.src}
                     poster={media.poster}
-                    label={many ? `${spot.name} 영상 ${index + 1}` : `${spot.name} 영상`}
+                    label={label}
                     onError={() => fail(url)}
                   />
                 ) : (
-                  // 넘기려고 끈 것은 캐러셀이 클릭으로 치지 않아 확대되지 않는다.
                   // 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다.
-                  <ImageZoom
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
                     src={media.src}
-                    alt={many ? `${spot.name} 사진 ${index + 1}` : `${spot.name} 사진`}
+                    alt={label}
                     loading={index === 0 ? "eager" : "lazy"}
                     decoding="async"
                     draggable={false}
                     referrerPolicy="no-referrer"
                     onError={() => fail(url)}
                     className="size-full object-cover select-none"
-                    // 확대한 사진도 같은 CDN에서 받으므로 리퍼러를 빼야 한다.
-                    zoomInProps={{ referrerPolicy: "no-referrer" }}
-                    rmiz={{
-                      a11yNameButtonZoom: "사진 크게 보기",
-                      a11yNameButtonUnzoom: "사진 작게 보기",
-                    }}
                   />
                 )}
+                {/* 넘기려고 끈 것은 캐러셀이 누름으로 치지 않아 크게 보지 않는다. */}
+                <button
+                  type="button"
+                  aria-label={`${label} 크게 보기`}
+                  onClick={() => setZoomed(index)}
+                  className="absolute inset-0 cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                />
               </div>
             </CarouselItem>
-          );
-        })}
-      </CarouselContent>
-      {many && (
-        <>
-          <span
-            aria-live="polite"
-            className="pointer-events-none absolute top-2.5 right-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums"
-          >
-            {current + 1} / {photos.length}
-          </span>
-          <CarouselPrevious
-            aria-label="이전 사진"
-            variant="secondary"
-            className="left-2 border-0 bg-white/85 shadow-sm hover:bg-white disabled:opacity-0 md:opacity-0 md:group-hover/photos:opacity-100 md:disabled:group-hover/photos:opacity-0"
-          />
-          <CarouselNext
-            aria-label="다음 사진"
-            variant="secondary"
-            className="right-2 border-0 bg-white/85 shadow-sm hover:bg-white disabled:opacity-0 md:opacity-0 md:group-hover/photos:opacity-100 md:disabled:group-hover/photos:opacity-0"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1"
-          >
-            {photos.map((url, index) => (
-              <span
-                key={url}
-                className={cn(
-                  "size-1.5 rounded-full bg-white/55 transition-colors",
-                  index === current && "bg-white"
-                )}
-              />
-            ))}
-          </div>
-        </>
-      )}
-    </Carousel>
+          ))}
+        </CarouselContent>
+        {many && (
+          <>
+            <span
+              aria-live="polite"
+              className="pointer-events-none absolute top-2.5 right-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums"
+            >
+              {current + 1} / {photos.length}
+            </span>
+            <CarouselPrevious
+              aria-label="이전 사진"
+              variant="secondary"
+              className="left-2 border-0 bg-white/85 shadow-sm hover:bg-white disabled:opacity-0 md:opacity-0 md:group-hover/photos:opacity-100 md:disabled:group-hover/photos:opacity-0"
+            />
+            <CarouselNext
+              aria-label="다음 사진"
+              variant="secondary"
+              className="right-2 border-0 bg-white/85 shadow-sm hover:bg-white disabled:opacity-0 md:opacity-0 md:group-hover/photos:opacity-100 md:disabled:group-hover/photos:opacity-0"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1"
+            >
+              {photos.map((url, index) => (
+                <span
+                  key={url}
+                  className={cn(
+                    "size-1.5 rounded-full bg-white/55 transition-colors",
+                    index === current && "bg-white"
+                  )}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </Carousel>
+      <Dialog open={zoomed !== null} onOpenChange={(open) => !open && setZoomed(null)}>
+        <DialogContent
+          showCloseButton={false}
+          className="top-0 left-0 block h-dvh w-dvw max-w-none translate-x-0 translate-y-0 rounded-none bg-background p-0 ring-0 sm:max-w-none"
+        >
+          <DialogTitle className="sr-only">{spot.name} 사진 크게 보기</DialogTitle>
+          {zoomed !== null && (
+            <ZoomedGallery
+              slides={slides}
+              start={zoomed}
+              onSelect={follow}
+              onClose={() => setZoomed(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
