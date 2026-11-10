@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 
 import { expect, type Page, test } from "@playwright/test";
 
+import { isSpotVideo } from "../src/lib/dates/media";
 import { parseEmbedPhotos, photoExpiresAt } from "../src/lib/dates/photo";
 import { login, pool } from "./helpers";
 
@@ -34,6 +36,9 @@ const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64"
 );
+/** 테스트 브라우저(Chromium)는 H.264를 못 틀어서 VP9 영상을 .mp4 주소로 내보낸다. */
+const TINY_VIDEO = readFileSync(new URL("./fixtures/tiny.webm", import.meta.url));
+const videoSrc = (code: string) => `${photoBase()}/${code}.mp4?efg=v&oe=${futureOe()}`;
 const photoSrc = (code: string, w: number) =>
   `${photoBase()}/${code}-${w}.png?stp=dst&oe=${futureOe()}`;
 /** 실제 임베드처럼 게시물 데이터(contextJSON)를 JSON 문자열 안의 JSON으로 싣는다. */
@@ -49,20 +54,29 @@ const mediaNode = (code: string) => ({
     config_width: w,
   })),
 });
+const videoNode = (code: string) => ({
+  ...mediaNode(code),
+  is_video: true,
+  video_url: videoSrc(code),
+});
 /**
- * `MULTI<n>…`으로 시작하는 게시물은 n장짜리 게시물 데이터를 싣고,
+ * `MULTI<n>…`으로 시작하는 게시물은 n장짜리 게시물 데이터를 싣고(`MULTI<n>v…`면 마지막 장이 영상),
  * 나머지는 데이터 없이 대표 사진 태그만 둔다(데이터가 없을 때의 대체 경로).
  */
 const embedHtml = (code: string) => {
   const src = (w: number) => photoSrc(code, w).replace(/&/g, "&amp;");
   const img = `<img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;seongsu_date" src="${src(1080)}" srcset="${src(1080)} 1080w,${src(640)} 640w,${src(320)} 320w" />`;
-  const count = Number(code.match(/^MULTI(\d+)/)?.[1] ?? 0);
+  const [, countText = "0", video] = code.match(/^MULTI(\d+)(v?)/) ?? [];
+  const count = Number(countText);
   const context = count
     ? contextScript({
         ...mediaNode(`${code}-0`),
         edge_sidecar_to_children: {
           edges: Array.from({ length: count }, (_, i) => ({
-            node: mediaNode(`${code}-${i + 1}`),
+            node:
+              video && i === count - 1
+                ? videoNode(`${code}-${i + 1}`)
+                : mediaNode(`${code}-${i + 1}`),
           })),
         },
       })
@@ -129,8 +143,9 @@ const startFakeHermes = () =>
         return;
       }
       if (req.method === "GET" && path.startsWith("/img/")) {
-        res.writeHead(200, { "Content-Type": "image/png" });
-        res.end(PIXEL);
+        const video = new URL(path, "http://x").pathname.endsWith(".mp4");
+        res.writeHead(200, { "Content-Type": video ? "video/webm" : "image/png" });
+        res.end(video ? TINY_VIDEO : PIXEL);
         return;
       }
       const statusMatch = path.match(/\/v1\/runs\/([^/?]+)$/);
@@ -351,6 +366,24 @@ test("임베드에서 여러 장 사진을 순서대로 읽고, 데이터가 없
   expect(parseEmbedPhotos(withContext(13))).toHaveLength(10);
   // 한 장짜리 게시물 데이터
   expect(parseEmbedPhotos(contextScript(node("single")))).toEqual([url("single", 640)]);
+  // 영상은 영상 주소를, 영상 주소가 없으면 표지 사진을 쓴다.
+  const video = `https://scontent.cdninstagram.com/o1/v/t16/clip.mp4?efg=a&oe=${oe}`;
+  expect(
+    parseEmbedPhotos(
+      contextScript({
+        ...node("cover"),
+        edge_sidecar_to_children: {
+          edges: [
+            { node: node("p1") },
+            { node: { ...node("v1"), is_video: true, video_url: video } },
+            { node: { ...node("v2"), is_video: true } },
+          ],
+        },
+      })
+    )
+  ).toEqual([url("p1", 640), video, url("v2", 640)]);
+  expect(isSpotVideo(video)).toBe(true);
+  expect(isSpotVideo(url("p1", 640))).toBe(false);
 
   // 데이터가 없으면 임베드에 보이는 대표 사진
   const escaped = (w: number) => url("img", w).replace(/&/g, "&amp;");
@@ -371,6 +404,7 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
     spot("MULTI3a", "여러 장 카페"),
     spot("PIC111", "한 장 카페"),
     spot("NOPIC2", "사진 없는 공방"),
+    spot("MULTI2v", "영상 섞인 카페"),
   ];
   const token = await login(request);
   await openDates(page, token);
@@ -393,9 +427,41 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   await multi.getByRole("button", { name: "다음 사진" }).click();
   await expect(multi.getByText("3 / 3")).toBeVisible();
   await expect(multi.getByRole("button", { name: "다음 사진" })).toBeDisabled();
-  await expect(
-    multi.getByRole("link", { name: "여러 장 카페 인스타그램 게시물" }).first()
-  ).toHaveAttribute("href", "https://www.instagram.com/p/MULTI3a/");
+
+  // 사진을 누르면 그 자리에서 화면 가득 커지고, 다시 누르거나 Esc로 닫는다.
+  await multi.getByRole("img", { name: "여러 장 카페 사진 3" }).click();
+  const zoomed = page.locator("dialog[data-rmiz-modal][open] [data-rmiz-modal-img]");
+  await expect(zoomed).toBeVisible();
+  await expect(zoomed).toHaveAttribute("src", /\/img\/MULTI3a-3-640\.png/);
+  await expect(zoomed).toHaveAttribute("referrerpolicy", "no-referrer");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog[data-rmiz-modal][open]")).toHaveCount(0);
+  // 넘기려고 끈 것은 확대로 치지 않는다.
+  const box = (await multi
+    .getByRole("img", { name: "여러 장 카페 사진 3" })
+    .boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(multi.getByText("2 / 3")).toBeVisible();
+  await expect(page.locator("dialog[data-rmiz-modal][open]")).toHaveCount(0);
+
+  // 영상은 GIF처럼 소리 없이 반복 재생한다.
+  const clip = page.getByRole("article", { name: "영상 섞인 카페" });
+  await clip.getByRole("button", { name: "다음 사진" }).click();
+  const video = clip.locator("video");
+  await expect(video).toHaveAttribute("aria-label", "영상 섞인 카페 영상 2");
+  await expect(video).toHaveAttribute("src", /\/img\/MULTI2v-2\.mp4/);
+  expect(
+    await video.evaluate((el: HTMLVideoElement) => ({ muted: el.muted, loop: el.loop }))
+  ).toEqual({ muted: true, loop: true });
+  await expect
+    .poll(() => video.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(false);
+  // 보이지 않는 칸으로 넘기면 멈춘다.
+  await clip.getByRole("button", { name: "이전 사진" }).click();
+  await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
 
   // 한 장이면 넘기기·장수 표시 없이 사진만
   const single = page.getByRole("article", { name: "한 장 카페" });
@@ -415,6 +481,7 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
     { name: "여러 장 카페", photos: 3, checked: true },
     { name: "한 장 카페", photos: 1, checked: true },
     { name: "사진 없는 공방", photos: 0, checked: true },
+    { name: "영상 섞인 카페", photos: 2, checked: true },
   ]);
 });
 

@@ -9,7 +9,7 @@ import {
   ThumbsDown,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -20,6 +20,8 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+import { ImageZoom } from "@/components/ui/image-zoom";
+import { isSpotVideo } from "@/lib/dates/media";
 import type { DateReaction, DateSpotView } from "@/lib/dates/types";
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
@@ -51,12 +53,71 @@ const mapUrl = (spot: DateSpotView) =>
     [spot.name, spot.address?.split(" ").slice(0, 3).join(" ")].filter(Boolean).join(" ")
   )}`;
 
-/** 게시물 사진. 인스타그램 CDN에서 바로 받고, 못 받은 사진은 빼고 보여 준다. */
+/**
+ * 게시물 영상. GIF처럼 소리 없이 반복 재생하되, 화면(캐러셀의 보이는 칸)에 들어왔을 때만 돌려
+ * 데이터와 배터리를 아낀다. 동작 줄이기를 켠 기기에서는 멈춰 두고 재생 버튼을 보여 준다.
+ */
+const SpotVideo = ({
+  src,
+  label,
+  onError,
+}: {
+  src: string;
+  label: string;
+  onError: () => void;
+}) => {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [reducedMotion] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || reducedMotion) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // 자동 재생이 막힌 브라우저에서는 첫 장면만 보인다.
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [reducedMotion]);
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      aria-label={label}
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      disablePictureInPicture
+      controls={reducedMotion}
+      onError={onError}
+      className="size-full object-cover"
+    />
+  );
+};
+
+/**
+ * 게시물 사진·영상. 인스타그램 CDN에서 바로 받고, 못 받은 것은 빼고 보여 준다.
+ * 사진은 누르면 그 자리에서 화면 가득 커지고(다시 누르거나 Esc로 닫기), 영상은 GIF처럼 돈다.
+ */
 const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
   const [failed, setFailed] = useState<string[]>([]);
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
   const photos = spot.photos.filter((url) => !failed.includes(url));
+  const fail = (url: string) => setFailed((list) => [...list, url]);
 
   useEffect(() => {
     if (!api) return;
@@ -80,26 +141,34 @@ const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
       <CarouselContent className="ml-0">
         {photos.map((url, index) => (
           <CarouselItem key={url} className="pl-0">
-            <a
-              href={spot.instagramUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`${spot.name} 인스타그램 게시물`}
-              className="block aspect-[4/3] overflow-hidden"
-            >
-              {/* 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={many ? `${spot.name} 사진 ${index + 1}` : `${spot.name} 사진`}
-                loading={index === 0 ? "eager" : "lazy"}
-                decoding="async"
-                draggable={false}
-                referrerPolicy="no-referrer"
-                onError={() => setFailed((list) => [...list, url])}
-                className="size-full object-cover select-none"
-              />
-            </a>
+            <div className="aspect-[4/3] overflow-hidden [&_[data-rmiz-content]]:size-full [&_[data-rmiz]]:size-full">
+              {isSpotVideo(url) ? (
+                <SpotVideo
+                  src={url}
+                  label={many ? `${spot.name} 영상 ${index + 1}` : `${spot.name} 영상`}
+                  onError={() => fail(url)}
+                />
+              ) : (
+                // 넘기려고 끈 것은 캐러셀이 클릭으로 치지 않아 확대되지 않는다.
+                // 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다.
+                <ImageZoom
+                  src={url}
+                  alt={many ? `${spot.name} 사진 ${index + 1}` : `${spot.name} 사진`}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                  onError={() => fail(url)}
+                  className="size-full object-cover select-none"
+                  // 확대한 사진도 같은 CDN에서 받으므로 리퍼러를 빼야 한다.
+                  zoomInProps={{ referrerPolicy: "no-referrer" }}
+                  rmiz={{
+                    a11yNameButtonZoom: "사진 크게 보기",
+                    a11yNameButtonUnzoom: "사진 작게 보기",
+                  }}
+                />
+              )}
+            </div>
           </CarouselItem>
         ))}
       </CarouselContent>

@@ -2,7 +2,9 @@
  * 인스타그램 게시물 사진 주소를 공식 임베드(`/p/<코드>/embed/captioned/`)에서 읽는다.
  *
  * 여러 장 게시물은 임베드에 들어 있는 게시물 데이터(`contextJSON`)에서 사진을 순서대로 모두 꺼내고,
- * 데이터가 없으면 임베드에 보이는 대표 사진 한 장만 쓴다. 영상은 표지 사진을 쓴다.
+ * 데이터가 없으면 임베드에 보이는 대표 사진 한 장만 쓴다.
+ * 영상은 영상 주소(.mp4)를 그대로 넣어 카드에서 GIF처럼 소리 없이 반복 재생한다.
+ * 게시물 데이터에 영상 주소가 없으면 예전처럼 표지 사진을 쓴다.
  *
  * 사진 파일은 저장하지 않는다. CDN 주소에 만료 시각(`oe`, 16진수 초)이 붙어 있어 4~5일 뒤 열리지 않으므로,
  * 주소와 가장 이른 만료 시각만 저장해 두고 만료가 가까우면 다시 읽는다. 화면은 인스타그램 CDN에서 바로 받는다.
@@ -58,13 +60,17 @@ export const photoExpiresAt = (url: string, now = Date.now()): Date => {
 };
 
 interface EmbedMediaNode {
+  is_video?: unknown;
+  video_url?: unknown;
   display_url?: unknown;
   display_resources?: { src?: unknown; config_width?: unknown }[];
   edge_sidecar_to_children?: { edges?: { node?: EmbedMediaNode }[] };
 }
 
+/** 영상이면 영상 주소, 아니면(또는 영상 주소가 없으면) 알맞은 크기의 사진 주소 */
 const nodePhoto = (node: EmbedMediaNode | undefined): string | null => {
   if (!node) return null;
+  if (node.is_video === true && isHttp(node.video_url)) return node.video_url;
   const sized = pickSize(
     (node.display_resources ?? []).map((r) => ({
       url: String(r.src ?? ""),
@@ -98,7 +104,7 @@ const readEmbedImage = (html: string): string | null => {
   return isHttp(decoded) ? decoded : null;
 };
 
-/** 임베드 HTML에서 게시물 사진 주소들을 순서대로 꺼낸다. */
+/** 임베드 HTML에서 게시물 사진·영상 주소들을 순서대로 꺼낸다. */
 export const parseEmbedPhotos = (html: string): string[] => {
   const media = readEmbedMedia(html);
   const children = media?.edge_sidecar_to_children?.edges ?? [];
