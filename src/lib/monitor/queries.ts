@@ -15,10 +15,15 @@ import type {
   MonitorCategory,
   MonitorClientPayload,
   MonitorClientView,
+  MonitorImportance,
   MonitorIssueArticleView,
   MonitorIssuePayload,
   MonitorOverview,
   MonitorRule,
+  MonitorSentiment,
+  MonitorStatsPayload,
+  StatsDays,
+  StatsScope,
 } from "@/lib/monitor/types";
 
 /** 쿼리 키 — 무효화를 한 곳에서 관리한다. */
@@ -34,6 +39,13 @@ export const monitorKeys = {
   client: (clientId: number, runId?: number) =>
     [...monitorKeys.all, "client", clientId, runId ?? "latest"] as const,
   clientAll: (clientId: number) => [...monitorKeys.all, "client", clientId] as const,
+  stats: (
+    clientId: number,
+    filter?: { days: StatsDays; scope: StatsScope; category: string | null }
+  ) =>
+    filter
+      ? ([...monitorKeys.all, "stats", clientId, filter] as const)
+      : ([...monitorKeys.all, "stats", clientId] as const),
   issue: (issueId: number) => [...monitorKeys.all, "issue", issueId] as const,
 };
 
@@ -91,6 +103,25 @@ export const useMonitorClient = (clientId: number, runId?: number) => {
     refetchInterval: (query) =>
       query.state.data?.run?.pendingSince ? 10_000 : IDLE_REFETCH_MS,
     refetchOnWindowFocus: true,
+  });
+};
+
+/** 매체·기자 통계. 기간·범위를 바꿔도 이전 표를 유지한다. */
+export const useMonitorStats = (
+  clientId: number,
+  filter: { days: StatsDays; scope: StatsScope; category: string | null }
+) => {
+  const api = useApi();
+  const params = new URLSearchParams({
+    days: String(filter.days),
+    scope: filter.scope,
+    ...(filter.category ? { category: filter.category } : {}),
+  });
+  return useQuery({
+    queryKey: monitorKeys.stats(clientId, filter),
+    queryFn: () =>
+      api<MonitorStatsPayload>(`/api/monitor/clients/${clientId}/stats?${params}`),
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -152,7 +183,10 @@ export const useMonitorMutations = (clientId?: number) => {
   const api = useApi();
   const qc = useQueryClient();
   const refreshClient = () => {
-    if (clientId) qc.invalidateQueries({ queryKey: monitorKeys.clientAll(clientId) });
+    if (clientId) {
+      qc.invalidateQueries({ queryKey: monitorKeys.clientAll(clientId) });
+      qc.invalidateQueries({ queryKey: monitorKeys.stats(clientId) });
+    }
     qc.invalidateQueries({ queryKey: monitorKeys.overview() });
   };
   const onError = (error: Error) => toast.error(error.message);
@@ -163,6 +197,8 @@ export const useMonitorMutations = (clientId?: number) => {
       included?: boolean;
       category?: string | null;
       subcategory?: string | null;
+      sentiment?: MonitorSentiment | null;
+      importance?: MonitorImportance | null;
     }) => {
       const { id, ...body } = v;
       return api(`/api/monitor/items/${id}`, { method: "PATCH", body });

@@ -65,7 +65,9 @@ const ITEM_FORMAT = `items 원소 형식 (JSON):
   "score": 0~100 관련도,
   "reason": "고른 이유 한 줄",
   "excludedReason": "제외 이유 (category가 null일 때)",
-  "blocked": 원문 접근이 막혔으면 true
+  "blocked": 원문 접근이 막혔으면 true,
+  "sentiment": "positive | neutral | negative — 고객사 입장에서 본 기사 논조. 고객사에 불리한 비판·사고·논란은 negative, 단순 언급·정보 전달은 neutral",
+  "importance": "high | normal | low — 고객사가 오늘 꼭 알아야 하면 high(부정 이슈, 주요 매체 단독, 경쟁사 큰 움직임 등), 참고용이면 low"
 }`;
 
 const curlExample = (url: string, token: string, body: string) =>
@@ -188,7 +190,7 @@ export const startIssueRecount = async (options: {
     "",
     "added = 구간 안에 새로 게재된 관련 기사 수, mediaCount = 매체 수, brandMentions = 감시어가 본문·제목에 나온 기사 수.",
     "lastArticle = 가장 최근 기사. events = 이번 구간에 새로 생긴 중요한 흐름(없으면 빈 배열).",
-    `articles = added로 센 기사 전부. 담당자가 화면에서 기사를 직접 확인하는 목록이라 빠뜨리면 안 돼. 손으로 옮겨 적지 말고 스윕 결과 파일에서 코드로 만들어. url은 네이버 링크가 있으면 네이버 링크, media는 매체 이름(모르면 비워), publishedAt은 'YYYY-MM-DD HH:mm'(KST), brandMention은 감시어가 제목·본문에 나왔는지. ${MAX_ISSUE_ARTICLES}건이 넘으면 최신순으로 ${MAX_ISSUE_ARTICLES}건만 보내.`,
+    `articles = added로 센 기사 전부. 담당자가 화면에서 기사를 직접 확인하는 목록이라 빠뜨리면 안 돼. 손으로 옮겨 적지 말고 스윕 결과 파일에서 코드로 만들어. url은 네이버 링크가 있으면 네이버 링크, media는 매체 이름(모르면 비워), publishedAt은 'YYYY-MM-DD HH:mm'(KST), brandMention은 감시어가 제목·본문에 나왔는지, sentiment는 고객사 입장에서 본 논조(positive | neutral | negative). ${MAX_ISSUE_ARTICLES}건이 넘으면 최신순으로 ${MAX_ISSUE_ARTICLES}건만 보내.`,
     "at(집계 시각)은 보내지 마. 서버가 받은 시각으로 기록해. 기사 시각(lastArticle.time, events.at)은 KST로 써.",
     "결과는 채팅으로 길게 답하지 말고 아래 API로 보내. 보낸 뒤 채팅에는 숫자만 한 줄로 말해.",
     curlExample(
@@ -212,6 +214,7 @@ export const startIssueRecount = async (options: {
             title: "",
             publishedAt: "YYYY-MM-DD HH:mm",
             brandMention: false,
+            sentiment: "neutral",
           },
         ],
       })

@@ -36,6 +36,35 @@ export const monitorRuleSchema = z.object({
 export type MonitorRule = z.infer<typeof monitorRuleSchema>;
 export type MonitorRuleKind = MonitorRule["kind"];
 
+/** 고객사 입장에서 본 기사 논조 */
+export const SENTIMENTS = ["positive", "neutral", "negative"] as const;
+export type MonitorSentiment = (typeof SENTIMENTS)[number];
+export const sentimentSchema = z.enum(SENTIMENTS);
+
+/** 고객사에 미칠 영향 */
+export const IMPORTANCES = ["high", "normal", "low"] as const;
+export type MonitorImportance = (typeof IMPORTANCES)[number];
+export const importanceSchema = z.enum(IMPORTANCES);
+
+export const SENTIMENT_LABEL: Record<MonitorSentiment, string> = {
+  positive: "긍정",
+  neutral: "중립",
+  negative: "부정",
+};
+
+export const IMPORTANCE_LABEL: Record<MonitorImportance, string> = {
+  high: "중요",
+  normal: "보통",
+  low: "낮음",
+};
+
+/** DB의 text 값을 알려진 값으로 좁힌다. 모르는 값은 null. */
+export const asSentiment = (value: string | null | undefined): MonitorSentiment | null =>
+  SENTIMENTS.find((s) => s === value) ?? null;
+export const asImportance = (
+  value: string | null | undefined
+): MonitorImportance | null => IMPORTANCES.find((s) => s === value) ?? null;
+
 /** 하치와레 작업량 — tokens는 캐시를 뺀 입력 + 출력 */
 export interface MonitorUsage {
   tokens: number;
@@ -115,6 +144,8 @@ export interface MonitorItemView {
   dupGroup: string | null;
   isLead: boolean;
   flags: string[];
+  sentiment: MonitorSentiment | null;
+  importance: MonitorImportance | null;
   url: string;
   naverUrl: string | null;
   media: string;
@@ -187,6 +218,7 @@ export interface MonitorIssueArticleView {
   title: string;
   publishedAt: string | null;
   brandMention: boolean;
+  sentiment: MonitorSentiment | null;
 }
 
 export interface MonitorIssuePayload {
@@ -234,6 +266,10 @@ export const agentItemSchema = z.object({
   dupGroup: z.string().max(80).nullish(),
   isLead: z.boolean().default(true),
   blocked: z.boolean().default(false),
+  /** 고객사 입장에서 본 논조 */
+  sentiment: sentimentSchema.nullish(),
+  /** 고객사에 미칠 영향 */
+  importance: importanceSchema.nullish(),
 });
 export type AgentItem = z.infer<typeof agentItemSchema>;
 
@@ -326,6 +362,7 @@ export const agentSnapshotSchema = z.object({
           )
           .nullish(),
         brandMention: z.boolean().default(false),
+        sentiment: sentimentSchema.nullish(),
       })
     )
     .max(MAX_ISSUE_ARTICLES)
@@ -343,3 +380,63 @@ export const agentSnapshotSchema = z.object({
     .optional(),
 });
 export type AgentSnapshotInput = z.infer<typeof agentSnapshotSchema>;
+
+/* ───────────── 매체·기자 통계 (GET /api/monitor/clients/{id}/stats) ───────────── */
+
+export const STATS_DAYS = [7, 30, 90] as const;
+export type StatsDays = (typeof STATS_DAYS)[number];
+
+/** included: 리포트에 넣은 기사 · picked: AI가 카테고리로 고른 후보 전체 */
+export const STATS_SCOPES = ["included", "picked"] as const;
+export type StatsScope = (typeof STATS_SCOPES)[number];
+
+export interface MonitorStatsArticle {
+  url: string;
+  title: string;
+  media: string;
+  reporter: string | null;
+  publishedAt: string | null;
+  category: string | null;
+  sentiment: MonitorSentiment | null;
+}
+
+export type SentimentCounts = Record<MonitorSentiment | "unknown", number>;
+
+export interface MonitorMediaStat {
+  media: string;
+  count: number;
+  sentiment: SentimentCounts;
+  /** 이 매체에서 보도한 기자 수 */
+  reporters: number;
+  lastAt: string | null;
+  categories: { key: string; count: number }[];
+}
+
+export interface MonitorReporterStat {
+  reporter: string;
+  media: string;
+  count: number;
+  sentiment: SentimentCounts;
+  lastAt: string | null;
+  categories: { key: string; count: number }[];
+  /** 최신순 기사 (최대 5건) */
+  articles: MonitorStatsArticle[];
+}
+
+export interface MonitorStatsPayload {
+  days: StatsDays;
+  scope: StatsScope;
+  category: string | null;
+  from: string;
+  to: string;
+  totals: {
+    articles: number;
+    media: number;
+    reporters: number;
+    /** 기자를 확인하지 못한 기사 */
+    noReporter: number;
+    sentiment: SentimentCounts;
+  };
+  media: MonitorMediaStat[];
+  reporters: MonitorReporterStat[];
+}

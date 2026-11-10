@@ -122,6 +122,8 @@ Content-Type: application/json
 | `dupGroup`       |      | 같은 보도자료 묶음 키 (예: `"hk-gourmet-month"`)                                           |
 | `isLead`         |      | 묶음의 대표 기사면 true(기본). 나머지 전재 기사는 false                                    |
 | `blocked`        |      | 원문 접근이 막혔으면 true                                                                  |
+| `sentiment`      |      | 고객사 입장에서 본 논조 `positive` / `neutral` / `negative`. 화면·통계·엑셀에 표시         |
+| `importance`     |      | 고객사에 미칠 영향 `high` / `normal` / `low`. `high`는 화면에 "중요"로 표시                |
 
 - 같은 URL을 같은 런에 두 번 보내면 무시된다.
 - **나눠 보내기**: runId로 붙이는 결과를 여러 번에 나눠 보내면 마지막을 뺀 묶음에 `"final": false`를 넣는다.
@@ -160,6 +162,7 @@ POST /api/monitor/agent/issues/{issueId}/snapshots
       "title": "...",
       "publishedAt": "2026-11-06 14:42", // KST
       "brandMention": false,
+      "sentiment": "negative", // 선택. positive | neutral | negative
     },
   ],
 }
@@ -240,3 +243,8 @@ POST /api/dates/agent/digests   // x-monitor-token(프롬프트에 들어 있음
   화면이 인스타그램 CDN에서 바로 받는다(주소의 `oe`가 만료 시각, 4~5일). 못 읽은 게시물은 6시간 뒤 다시 찾아본다.
   여러 장이면 카드에서 캐러셀로 넘겨 본다.
 - 로그인 없이 공개 임베드만 읽는다. 로그인 페이지를 열거나 다른 브라우저인 척하는 우회는 프롬프트에서 막아 둔다.
+
+## 6. 엑셀(CSV) 내려받기
+
+리포트 탭의 "엑셀(CSV)로 받기"는 리포트에 넣은 기사를 같은 보도자료 전재까지 포함해 내려받는다.
+논조·중요도 열이 함께 들어가고, Excel에서 한글이 깨지지 않게 BOM을 붙인다.

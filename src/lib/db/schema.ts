@@ -410,6 +410,10 @@ export const monitorItems = pgTable(
     isLead: boolean("is_lead").notNull().default(true),
     /** dup | blocked | reported | new */
     flags: jsonb("flags").$type<string[]>().notNull().default([]),
+    /** 고객사 입장에서 본 논조 — positive | neutral | negative. 모르면 null */
+    sentiment: text("sentiment"),
+    /** 고객사에 미칠 영향 — high | normal | low. 모르면 null */
+    importance: text("importance"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -495,6 +499,8 @@ export const monitorIssueArticles = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** 감시어가 제목·본문에 나온 기사 */
     brandMention: boolean("brand_mention").notNull().default(false),
+    /** 고객사 입장에서 본 논조 — positive | neutral | negative. 모르면 null */
+    sentiment: text("sentiment"),
   },
   (t) => ({
     snapshotIdx: index("monitor_issue_articles_snapshot_idx").on(

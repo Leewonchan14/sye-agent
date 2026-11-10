@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Undo2 } from "lucide-react";
+import { Check, Copy, FileSpreadsheet, Undo2 } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { toast } from "sonner";
 import useLocalStorageState from "use-local-storage-state";
@@ -8,7 +8,12 @@ import useLocalStorageState from "use-local-storage-state";
 import { Button } from "@/components/ui/button";
 import { kst } from "@/lib/kst";
 import type { useMonitorMutations } from "@/lib/monitor/queries";
-import { buildMonitorReport, type ReportFormat } from "@/lib/monitor/report";
+import {
+  buildMonitorReport,
+  buildReportCsv,
+  reportLeads,
+  type ReportFormat,
+} from "@/lib/monitor/report";
 import type {
   MonitorClientView,
   MonitorItemView,
@@ -23,6 +28,23 @@ interface Props {
   mutations: ReturnType<typeof useMonitorMutations>;
   onCopied: () => void;
 }
+
+/** 리포트에 넣은 기사를 엑셀에서 바로 열리는 CSV로 내려받는다. */
+const downloadCsv = (
+  client: MonitorClientView,
+  run: MonitorRunView,
+  items: MonitorItemView[]
+) => {
+  const blob = new Blob([buildReportCsv(client, items)], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${client.name}_모니터링_${kst(run.until).format("YYYYMMDD")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 const FORMATS: { id: ReportFormat; label: string }[] = [
   { id: "email", label: "메일 본문" },
@@ -39,10 +61,10 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
     [client, run, items, format]
   );
 
-  const leads = items.filter(
-    (i) => i.category && i.included && (i.isLead || !i.dupGroup)
-  );
+  const leads = reportLeads(items);
   const missing = leads.filter((i) => !i.reporter || !i.publishedAt).length;
+  const negative = leads.filter((i) => i.sentiment === "negative").length;
+  const important = leads.filter((i) => i.importance === "high").length;
   const skipReported = client.rules.some(
     (r) => r.id === "skip-reported" && r.value === true
   );
@@ -135,6 +157,24 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
           >
             {missing}건
           </dd>
+          <dt className="text-muted">부정 기사</dt>
+          <dd
+            className={cn(
+              "text-right font-mono text-muted tabular-nums",
+              negative > 0 && "text-error"
+            )}
+          >
+            {negative}건
+          </dd>
+          <dt className="text-muted">중요 기사</dt>
+          <dd
+            className={cn(
+              "text-right font-mono text-muted tabular-nums",
+              important > 0 && "text-warning"
+            )}
+          >
+            {important}건
+          </dd>
         </dl>
         <Button onClick={copy} disabled={!leads.length}>
           <Copy /> 리포트 복사
@@ -171,6 +211,17 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
               </Button>
             </>
           )}
+        </div>
+        <div className="border-t border-hairline pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={!leads.length}
+            onClick={() => downloadCsv(client, run, items)}
+          >
+            <FileSpreadsheet /> 엑셀(CSV)로 받기
+          </Button>
         </div>
       </aside>
     </div>

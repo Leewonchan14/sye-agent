@@ -3,6 +3,7 @@
 import { ExternalLink, Newspaper, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { SentimentPill } from "@/components/monitor/tone-badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
@@ -63,6 +64,7 @@ const ArticleRow = ({ article }: { article: MonitorIssueArticleView }) => (
               브랜드 언급
             </span>
           )}
+          <SentimentPill sentiment={article.sentiment} hideNeutral />
         </span>
       </span>
       <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-soft" />
@@ -70,35 +72,48 @@ const ArticleRow = ({ article }: { article: MonitorIssueArticleView }) => (
   </li>
 );
 
+type ArticleFilter = "all" | "brand" | "negative";
+
+const ARTICLE_FILTERS: {
+  id: ArticleFilter;
+  label: string;
+  match: (a: MonitorIssueArticleView) => boolean;
+}[] = [
+  { id: "all", label: "전체", match: () => true },
+  { id: "brand", label: "브랜드 언급", match: (a) => a.brandMention },
+  { id: "negative", label: "부정", match: (a) => a.sentiment === "negative" },
+];
+
 const ArticleList = ({ articles }: { articles: MonitorIssueArticleView[] }) => {
   const [visible, setVisible] = useState(PAGE_SIZE);
-  const [brandOnly, setBrandOnly] = useState(false);
-  const brandCount = articles.filter((a) => a.brandMention).length;
-  const shown = brandOnly ? articles.filter((a) => a.brandMention) : articles;
+  const [filter, setFilter] = useState<ArticleFilter>("all");
+  const filters = ARTICLE_FILTERS.map((f) => ({
+    ...f,
+    count: articles.filter(f.match).length,
+  })).filter((f) => f.id === "all" || f.count > 0);
+  const active = filters.find((f) => f.id === filter) ?? filters[0];
+  const shown = articles.filter(active.match);
   const rest = shown.length - visible;
 
   return (
     <div className="flex flex-col gap-1">
-      {brandCount > 0 && (
-        <div className="flex gap-1.5 pb-1">
-          {[
-            { label: `전체 ${articles.length}`, value: false },
-            { label: `브랜드 언급 ${brandCount}`, value: true },
-          ].map((f) => (
+      {filters.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 pb-1">
+          {filters.map((f) => (
             <button
-              key={f.label}
+              key={f.id}
               type="button"
-              aria-pressed={brandOnly === f.value}
+              aria-pressed={active.id === f.id}
               onClick={() => {
-                setBrandOnly(f.value);
+                setFilter(f.id);
                 setVisible(PAGE_SIZE);
               }}
               className={cn(
                 "rounded-full border border-hairline px-2.5 py-1 text-[12px] text-body",
-                brandOnly === f.value && "border-primary bg-primary/10 text-primary"
+                active.id === f.id && "border-primary bg-primary/10 text-primary"
               )}
             >
-              {f.label}
+              {f.label} {f.count}
             </button>
           ))}
         </div>
