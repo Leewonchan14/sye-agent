@@ -15,7 +15,7 @@ import {
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs, kst } from "@/lib/kst";
-import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
+import { monitorClientPresets } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
 import {
   DAILY_COLLECT_REQUEST,
@@ -208,7 +208,7 @@ export const createPresetClients = async () => {
   const db = getDb();
   await db
     .insert(clientsT)
-    .values(MONITOR_CLIENT_PRESETS.map((p, i) => ({ ...p, sortOrder: i })))
+    .values(monitorClientPresets().map((p, i) => ({ ...p, sortOrder: i })))
     .onConflictDoNothing({ target: clientsT.slug });
 };
 

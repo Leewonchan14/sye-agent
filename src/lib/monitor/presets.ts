@@ -1,8 +1,10 @@
+import { reportClosing, reportGreeting } from "@/lib/monitor/sender";
 import type { MonitorCategory, MonitorRule } from "@/lib/monitor/types";
 
 /**
  * 처음 대시보드를 열었을 때 만들어 줄 고객사 기본값.
  * 규칙은 실제 채팅에서 "앞으로는~"으로 남겼던 지시를 옮겨 왔다.
+ * 인사·맺음말의 보내는 사람은 환경 변수에서 읽으므로 만들 때마다 계산한다.
  */
 export interface MonitorClientPreset {
   slug: string;
@@ -14,7 +16,7 @@ export interface MonitorClientPreset {
   closing: string;
 }
 
-export const MONITOR_CLIENT_PRESETS: MonitorClientPreset[] = [
+export const monitorClientPresets = (): MonitorClientPreset[] => [
   {
     slug: "hktb",
     name: "홍콩관광청",
@@ -85,9 +87,8 @@ export const MONITOR_CLIENT_PRESETS: MonitorClientPreset[] = [
       },
     ],
     reportTitle: "[HKTB] Daily News Monitoring_{date}",
-    greeting:
-      "담당 매니저님, 안녕하세요. 웰컴 성예은입니다.\n{date} 홍콩관광청 데일리 뉴스 모니터링 결과 공유드립니다.",
-    closing: "감사합니다.\n성예은 드림",
+    greeting: `${reportGreeting("담당 매니저님")}\n{date} 홍콩관광청 데일리 뉴스 모니터링 결과 공유드립니다.`,
+    closing: reportClosing(),
   },
   {
     slug: "panasonic",
@@ -128,8 +129,7 @@ export const MONITOR_CLIENT_PRESETS: MonitorClientPreset[] = [
       },
     ],
     reportTitle: "[Panasonic] Daily Monitoring_{date}",
-    greeting:
-      "담당 매니저님, 안녕하세요. 웰컴 성예은입니다.\n{date} 파나소닉코리아 모니터링 결과 공유드립니다.",
-    closing: "감사합니다.\n성예은 드림",
+    greeting: `${reportGreeting("담당 매니저님")}\n{date} 파나소닉코리아 모니터링 결과 공유드립니다.`,
+    closing: reportClosing(),
   },
 ];

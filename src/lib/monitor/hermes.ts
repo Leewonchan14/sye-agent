@@ -15,6 +15,7 @@ import {
 } from "@/lib/hermes/config";
 import { getHermesRunStatus, startHermesRun } from "@/lib/hermes/run-client";
 import { kst } from "@/lib/kst";
+import { reportGreeting } from "@/lib/monitor/sender";
 import {
   MAX_ISSUE_ARTICLES,
   type MonitorCategory,
@@ -179,7 +180,7 @@ export const startIssueRecount = async (options: {
       : "집계 구간: 최초 보도부터 지금까지 (네이버 뉴스 기준, KST)",
     ...(options.isReport
       ? [
-          `정기 보고용 집계야. 고객사 담당자에게 보낼 보고 초안(reportText)도 써줘. 인사는 '${options.reportRecipient || "담당 매니저님"}, 안녕하세요. 웰컴 성예은입니다.'로 시작해.`,
+          `정기 보고용 집계야. 고객사 담당자에게 보낼 보고 초안(reportText)도 써줘. 인사는 '${reportGreeting(options.reportRecipient || "담당 매니저님")}'로 시작해.`,
           ...(options.reportTemplate
             ? [
                 `보고 초안은 아래 서식을 그대로 따라 쓰고, 빈칸과 숫자만 이번 집계로 채워:\n${options.reportTemplate}`,
