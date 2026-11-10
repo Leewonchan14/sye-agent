@@ -176,6 +176,23 @@ export const ledgerTrips = pgTable(
   (t) => ({ nameUniq: uniqueIndex("ledger_trips_name_uniq").on(t.name) })
 );
 
+/** 매달 같은 날 자동으로 내역을 만드는 규칙. lastDate까지 생성을 마쳤다는 뜻이다. */
+export const ledgerRecurring = pgTable("ledger_recurring", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull().default("expense"), // expense | income
+  amount: integer("amount").notNull(),
+  categoryId: integer("category_id").references(() => ledgerCategories.id, {
+    onDelete: "set null",
+  }),
+  memo: text("memo").notNull().default(""),
+  dayOfMonth: integer("day_of_month").notNull(),
+  startDate: text("start_date").notNull(), // YYYY-MM-DD (KST)
+  endDate: text("end_date"),
+  lastDate: text("last_date"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const ledgerEntries = pgTable(
   "ledger_entries",
   {
@@ -193,6 +210,9 @@ export const ledgerEntries = pgTable(
     tripId: integer("trip_id").references(() => ledgerTrips.id, {
       onDelete: "set null",
     }),
+    recurringId: integer("recurring_id").references(() => ledgerRecurring.id, {
+      onDelete: "set null",
+    }),
     memo: text("memo").notNull().default(""),
     tags: text("tags").notNull().default(""),
     member: text("member").notNull().default("wonchan"), // wonchan | yeeun
@@ -204,6 +224,11 @@ export const ledgerEntries = pgTable(
     dateIdx: index("ledger_entries_date_idx").on(t.entryDate),
     memberIdx: index("ledger_entries_member_idx").on(t.member),
     tripIdx: index("ledger_entries_trip_idx").on(t.tripId),
+    // 반복 규칙은 같은 날짜에 한 번만 내역을 만든다.
+    recurringDateUniq: uniqueIndex("ledger_entries_recurring_date_uniq").on(
+      t.recurringId,
+      t.entryDate
+    ),
   })
 );
 

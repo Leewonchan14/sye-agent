@@ -45,6 +45,19 @@ export type LedgerTripView = {
   expense: number;
 };
 
+export type LedgerRecurringView = {
+  id: number;
+  kind: LedgerEntryKind;
+  amount: number;
+  categoryId: number | null;
+  memo: string;
+  dayOfMonth: number;
+  startDate: string;
+  endDate: string | null;
+  lastDate: string | null;
+  active: boolean;
+};
+
 export type LedgerAccountView = {
   openingBalance: number;
   /** 시작 잔액 + 오늘까지의 입금 - 지출 */
@@ -70,6 +83,7 @@ export type LedgerMonthPayload = {
   }[];
   entries: LedgerEntryView[];
   trips: LedgerTripView[];
+  recurring: LedgerRecurringView[];
   /** 이 달 이전 3개월 중 지출이 있던 달의 평균. 예산을 정할 때 참고한다. */
   expenseReference: {
     months: number;
@@ -204,19 +218,19 @@ const DEFAULT_INCOME_CATEGORIES = [
   ["기타", "➕"],
 ] as const;
 
-const normalizeId = (value: unknown, label: string): number => {
+export const normalizeId = (value: unknown, label: string): number => {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new LedgerError(`${label}가 올바르지 않아요.`);
   }
   return value;
 };
 
-const normalizeOptionalId = (value: unknown, label: string): number | null => {
+export const normalizeOptionalId = (value: unknown, label: string): number | null => {
   if (value == null) return null;
   return normalizeId(value, label);
 };
 
-const normalizeEntryKind = (value: unknown): LedgerEntryKind => {
+export const normalizeEntryKind = (value: unknown): LedgerEntryKind => {
   if (value !== "expense" && value !== "income") {
     throw new LedgerError("입금/지출 구분을 확인해 주세요.");
   }
@@ -246,7 +260,7 @@ const normalizeCategoryColor = (value: unknown): LedgerCategoryColorKey => {
   return value;
 };
 
-const normalizeMemo = (value: unknown): string => {
+export const normalizeMemo = (value: unknown): string => {
   if (value == null) return "";
   if (typeof value !== "string") throw new LedgerError("내용을 확인해 주세요.");
   const memo = value.trim();
@@ -262,7 +276,7 @@ const normalizeTags = (value: unknown): string => {
   return tags;
 };
 
-const normalizeAmount = (value: unknown): number => {
+export const normalizeAmount = (value: unknown): number => {
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||
@@ -305,7 +319,7 @@ const normalizeMonth = (value: unknown): string => {
   return value;
 };
 
-const normalizeDate = (value: unknown): string => {
+export const normalizeDate = (value: unknown): string => {
   if (
     typeof value !== "string" ||
     !DATE_RE.test(value) ||
@@ -332,7 +346,7 @@ const normalizeNote = (value: unknown): string => {
   return value.trim();
 };
 
-const toEntryKind = (kind: string): LedgerEntryKind =>
+export const toEntryKind = (kind: string): LedgerEntryKind =>
   kind === "income" ? "income" : "expense";
 
 /** neon-http와 node-postgres 양쪽에서 쓰는 단일 SQL 실행. 한 문장이라 원자적이다. */
@@ -341,7 +355,7 @@ const executeStatement = async (statement: SQL): Promise<void> => {
   await db.execute(statement);
 };
 
-const activeEntry = isNull(schema.ledgerEntries.deletedAt);
+export const activeEntry = isNull(schema.ledgerEntries.deletedAt);
 
 type EntryRow = typeof schema.ledgerEntries.$inferSelect;
 type CategoryRef = { name: string; emoji: string; icon: string; color: string };
@@ -397,7 +411,7 @@ export const compareLedgerEntries = (
   (b.entryTime ?? "").localeCompare(a.entryTime ?? "") ||
   b.id - a.id;
 
-const logEntryHistory = async (
+export const logEntryHistory = async (
   entryId: number,
   action: LedgerHistoryItem["action"],
   source: LedgerEntrySource,
@@ -567,6 +581,7 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     usageRows,
     account,
     referenceRows,
+    recurringRows,
   ] = await Promise.all([
     getCategoryRows(),
     db
@@ -613,6 +628,10 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
         )
       )
       .groupBy(referenceMonth, schema.ledgerEntries.categoryId),
+    db
+      .select()
+      .from(schema.ledgerRecurring)
+      .orderBy(asc(schema.ledgerRecurring.dayOfMonth), asc(schema.ledgerRecurring.id)),
   ]);
 
   const [tripRows, tripUsageRows] = await Promise.all([
@@ -729,6 +748,18 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
     categories,
     entries,
     trips,
+    recurring: recurringRows.map((rule) => ({
+      id: rule.id,
+      kind: toEntryKind(rule.kind),
+      amount: rule.amount,
+      categoryId: rule.categoryId,
+      memo: rule.memo,
+      dayOfMonth: rule.dayOfMonth,
+      startDate: rule.startDate,
+      endDate: rule.endDate,
+      lastDate: rule.lastDate,
+      active: rule.active,
+    })),
     expenseReference,
     budget: {
       totalBudget,
@@ -763,7 +794,10 @@ const normalizeEntryFields = (input: LedgerEntryInput) => ({
   tags: normalizeTags(input.tags),
 });
 
-const assertCategoryKind = async (categoryId: number | null, kind: LedgerEntryKind) => {
+export const assertCategoryKind = async (
+  categoryId: number | null,
+  kind: LedgerEntryKind
+) => {
   if (categoryId == null) return;
   const [category] = await getDb()
     .select({ kind: schema.ledgerCategories.kind })
@@ -777,7 +811,7 @@ const assertCategoryKind = async (categoryId: number | null, kind: LedgerEntryKi
 };
 
 /** 새 기록을 모임통장에 묶기 위한 자산 id. 없으면 만든다. */
-const ensureJointAssetId = async (): Promise<number> => {
+export const ensureJointAssetId = async (): Promise<number> => {
   const db = getDb();
   await db
     .insert(schema.ledgerAssets)
@@ -994,7 +1028,7 @@ export const restoreLedgerEntry = async (id: number) => {
   return entry;
 };
 
-const getTripRows = () =>
+export const getTripRows = () =>
   getDb()
     .select()
     .from(schema.ledgerTrips)
@@ -1006,7 +1040,7 @@ const getTripMap = async () =>
 type TripRow = typeof schema.ledgerTrips.$inferSelect;
 
 /** undefined면 지출 날짜가 정확히 한 여행 기간에 들 때만 그 여행으로 묶는다. */
-const resolveTripId = (
+export const resolveTripId = (
   value: unknown,
   entryDate: string,
   kind: LedgerEntryKind,

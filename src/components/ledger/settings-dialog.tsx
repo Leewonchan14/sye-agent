@@ -42,6 +42,7 @@ import {
   type LedgerCategoryColorKey,
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "budget", label: "예산" },
@@ -206,8 +207,11 @@ const TripForm = ({
   pending,
   onSubmit,
   onCancel,
+  bare = false,
 }: {
   initial?: LedgerTrip;
+  /** 이미 카드 안에 있으면 폼 테두리를 생략한다. */
+  bare?: boolean;
   submitLabel: string;
   pending: boolean;
   onSubmit: (input: { name: string; startDate: string; endDate: string }) => void;
@@ -219,7 +223,7 @@ const TripForm = ({
   const ready = name.trim() && startDate && endDate;
 
   return (
-    <div className="space-y-2 rounded-xl border border-hairline p-2.5">
+    <div className={cn("space-y-2", !bare && "rounded-xl border border-hairline p-2.5")}>
       <Input
         aria-label="여행 이름"
         value={name}
@@ -348,7 +352,14 @@ const TripCandidates = ({ trip, onDone }: { trip: LedgerTrip; onDone: () => void
   );
 };
 
-const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
+/** 설정 창(dialog)에서는 한 줄로 쌓고, 메인 탭(page)에서는 목록과 추가 폼을 카드 두 개로 나눈다. */
+export const TripsTab = ({
+  ledger,
+  variant = "dialog",
+}: {
+  ledger: LedgerMonthPayload;
+  variant?: "dialog" | "page";
+}) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -395,104 +406,123 @@ const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  return (
-    <div className="space-y-3">
-      <ul className="divide-y divide-hairline-soft">
-        {ledger.trips.map((trip) => (
-          <li key={trip.id} className="py-2">
-            {editingId === trip.id ? (
-              <TripForm
-                initial={trip}
-                submitLabel="저장"
-                pending={update.isPending}
-                onSubmit={(input) => update.mutate({ id: trip.id, ...input })}
-                onCancel={() => setEditingId(null)}
-              />
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium text-ink">
-                      {trip.name}
-                    </p>
-                    <p className="text-[11px] text-muted tabular-nums">
-                      {trip.startDate.replaceAll("-", ".")} ~{" "}
-                      {trip.endDate.slice(5).replace("-", ".")} · {trip.entryCount}건 ·{" "}
-                      {formatWon(trip.expense)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`${trip.name} 수정`}
-                    onClick={() => setEditingId(trip.id)}
-                  >
-                    <Pencil />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`${trip.name} 삭제`}
-                    onClick={() => setDeletingId(trip.id)}
-                  >
-                    <Trash2 />
-                  </Button>
+  const tripList = (
+    <ul className="divide-y divide-hairline-soft">
+      {ledger.trips.map((trip) => (
+        <li key={trip.id} className="py-2">
+          {editingId === trip.id ? (
+            <TripForm
+              initial={trip}
+              submitLabel="저장"
+              pending={update.isPending}
+              onSubmit={(input) => update.mutate({ id: trip.id, ...input })}
+              onCancel={() => setEditingId(null)}
+            />
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-ink">{trip.name}</p>
+                  <p className="text-[11px] text-muted tabular-nums">
+                    {trip.startDate.replaceAll("-", ".")} ~{" "}
+                    {trip.endDate.slice(5).replace("-", ".")} · {trip.entryCount}건 ·{" "}
+                    {formatWon(trip.expense)}
+                  </p>
                 </div>
-
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  className="mt-1"
-                  onClick={() => setLinkingId(linkingId === trip.id ? null : trip.id)}
+                  size="icon-sm"
+                  aria-label={`${trip.name} 수정`}
+                  onClick={() => setEditingId(trip.id)}
                 >
-                  기간 내역 연결
+                  <Pencil />
                 </Button>
-                {linkingId === trip.id && (
-                  <TripCandidates trip={trip} onDone={() => setLinkingId(null)} />
-                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`${trip.name} 삭제`}
+                  onClick={() => setDeletingId(trip.id)}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
 
-                {deletingId === trip.id && (
-                  <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline p-2.5 text-[12px] text-body">
-                    <span className="flex-1">여행만 지워지고 내역은 남아요.</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeletingId(null)}
-                    >
-                      취소
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      disabled={remove.isPending}
-                      onClick={() => remove.mutate(trip.id)}
-                    >
-                      여행 삭제
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </li>
-        ))}
-        {!ledger.trips.length && (
-          <li className="py-4 text-center text-[12px] text-muted">
-            등록된 여행이 없어요
-          </li>
-        )}
-      </ul>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-1"
+                onClick={() => setLinkingId(linkingId === trip.id ? null : trip.id)}
+              >
+                기간 내역 연결
+              </Button>
+              {linkingId === trip.id && (
+                <TripCandidates trip={trip} onDone={() => setLinkingId(null)} />
+              )}
 
-      <TripForm
-        key={formKey}
-        submitLabel="여행 추가"
-        pending={create.isPending}
-        onSubmit={(input) => create.mutate(input)}
-      />
+              {deletingId === trip.id && (
+                <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline p-2.5 text-[12px] text-body">
+                  <span className="flex-1">여행만 지워지고 내역은 남아요.</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeletingId(null)}
+                  >
+                    취소
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={remove.isPending}
+                    onClick={() => remove.mutate(trip.id)}
+                  >
+                    여행 삭제
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </li>
+      ))}
+      {!ledger.trips.length && (
+        <li className="py-4 text-center text-[12px] text-muted">등록된 여행이 없어요</li>
+      )}
+    </ul>
+  );
+
+  const tripForm = (
+    <TripForm
+      key={formKey}
+      submitLabel="여행 추가"
+      bare={variant === "page"}
+      pending={create.isPending}
+      onSubmit={(input) => create.mutate(input)}
+    />
+  );
+
+  if (variant === "page") {
+    return (
+      <div className="grid items-start gap-3 md:grid-cols-2">
+        <section className="rounded-2xl border border-hairline bg-surface p-4">
+          <h3 className="text-[12px] font-medium text-muted">여행</h3>
+          {tripList}
+        </section>
+        <section className="rounded-2xl border border-hairline bg-surface p-4">
+          <h3 className="mb-2 text-[12px] font-medium text-muted">여행 추가</h3>
+          {tripForm}
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {tripList}
+      {tripForm}
     </div>
   );
 };
