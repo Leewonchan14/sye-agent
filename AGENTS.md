@@ -65,7 +65,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Drizzle ORM
 
 - 데이터베이스 스키마 변경이 필요하면 **`src/lib/db/schema.ts`만 수정**하세요.
-- `drizzle/` 폴더(마이그레이션 파일), `drizzle.config.ts`, `src/lib/db/`의 기타 파일(migration, db.ts 등)은 **직접 수정하지 마세요.**
+- `drizzle/` 폴더(마이그레이션 파일), `drizzle.config.ts`, `src/lib/db/`의 기타 파일(migration, db.ts 등)은 **직접 수정하지 마세요.** (아래 `IF NOT EXISTS` 예외만 허용)
+- 예외: `db:generate`로 만든 마이그레이션 SQL에는 다시 실행해도 안전하도록 **`IF NOT EXISTS`를 붙여도 됩니다.** drizzle-kit에는 이걸 자동으로 붙이는 옵션이 없습니다.
+  - `ALTER TABLE ... ADD COLUMN` → `ADD COLUMN IF NOT EXISTS`
+  - `CREATE TABLE` → `CREATE TABLE IF NOT EXISTS`
+  - `CREATE INDEX` / `CREATE UNIQUE INDEX` → `CREATE [UNIQUE] INDEX IF NOT EXISTS`
+  - 이 문구만 붙이고 컬럼 타입·기본값·제약 조건 등 SQL 내용과 `drizzle/meta/` 파일은 바꾸지 마세요.
+  - 아직 운영 DB에 적용되지 않은 마이그레이션 파일에만 붙이세요. 이미 적용된 파일은 고치지 마세요.
 - schema 변경 후에는 반드시 아래 명령어를 순서대로 실행하세요.
   1. `npm run db:generate` — `drizzle/`에 마이그레이션 파일 자동 생성
   2. `npm run db:migrate` — 변경사항을 데이터베이스에 적용
