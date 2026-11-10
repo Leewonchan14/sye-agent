@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -15,10 +15,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerEntryKind, LedgerMonthPayload } from "@/lib/db/ledger";
+import type { LedgerSuggestion } from "@/lib/db/ledger-suggestions";
 import { ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
-import { nowTimeKst, todayKst } from "@/lib/ledger/format";
+import { formatWon, nowTimeKst, todayKst } from "@/lib/ledger/format";
 
 interface Props {
   open: boolean;
@@ -32,6 +34,8 @@ const numberDisplay = (digits: string) =>
   digits ? Number(digits).toLocaleString("ko-KR") : "";
 
 const cleanDigits = (value: string) => value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+
+const MAX_SUGGESTION_CHIPS = 8;
 
 export const EntryDialog = ({
   open,
@@ -70,6 +74,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
   );
   const [categoryId, setCategoryId] = useState<number | null>(entry?.categoryId ?? null);
   const [memo, setMemo] = useState(entry?.memo ?? "");
+  const [note, setNote] = useState(entry?.note ?? "");
   const [tags, setTags] = useState(entry?.tags ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   // undefined면 아직 고르지 않은 상태라 날짜로 여행을 추천한다.
@@ -88,6 +93,48 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         : null;
 
   const categories = ledger.categories.filter((category) => category.kind === kind);
+
+  // 새 기록을 쓸 때만 자주 쓰는 내역을 칩으로 보여 준다.
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ledgerKeys.suggestions,
+    queryFn: async () =>
+      (
+        await ledgerRequest<{ suggestions: LedgerSuggestion[] }>(
+          token,
+          "/api/ledger/suggestions"
+        )
+      ).suggestions,
+    enabled: Boolean(token) && !entry,
+  });
+
+  const query = memo.trim().toLowerCase();
+  const suggestionChips = entry
+    ? []
+    : suggestions
+        .filter(
+          (item) =>
+            item.memo !== memo.trim() &&
+            (!query || item.memo.toLowerCase().includes(query))
+        )
+        .slice(0, MAX_SUGGESTION_CHIPS);
+
+  const applySuggestion = (item: LedgerSuggestion) => {
+    setKind(item.kind);
+    setMemo(item.memo);
+    setAmount(String(item.amount));
+    setCategoryId(item.categoryId);
+  };
+
+  /** 예전에 쓴 내용과 똑같이 입력하면 분류를 채운다. 직접 고른 분류는 덮지 않는다. */
+  const changeMemo = (value: string) => {
+    setMemo(value);
+    if (entry || categoryId != null) return;
+    const match = suggestions.find(
+      (item) => item.memo === value.trim() && item.kind === kind
+    );
+    if (match) setCategoryId(match.categoryId);
+  };
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ledgerKeys.all });
 
   const saveEntry = useMutation({
@@ -99,6 +146,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         amount: Number(amount),
         categoryId,
         memo: memo.trim(),
+        note: note.trim(),
         tags: tags.trim(),
         tripId: kind === "expense" ? selectedTripId : (entry?.tripId ?? null),
       };
@@ -321,9 +369,46 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
           <Input
             id="ledger-memo"
             value={memo}
-            onChange={(event) => setMemo(event.target.value)}
+            onChange={(event) => changeMemo(event.target.value)}
             placeholder="예: 성수동 카페"
             maxLength={200}
+            autoComplete="off"
+            className="mt-1"
+          />
+          {suggestionChips.length > 0 && (
+            <div
+              className="mt-1.5 flex flex-wrap gap-1"
+              role="group"
+              aria-label="자주 쓰는 내역"
+            >
+              {suggestionChips.map((item) => (
+                <button
+                  key={item.memo}
+                  type="button"
+                  onClick={() => applySuggestion(item)}
+                  className="rounded-md bg-canvas-soft px-2 py-1 text-[11px] text-body transition-colors hover:bg-canvas-card"
+                >
+                  {item.memo}{" "}
+                  <span className="text-muted tabular-nums">
+                    {formatWon(item.amount)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="text-[12px] font-medium text-muted" htmlFor="ledger-note">
+            메모
+          </label>
+          <Textarea
+            id="ledger-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="자세히 남기고 싶은 내용"
+            maxLength={2000}
+            rows={2}
             className="mt-1"
           />
         </div>

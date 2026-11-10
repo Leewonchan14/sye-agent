@@ -12,6 +12,7 @@ export const ledgerEntriesToCsv = (entries: LedgerEntryView[]): string =>
       금액: entry.amount,
       분류: entry.categoryName ?? "분류 없음",
       내용: entry.memo,
+      메모: entry.note,
       태그: entry.tags,
       여행: entry.tripName ?? "",
     })),

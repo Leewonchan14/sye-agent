@@ -1,8 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { ReceiptText } from "lucide-react";
+import { useState } from "react";
 
+import { ReceiptDialog } from "@/components/ledger/receipt/receipt-dialog";
 import { shortDate } from "@/components/ledger/trend-chart";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuthStore } from "@/lib/auth-store";
 import { ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
@@ -46,6 +50,7 @@ export const WeeklyRecapCard = () => {
     enabled: Boolean(token),
     staleTime: RECAP_STALE_MS,
   });
+  const [receiptOpen, setReceiptOpen] = useState(false);
 
   if (!recap || recap.expense === 0) return null;
 
@@ -81,6 +86,15 @@ export const WeeklyRecapCard = () => {
                 </p>
               </div>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2.5"
+              onClick={() => setReceiptOpen(true)}
+            >
+              <ReceiptText />
+              영수증 뽑기
+            </Button>
           </div>
 
           <div className="min-w-0">
@@ -117,6 +131,12 @@ export const WeeklyRecapCard = () => {
           </div>
         </CardContent>
       </Card>
+      <ReceiptDialog
+        recap={recap}
+        budgetLine={budgetLine || null}
+        open={receiptOpen}
+        onOpenChange={setReceiptOpen}
+      />
     </section>
   );
 };

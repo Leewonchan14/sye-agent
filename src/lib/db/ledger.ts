@@ -31,6 +31,7 @@ export type LedgerEntryView = {
   categoryIcon: LedgerCategoryIconKey | null;
   categoryColor: LedgerCategoryColorKey | null;
   memo: string;
+  note: string;
   tags: string;
   tripId: number | null;
   tripName: string | null;
@@ -121,6 +122,8 @@ export interface LedgerEntryInput {
   amount: number;
   categoryId?: number | null;
   memo?: string;
+  /** 생략하면 수정할 때 기존 메모를 그대로 둔다. */
+  note?: string;
   tags?: string;
   /** 생략하면 날짜로 여행을 찾고, null이면 여행에 넣지 않는다. */
   tripId?: number | null;
@@ -189,6 +192,7 @@ export class LedgerError extends Error {
 const MAX_AMOUNT = 1_000_000_000;
 const MAX_BALANCE = 2_000_000_000;
 const MAX_BULK_ENTRIES = 100;
+export const MAX_NOTE_LENGTH = 2000;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -266,6 +270,16 @@ export const normalizeMemo = (value: unknown): string => {
   const memo = value.trim();
   if (memo.length > 200) throw new LedgerError("내용은 200자 이하로 입력해 주세요.");
   return memo;
+};
+
+export const normalizeEntryNote = (value: unknown): string => {
+  if (value == null) return "";
+  if (typeof value !== "string") throw new LedgerError("메모를 확인해 주세요.");
+  const note = value.trim();
+  if (note.length > MAX_NOTE_LENGTH) {
+    throw new LedgerError(`메모는 ${MAX_NOTE_LENGTH}자 이하로 입력해 주세요.`);
+  }
+  return note;
 };
 
 const normalizeTags = (value: unknown): string => {
@@ -397,6 +411,7 @@ export const toLedgerEntryView = (
     categoryIcon: (category?.icon ?? null) as LedgerCategoryIconKey | null,
     categoryColor: (category?.color ?? null) as LedgerCategoryColorKey | null,
     memo: entry.memo,
+    note: entry.note,
     tripId: entry.tripId,
     tripName: entry.tripId == null ? null : (tripById.get(entry.tripId)?.name ?? null),
   };
@@ -839,9 +854,10 @@ export const createLedgerEntry = async (
     await getTripRows()
   );
   const assetId = await ensureJointAssetId();
+  const note = normalizeEntryNote(input.note);
   const [entry] = await getDb()
     .insert(schema.ledgerEntries)
-    .values({ ...values, assetId, member: "joint", tripId })
+    .values({ ...values, note, assetId, member: "joint", tripId })
     .returning();
   await logEntryHistory(entry.id, "create", source, null, entry);
   return entry;
@@ -985,10 +1001,13 @@ export const updateLedgerEntry = async (
             await getTripRows()
           ),
         };
+  // 메모를 보내지 않는 호출(에이전트 등)이 기존 메모를 지우지 않게 한다.
+  const notePatch =
+    input.note === undefined ? {} : { note: normalizeEntryNote(input.note) };
   const before = await findActiveEntry(entryId);
   const [entry] = await getDb()
     .update(schema.ledgerEntries)
-    .set({ ...values, ...tripPatch, updatedAt: new Date() })
+    .set({ ...values, ...notePatch, ...tripPatch, updatedAt: new Date() })
     .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
     .returning();
   if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");
@@ -1177,7 +1196,7 @@ export const listAllLedgerEntries = async (): Promise<LedgerEntryView[]> => {
     .sort(compareLedgerEntries);
 };
 
-/** 내용·태그·분류 이름으로 전 기간을 검색한다. */
+/** 내용·메모·태그·분류 이름으로 전 기간을 검색한다. */
 export const searchLedgerEntries = async (query: string, limit = 200) => {
   const q = query.trim();
   if (!q) return { entries: [] as LedgerEntryView[], income: 0, expense: 0, count: 0 };
@@ -1193,9 +1212,13 @@ export const searchLedgerEntries = async (query: string, limit = 200) => {
   const views = rows
     .map((row) => toLedgerEntryView(row, categoryById, tripById))
     .filter((entry) =>
-      [entry.memo, entry.tags, entry.categoryName ?? "", entry.tripName ?? ""].some(
-        (value) => value.toLowerCase().includes(lowered)
-      )
+      [
+        entry.memo,
+        entry.note,
+        entry.tags,
+        entry.categoryName ?? "",
+        entry.tripName ?? "",
+      ].some((value) => value.toLowerCase().includes(lowered))
     )
     .sort(compareLedgerEntries);
 
