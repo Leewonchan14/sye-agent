@@ -13,3 +13,14 @@ DATABASE_URL=$E2E_DATABASE_URL npx next start -p 3100 &
 
 E2E_BASE_URL=http://localhost:3100 npm run test:e2e
 ```
+
+데이트 장소 테스트(`date-spots.spec.ts`)는 테스트 안에서 가짜 Hermes(기본 포트 8972)를 띄운다.
+앱을 띄울 때 아래 값을 함께 넣는다.
+
+```bash
+HERMES_API_URL=http://127.0.0.1:8972 HERMES_API_KEY=fake \
+MONITOR_INGEST_KEY=e2e-ingest-key MONITOR_CALLBACK_ORIGIN=http://localhost:3100 \
+DATABASE_URL=$E2E_DATABASE_URL npx next start -p 3100 &
+
+MONITOR_INGEST_KEY=e2e-ingest-key E2E_BASE_URL=http://localhost:3100 npx playwright test e2e/date-spots.spec.ts
+```
