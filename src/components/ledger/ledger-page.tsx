@@ -463,17 +463,12 @@ export const LedgerPage = () => {
           </div>
         </header>
 
-        {/* 탭은 항상 같은 자리에 둔다. 월 이동이 숨는 탭에서도 탭이 움직이지 않게 한다. */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        {/* 탭은 항상 같은 자리에 두고, 월 이동은 그 아래 왼쪽에 둔다. */}
+        <div className="mt-5 flex flex-col items-start gap-2">
           <LedgerTabs tab={tab} onChange={setTab} />
 
           {!hidesMonthSummary && (
-            <div className="ml-auto flex items-center gap-1">
-              {month !== thisMonth && (
-                <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
-                  이번 달
-                </Button>
-              )}
+            <div className="-ml-2 flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -493,6 +488,11 @@ export const LedgerPage = () => {
               >
                 <ChevronRight />
               </Button>
+              {month !== thisMonth && (
+                <Button variant="ghost" size="sm" onClick={() => setMonth(thisMonth)}>
+                  이번 달
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -647,13 +647,23 @@ export const LedgerPage = () => {
                       </div>
                     )}
 
-                  {!deferredSearch && ledger.byCategory.length > 0 && (
+                  {!deferredSearch && topExpenses.length > 0 && (
                     <div className="grid items-start gap-3 md:grid-cols-2">
-                      <CategoryCard
-                        total={ledger.summary.expense}
-                        byCategory={ledger.byCategory}
-                        entries={ledger.entries}
-                      />
+                      {/* 내역 필터를 따른다: 분류를 고르면 그 분류의 사용처별 지출. */}
+                      {filterCategory ? (
+                        <CategoryCard
+                          key={filterCategory.id}
+                          entries={listEntries}
+                          groupBy="place"
+                          title={`${filterCategory.name} 사용처별 지출`}
+                        />
+                      ) : (
+                        <CategoryCard
+                          total={ledger.summary.expense}
+                          byCategory={ledger.byCategory}
+                          entries={ledger.entries}
+                        />
+                      )}
                       {topExpenses.length > 0 && (
                         <section
                           aria-label="큰 지출"
@@ -728,7 +738,7 @@ export const LedgerPage = () => {
 
               {tab === "recurring" && <RecurringTab ledger={ledger} />}
 
-              {tab === "trips" && <TripsTab ledger={ledger} variant="page" />}
+              {tab === "trips" && <TripsTab ledger={ledger} />}
 
               {tab === "stats" && (
                 <StatsView

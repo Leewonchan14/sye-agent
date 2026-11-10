@@ -50,6 +50,15 @@ const openSettingsTab = async (page: Page, name: string) => {
   return page.getByRole("dialog");
 };
 
+/** 여행 관리는 설정 창이 아니라 가계부의 여행 탭에 있다. */
+const openTripsTab = async (page: Page) => {
+  await page
+    .getByRole("tablist", { name: "가계부 보기" })
+    .getByRole("tab", { name: "여행" })
+    .click();
+  return page.getByRole("main");
+};
+
 test("모임통장 전용 입력: 기록자·결제수단 없이 저장하고 시각을 보여 준다", async ({
   page,
 }) => {
@@ -805,7 +814,7 @@ test("여행을 등록하고 기간 내역을 골라 연결한다", async ({ pag
   });
 
   await openLedger(page, token);
-  const dialog = await openSettingsTab(page, "여행");
+  const dialog = await openTripsTab(page);
   await dialog.getByRole("textbox", { name: "여행 이름" }).fill("춘천 여행");
   await dialog.getByLabel("여행 시작일").fill(today());
   await dialog.getByLabel("여행 종료일").fill(today());
@@ -964,7 +973,7 @@ test("여행을 지워도 내역과 분류는 남는다", async ({ page, request
   });
 
   await openLedger(page, token);
-  const dialog = await openSettingsTab(page, "여행");
+  const dialog = await openTripsTab(page);
   await dialog.getByRole("button", { name: "지울 여행 삭제" }).click();
   await dialog.getByRole("button", { name: "여행 삭제", exact: true }).click();
   await expect(dialog.getByText("등록된 여행이 없어요")).toBeVisible();

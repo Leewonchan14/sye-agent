@@ -31,6 +31,11 @@ import {
   shiftMonth,
   todayKst,
 } from "@/lib/ledger/format";
+import {
+  CATEGORY_COLOR_OPTIONS,
+  type LedgerCategoryColorKey,
+  type LedgerCategoryIconKey,
+} from "@/lib/ledger/icons";
 import { projectMonthExpense } from "@/lib/ledger/pace";
 import { cn } from "@/lib/utils";
 
@@ -318,9 +323,9 @@ const BreakdownList = ({
   <div>
     <p className="text-[11px] font-medium text-muted">{title}</p>
     <ul className="mt-1 space-y-1">
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <li
-          key={row.name}
+          key={`${row.name}-${index}`}
           className="flex items-baseline justify-between gap-2 text-[12px] tabular-nums"
         >
           <span className="min-w-0 truncate text-ink">{row.name}</span>
@@ -337,13 +342,33 @@ const BreakdownList = ({
 );
 
 /** 분류를 눌렀을 때 그 돈이 어디에서 나갔는지 보여 준다. */
+type CategoryGroupBy = "category" | "place";
+
 const CategoryBreakdown = ({
   entries,
   total,
+  groupBy,
 }: {
   entries: LedgerEntryView[];
   total: number;
+  groupBy: CategoryGroupBy;
 }) => {
+  if (groupBy === "place") {
+    const recent = [...entries]
+      .sort((a, b) => b.entryDate.localeCompare(a.entryDate) || b.id - a.id)
+      .slice(0, 5)
+      .map((entry) => ({
+        name: shortDate(entry.entryDate),
+        amount: entry.amount,
+        count: 1,
+      }));
+    return (
+      <div className="mt-2 rounded-lg bg-canvas-soft p-2.5">
+        <BreakdownList title="최근 내역" rows={recent} total={total} />
+      </div>
+    );
+  }
+
   const places = sumBy(
     entries,
     (entry) => entry.memo.trim() || entry.categoryName || "지출"
@@ -356,49 +381,110 @@ const CategoryBreakdown = ({
   );
 };
 
-/** 통계 탭과 내역 탭이 함께 쓰는 분류별 지출 도넛. 분류를 누르면 사용처를 펼친다. */
+const SLICE_COLORS = CATEGORY_COLOR_OPTIONS.map((option) => option.key).filter(
+  (key) => key !== "neutral"
+);
+
+type CategoryGroup = {
+  key: string;
+  name: string;
+  icon: LedgerCategoryIconKey;
+  color: LedgerCategoryColorKey;
+  amount: number;
+  match: (entry: LedgerEntryView) => boolean;
+};
+
+const placeOf = (entry: LedgerEntryView) =>
+  entry.memo.trim() || entry.categoryName || "지출";
+
+/** 사용처(내용)로 묶는다. 색은 큰 순서대로 돌려 쓴다. */
+const groupByPlace = (expenses: LedgerEntryView[]): CategoryGroup[] => {
+  const groups = new Map<string, Omit<CategoryGroup, "color">>();
+  for (const entry of expenses) {
+    const key = placeOf(entry);
+    const group = groups.get(key) ?? {
+      key,
+      name: key,
+      icon: entry.categoryIcon ?? "tag",
+      amount: 0,
+      match: (other: LedgerEntryView) => placeOf(other) === key,
+    };
+    group.amount += entry.amount;
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.amount - a.amount)
+    .map((group, index) => ({
+      ...group,
+      color: SLICE_COLORS[index % SLICE_COLORS.length],
+    }));
+};
+
+/**
+ * 통계 탭과 내역 탭이 함께 쓰는 지출 도넛. 기본은 분류별이고, groupBy="place"면
+ * 사용처별로 보여 준다. 항목을 누르면 그 안에서 어디에 썼는지 펼친다.
+ */
 export const CategoryCard = ({
-  total,
-  byCategory,
+  total: totalProp,
+  byCategory = [],
   entries,
+  groupBy = "category",
+  title = "분류별 지출",
   className,
 }: {
-  total: number;
-  byCategory: LedgerStats["byCategory"];
+  total?: number;
+  byCategory?: LedgerStats["byCategory"];
   entries: LedgerEntryView[];
+  groupBy?: CategoryGroupBy;
+  title?: string;
   className?: string;
 }) => {
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const top = byCategory.slice(0, 7);
-  const rest = byCategory.slice(7);
-  const slices = top.map((category) => ({
-    key: category.categoryId == null ? "none" : String(category.categoryId),
-    name: category.name,
-    icon: category.icon,
-    colorKey: category.color,
-    amount: category.amount,
-    pct: category.pct,
-    color: CATEGORY_COLOR_HEX(category.color),
-    categoryIds: [category.categoryId],
+  const expenses = entries.filter((entry) => entry.kind === "expense");
+  const groups: CategoryGroup[] =
+    groupBy === "category"
+      ? byCategory.map((category) => ({
+          key: category.categoryId == null ? "none" : String(category.categoryId),
+          name: category.name,
+          icon: category.icon,
+          color: category.color,
+          amount: category.amount,
+          match: (entry: LedgerEntryView) => entry.categoryId === category.categoryId,
+        }))
+      : groupByPlace(expenses);
+  const total = totalProp ?? groups.reduce((sum, group) => sum + group.amount, 0);
+  const pctOf = (amount: number) =>
+    total === 0 ? 0 : Math.round((amount / total) * 100);
+
+  const top = groups.slice(0, 7);
+  const rest = groups.slice(7);
+  const slices = top.map((group) => ({
+    key: group.key,
+    name: group.name,
+    icon: group.icon,
+    colorKey: group.color,
+    amount: group.amount,
+    pct: pctOf(group.amount),
+    color: CATEGORY_COLOR_HEX(group.color),
+    match: group.match,
   }));
 
   if (rest.length) {
-    const amount = rest.reduce((sum, category) => sum + category.amount, 0);
+    const amount = rest.reduce((sum, group) => sum + group.amount, 0);
     slices.push({
       key: "etc",
       name: "기타",
       icon: "tag",
       colorKey: "neutral",
       amount,
-      pct: total === 0 ? 0 : Math.round((amount / total) * 100),
+      pct: pctOf(amount),
       color: CATEGORY_COLOR_HEX("neutral"),
-      categoryIds: rest.map((category) => category.categoryId),
+      match: (entry) => rest.some((group) => group.match(entry)),
     });
   }
 
-  const expenses = entries.filter((entry) => entry.kind === "expense");
-  const entriesOf = (categoryIds: (number | null)[]) =>
-    expenses.filter((entry) => categoryIds.includes(entry.categoryId));
+  const entriesOf = (match: (entry: LedgerEntryView) => boolean) =>
+    expenses.filter(match);
 
   const radius = 70;
   const circumference = 2 * Math.PI * radius;
@@ -416,7 +502,7 @@ export const CategoryCard = ({
   return (
     <StatCard className={className}>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-muted">분류별 지출</p>
+        <p className="text-[12px] font-medium text-muted">{title}</p>
         {slices.length > 0 && (
           <span className="text-[11px] text-muted">눌러서 자세히</span>
         )}
@@ -519,7 +605,8 @@ export const CategoryCard = ({
                 </button>
                 {openKey === slice.key && (
                   <CategoryBreakdown
-                    entries={entriesOf(slice.categoryIds)}
+                    entries={entriesOf(slice.match)}
+                    groupBy={slice.key === "etc" ? "category" : groupBy}
                     total={slice.amount}
                   />
                 )}
@@ -1105,9 +1192,9 @@ export const StatsView = ({
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between md:col-span-2">
+      <div className="flex flex-col gap-2 md:col-span-2">
         <p className="text-[12px] font-medium text-muted">기간별 리포트</p>
-        <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
+        <div className="flex w-full flex-col items-start gap-1.5">
           <div
             role="group"
             aria-label="리포트 기간"
@@ -1162,7 +1249,7 @@ export const StatsView = ({
           )}
 
           {range === "month" && (
-            <div className="flex items-center gap-1">
+            <div className="-ml-2 flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -1247,7 +1334,7 @@ export const StatsView = ({
       {isTripReport && !activeTrip ? (
         <StatCard className="md:col-span-2">
           <p className="py-8 text-center text-[12px] text-muted">
-            등록된 여행이 없어요. 예산·설정의 여행 탭에서 추가해 주세요.
+            등록된 여행이 없어요. 여행 탭에서 추가해 주세요.
           </p>
         </StatCard>
       ) : statsQuery.isPending ? (

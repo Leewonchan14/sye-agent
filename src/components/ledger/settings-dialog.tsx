@@ -48,7 +48,6 @@ const TABS = [
   { id: "budget", label: "예산" },
   { id: "categories", label: "분류" },
   { id: "account", label: "통장" },
-  { id: "trips", label: "여행" },
   { id: "data", label: "기록" },
 ] as const;
 
@@ -352,14 +351,8 @@ const TripCandidates = ({ trip, onDone }: { trip: LedgerTrip; onDone: () => void
   );
 };
 
-/** 설정 창(dialog)에서는 한 줄로 쌓고, 메인 탭(page)에서는 목록과 추가 폼을 카드 두 개로 나눈다. */
-export const TripsTab = ({
-  ledger,
-  variant = "dialog",
-}: {
-  ledger: LedgerMonthPayload;
-  variant?: "dialog" | "page";
-}) => {
+/** 여행 탭: 여행 목록 카드와 여행 추가 카드. */
+export const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -498,31 +491,22 @@ export const TripsTab = ({
     <TripForm
       key={formKey}
       submitLabel="여행 추가"
-      bare={variant === "page"}
+      bare
       pending={create.isPending}
       onSubmit={(input) => create.mutate(input)}
     />
   );
 
-  if (variant === "page") {
-    return (
-      <div className="grid items-start gap-3 md:grid-cols-2">
-        <section className="rounded-2xl border border-hairline bg-surface p-4">
-          <h3 className="text-[12px] font-medium text-muted">여행</h3>
-          {tripList}
-        </section>
-        <section className="rounded-2xl border border-hairline bg-surface p-4">
-          <h3 className="mb-2 text-[12px] font-medium text-muted">여행 추가</h3>
-          {tripForm}
-        </section>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {tripList}
-      {tripForm}
+    <div className="grid items-start gap-3 md:grid-cols-2">
+      <section className="rounded-2xl border border-hairline bg-surface p-4">
+        <h3 className="text-[12px] font-medium text-muted">여행</h3>
+        {tripList}
+      </section>
+      <section className="rounded-2xl border border-hairline bg-surface p-4">
+        <h3 className="mb-2 text-[12px] font-medium text-muted">여행 추가</h3>
+        {tripForm}
+      </section>
     </div>
   );
 };
@@ -1350,8 +1334,6 @@ const SettingsBody = ({
       )}
 
       {tab === "account" && <AccountTab ledger={ledger} />}
-
-      {tab === "trips" && <TripsTab ledger={ledger} />}
 
       {tab === "data" && <DataTab />}
 
