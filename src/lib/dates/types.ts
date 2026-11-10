@@ -103,6 +103,8 @@ export interface DateSpotView {
   priceHint: string | null;
   tags: string[];
   reaction: DateReaction | null;
+  /** 게시물 대표 사진(인스타그램 CDN). 못 읽었으면 null */
+  photoUrl: string | null;
 }
 
 export interface DateDigestView {

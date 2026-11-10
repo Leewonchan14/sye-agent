@@ -2,11 +2,13 @@ import { createServer, type Server } from "node:http";
 
 import { expect, type Page, test } from "@playwright/test";
 
+import { parseEmbedPhoto, photoExpiresAt } from "../src/lib/dates/photo";
 import { login, pool } from "./helpers";
 
 /**
  * 데이트 장소 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
  * 아래 가짜 Hermes가 프롬프트에서 콜백 주소·토큰을 읽어 하치와레처럼 결과를 보낸다.
+ * `INSTAGRAM_EMBED_ORIGIN`도 같은 주소로 두면 인스타그램 임베드·사진 서버 역할까지 한다.
  */
 const FAKE_HERMES_PORT = Number(process.env.E2E_FAKE_HERMES_PORT ?? 8972);
 const ingestKey = process.env.MONITOR_INGEST_KEY ?? "";
@@ -20,6 +22,23 @@ const runs = new Map<string, FakeRun>();
 let nextSpots: (call: number) => unknown[] = () => [];
 let calls = 0;
 let server: Server;
+
+/** 테스트 시각 기준 3일 뒤 만료되는 CDN 주소처럼 `oe`를 붙인다. */
+const futureOe = () =>
+  Math.floor(Date.now() / 1000 + 3 * 86400)
+    .toString(16)
+    .toUpperCase();
+const photoBase = () => `http://127.0.0.1:${FAKE_HERMES_PORT}/img`;
+/** 1×1 PNG */
+const PIXEL = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+const embedHtml = (code: string) => {
+  const src = (w: number) =>
+    `${photoBase()}/${code}-${w}.png?stp=dst&amp;oe=${futureOe()}`;
+  return `<html><body><div class="Embed"><img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;seongsu_date" src="${src(1080)}" srcset="${src(1080)} 1080w,${src(640)} 640w,${src(320)} 320w" /></div></body></html>`;
+};
 
 const spot = (code: string, name: string, extra: Record<string, unknown> = {}) => ({
   name,
@@ -69,6 +88,19 @@ const startFakeHermes = () =>
         }, 500);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ run_id: id }));
+        return;
+      }
+      const embedMatch = path.match(/^\/p\/([A-Za-z0-9_-]+)\/embed\/captioned\/$/);
+      if (req.method === "GET" && embedMatch) {
+        // NOPIC으로 시작하는 게시물은 비공개·삭제된 것처럼 404
+        const missing = embedMatch[1].startsWith("NOPIC");
+        res.writeHead(missing ? 404 : 200, { "Content-Type": "text/html" });
+        res.end(missing ? "" : embedHtml(embedMatch[1]));
+        return;
+      }
+      if (req.method === "GET" && path.startsWith("/img/")) {
+        res.writeHead(200, { "Content-Type": "image/png" });
+        res.end(PIXEL);
         return;
       }
       const statusMatch = path.match(/\/v1\/runs\/([^/?]+)$/);
@@ -130,7 +162,7 @@ test("지금 찾아 줘 → 하치와레가 보낸 장소가 카드로 보이고
   await expect(page.getByText("날이 추워서 실내 위주로 골랐어!")).toBeVisible();
 
   const popup = page.getByRole("article", { name: "연무장 팝업" });
-  await expect(popup.getByRole("link", { name: /인스타/ })).toHaveAttribute(
+  await expect(popup.getByRole("link", { name: /^인스타/ })).toHaveAttribute(
     "href",
     "https://www.instagram.com/p/BBB222/"
   );
@@ -259,4 +291,65 @@ test("하치와레 결과는 인스타그램 게시물만, 발급한 토큰으�
   const ok = await post({ "x-monitor-key": ingestKey }, [spot("EEE555", "진짜")]);
   expect(ok.status()).toBe(201);
   expect(await ok.json()).toMatchObject({ inserted: 1, skipped: 0 });
+});
+
+test("임베드 HTML에서 640px 사진과 만료 시각을 읽는다", () => {
+  const oe = "6AF8A6BD";
+  const url = (w: number) =>
+    `https://scontent.cdninstagram.com/v/${w}.jpg?stp=a&amp;oe=${oe}`;
+  const html = `<img class="EmbeddedMediaImage" alt="x" src="${url(1080)}" srcset="${url(3024)} 3024w,${url(1080)} 1080w,${url(640)} 640w,${url(480)} 480w" />`;
+  const picked = parseEmbedPhoto(html);
+  expect(picked).toBe(`https://scontent.cdninstagram.com/v/640.jpg?stp=a&oe=${oe}`);
+  expect(photoExpiresAt(picked!).toISOString()).toBe(
+    new Date(parseInt(oe, 16) * 1000).toISOString()
+  );
+  expect(parseEmbedPhoto("<html>로그인이 필요해요</html>")).toBeNull();
+});
+
+test("카드에 게시물 사진을 보여 주고, 만료가 가까우면 새 주소로 바꾼다", async ({
+  page,
+  request,
+}) => {
+  nextSpots = () => [spot("PIC111", "사진 있는 카페"), spot("NOPIC2", "사진 없는 공방")];
+  const token = await login(request);
+  await openDates(page, token);
+  await page.getByRole("button", { name: "지금 찾아 줘" }).click();
+
+  const withPhoto = page.getByRole("article", { name: "사진 있는 카페" });
+  const photo = withPhoto.getByRole("img", { name: "사진 있는 카페 사진" });
+  await expect(photo).toBeVisible({ timeout: 20_000 });
+  await expect(photo).toHaveAttribute("src", /\/img\/PIC111-640\.png\?stp=dst&oe=/);
+  await expect
+    .poll(() => photo.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(
+    withPhoto.getByRole("link", { name: "사진 있는 카페 인스타그램 게시물" })
+  ).toHaveAttribute("href", "https://www.instagram.com/p/PIC111/");
+  await expect(
+    page.getByRole("article", { name: "사진 없는 공방" }).getByRole("img")
+  ).toHaveCount(0);
+
+  const { rows } = await pool.query(
+    "select name, photo_url is not null as has_photo, photo_checked_at is not null as checked from date_spots order by id"
+  );
+  expect(rows).toEqual([
+    { name: "사진 있는 카페", has_photo: true, checked: true },
+    { name: "사진 없는 공방", has_photo: false, checked: true },
+  ]);
+
+  // 만료된 주소는 화면에 내보내지 않는다(방금 찾아봤으면 다시 읽지 않음).
+  await pool.query(
+    "update date_spots set photo_url = 'http://127.0.0.1:1/old.png', photo_expires_at = now() - interval '1 hour', photo_checked_at = now() where name = '사진 있는 카페'"
+  );
+  await page.reload();
+  await expect(page.getByRole("article", { name: "사진 있는 카페" })).toBeVisible();
+  await expect(photo).toHaveCount(0);
+
+  // 마지막 확인이 오래됐으면 화면을 불러올 때 새 주소를 읽어 온다.
+  await pool.query(
+    "update date_spots set photo_checked_at = now() - interval '2 hours' where name = '사진 있는 카페'"
+  );
+  await page.reload();
+  await expect(photo).toBeVisible();
+  await expect(photo).toHaveAttribute("src", /PIC111-640/);
 });

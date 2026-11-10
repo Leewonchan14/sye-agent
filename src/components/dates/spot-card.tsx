@@ -9,6 +9,7 @@ import {
   ThumbsDown,
   Wallet,
 } from "lucide-react";
+import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { DateReaction, DateSpotView } from "@/lib/dates/types";
@@ -42,6 +43,33 @@ const mapUrl = (spot: DateSpotView) =>
     [spot.name, spot.address?.split(" ").slice(0, 3).join(" ")].filter(Boolean).join(" ")
   )}`;
 
+/** 게시물 대표 사진. 인스타그램 CDN에서 바로 받고, 못 받으면 자리를 비우지 않고 감춘다. */
+const SpotPhoto = ({ spot }: { spot: DateSpotView }) => {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (!spot.photoUrl || failedUrl === spot.photoUrl) return null;
+  return (
+    <a
+      href={spot.instagramUrl}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`${spot.name} 인스타그램 게시물`}
+      className="block aspect-[4/3] overflow-hidden bg-canvas-card"
+    >
+      {/* 인스타그램 CDN 주소는 며칠 뒤 바뀌므로 Next 이미지 최적화를 거치지 않는다. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={spot.photoUrl}
+        alt={`${spot.name} 사진`}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrl(spot.photoUrl)}
+        className="size-full object-cover transition-transform duration-300 hover:scale-[1.02]"
+      />
+    </a>
+  );
+};
+
 export const SpotCard = ({
   spot,
   onReact,
@@ -54,107 +82,114 @@ export const SpotCard = ({
   <article
     aria-label={spot.name}
     className={cn(
-      "flex flex-col gap-3 rounded-2xl border border-hairline bg-surface p-4 transition-opacity",
+      "flex flex-col overflow-hidden rounded-2xl border border-hairline bg-surface transition-opacity",
       spot.reaction === "pass" && "opacity-55"
     )}
   >
-    <header className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-        {spot.category && (
-          <span className="rounded-full bg-canvas-card px-2 py-0.5 font-medium text-body">
-            {spot.category}
-          </span>
-        )}
-        {spot.area && <span>{spot.area}</span>}
-        {showDay && (
-          <span className="text-muted-soft">· {kst(spot.dayKey).format("M.D")} 추천</span>
-        )}
-      </div>
-      <h3 className="text-[17px] leading-snug font-semibold text-ink">{spot.name}</h3>
-    </header>
-
-    {spot.summary && <p className="text-sm leading-relaxed text-body">{spot.summary}</p>}
-    {spot.reason && (
-      <p className="flex gap-1.5 rounded-xl bg-canvas-soft px-3 py-2 text-[13px] leading-relaxed text-body">
-        <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
-        {spot.reason}
-      </p>
-    )}
-
-    {(spot.address || spot.priceHint) && (
-      <dl className="flex flex-col gap-1 text-[13px] text-muted">
-        {spot.address && (
-          <div className="flex gap-1.5">
-            <dt className="sr-only">주소</dt>
-            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <dd>{spot.address}</dd>
-          </div>
-        )}
-        {spot.priceHint && (
-          <div className="flex gap-1.5">
-            <dt className="sr-only">가격</dt>
-            <Wallet className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <dd>{spot.priceHint}</dd>
-          </div>
-        )}
-      </dl>
-    )}
-
-    {spot.tags.length > 0 && (
-      <ul className="flex flex-wrap gap-1" aria-label="키워드">
-        {spot.tags.map((tag) => (
-          <li key={tag} className="text-xs text-muted">
-            #{tag}
-          </li>
-        ))}
-      </ul>
-    )}
-
-    <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3">
-      <div className="flex gap-1">
-        <a
-          href={spot.instagramUrl}
-          target="_blank"
-          rel="noreferrer"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          <Camera />
-          인스타
-          {spot.instagramAuthor && (
-            <span className="max-w-[96px] truncate text-muted">
-              @{spot.instagramAuthor}
+    <SpotPhoto spot={spot} />
+    <div className="flex flex-1 flex-col gap-3 p-4">
+      <header className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          {spot.category && (
+            <span className="rounded-full bg-canvas-card px-2 py-0.5 font-medium text-body">
+              {spot.category}
             </span>
           )}
-        </a>
-        <a
-          href={mapUrl(spot)}
-          target="_blank"
-          rel="noreferrer"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          <MapPin />
-          지도
-        </a>
-      </div>
-      <div className="flex gap-0.5" role="group" aria-label="우리 반응">
-        {REACTIONS.map(({ value, label, icon: Icon, active }) => {
-          const on = spot.reaction === value;
-          return (
-            <Button
-              key={value}
-              variant="ghost"
-              size="icon-sm"
-              aria-label={label}
-              aria-pressed={on}
-              title={label}
-              onClick={() => onReact(on ? null : value)}
-              className={cn("text-muted", on && active)}
-            >
-              <Icon />
-            </Button>
-          );
-        })}
-      </div>
-    </footer>
+          {spot.area && <span>{spot.area}</span>}
+          {showDay && (
+            <span className="text-muted-soft">
+              · {kst(spot.dayKey).format("M.D")} 추천
+            </span>
+          )}
+        </div>
+        <h3 className="text-[17px] leading-snug font-semibold text-ink">{spot.name}</h3>
+      </header>
+
+      {spot.summary && (
+        <p className="text-sm leading-relaxed text-body">{spot.summary}</p>
+      )}
+      {spot.reason && (
+        <p className="flex gap-1.5 rounded-xl bg-canvas-soft px-3 py-2 text-[13px] leading-relaxed text-body">
+          <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+          {spot.reason}
+        </p>
+      )}
+
+      {(spot.address || spot.priceHint) && (
+        <dl className="flex flex-col gap-1 text-[13px] text-muted">
+          {spot.address && (
+            <div className="flex gap-1.5">
+              <dt className="sr-only">주소</dt>
+              <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <dd>{spot.address}</dd>
+            </div>
+          )}
+          {spot.priceHint && (
+            <div className="flex gap-1.5">
+              <dt className="sr-only">가격</dt>
+              <Wallet className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <dd>{spot.priceHint}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      {spot.tags.length > 0 && (
+        <ul className="flex flex-wrap gap-1" aria-label="키워드">
+          {spot.tags.map((tag) => (
+            <li key={tag} className="text-xs text-muted">
+              #{tag}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3">
+        <div className="flex gap-1">
+          <a
+            href={spot.instagramUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Camera />
+            인스타
+            {spot.instagramAuthor && (
+              <span className="max-w-[96px] truncate text-muted">
+                @{spot.instagramAuthor}
+              </span>
+            )}
+          </a>
+          <a
+            href={mapUrl(spot)}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <MapPin />
+            지도
+          </a>
+        </div>
+        <div className="flex gap-0.5" role="group" aria-label="우리 반응">
+          {REACTIONS.map(({ value, label, icon: Icon, active }) => {
+            const on = spot.reaction === value;
+            return (
+              <Button
+                key={value}
+                variant="ghost"
+                size="icon-sm"
+                aria-label={label}
+                aria-pressed={on}
+                title={label}
+                onClick={() => onReact(on ? null : value)}
+                className={cn("text-muted", on && active)}
+              >
+                <Icon />
+              </Button>
+            );
+          })}
+        </div>
+      </footer>
+    </div>
   </article>
 );
