@@ -2,10 +2,10 @@
 
 import { ChevronRight, ExternalLink, Newspaper, UserRound } from "lucide-react";
 import { useState } from "react";
+import { InView } from "react-intersection-observer";
 import useLocalStorageState from "use-local-storage-state";
 
 import { SentimentPill } from "@/components/monitor/tone-badge";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -161,7 +161,11 @@ const CountBar = ({
   </span>
 );
 
-const MoreButton = ({
+/**
+ * 목록 끝에 닿으면 다음 PAGE개를 더 그린다. 데이터는 이미 다 받아 두었으니 화면에 그리는 개수만 늘린다.
+ * key로 shown을 줘서 한 페이지를 더 그린 뒤에도 sentinel이 여전히 보이면(화면이 길 때) 다시 불리게 한다.
+ */
+const LoadMoreSentinel = ({
   shown,
   total,
   onMore,
@@ -171,9 +175,15 @@ const MoreButton = ({
   onMore: () => void;
 }) =>
   shown < total ? (
-    <Button variant="ghost" size="sm" className="self-center" onClick={onMore}>
-      {total - shown}곳 더 보기
-    </Button>
+    <InView
+      key={shown}
+      rootMargin="200px"
+      onChange={(inView) => inView && onMore()}
+      className="flex justify-center py-2"
+      aria-hidden
+    >
+      <Spinner className="size-4 text-muted-soft" />
+    </InView>
   ) : null;
 
 const MediaTable = ({
@@ -216,7 +226,7 @@ const MediaTable = ({
           </li>
         ))}
       </ol>
-      <MoreButton
+      <LoadMoreSentinel
         shown={limit}
         total={media.length}
         onMore={() => setLimit((l) => l + PAGE)}
@@ -336,7 +346,7 @@ const ReporterTable = ({
           기자를 확인한 기사가 없어요.
         </p>
       )}
-      <MoreButton
+      <LoadMoreSentinel
         shown={limit}
         total={reporters.length}
         onMore={() => setLimit((l) => l + PAGE)}
