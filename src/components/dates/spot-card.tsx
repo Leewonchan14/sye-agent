@@ -1,5 +1,6 @@
 "use client";
 
+import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
 import {
   Camera,
   Footprints,
@@ -201,6 +202,7 @@ const ZoomedGallery = ({
     <Carousel
       setApi={setApi}
       opts={{ startIndex: start }}
+      plugins={[WheelGesturesPlugin()]}
       aria-label="크게 본 사진"
       className="size-full [&_[data-slot=carousel-content]]:h-full"
     >
@@ -312,6 +314,8 @@ const SpotPhotos = ({ spot }: { spot: DateSpotView }) => {
     <>
       <Carousel
         setApi={setApi}
+        // 트랙패드·가로 휠로 좌우로 밀면 넘어간다. 세로 휠은 그대로 페이지를 내린다.
+        plugins={[WheelGesturesPlugin()]}
         aria-label={`${spot.name} 사진 ${photos.length}장`}
         className="group/photos relative bg-canvas-card"
       >

@@ -412,6 +412,19 @@ test("임베드에서 여러 장 사진을 순서대로 읽고, 데이터가 없
   expect(parseEmbedPhotos("<html>로그인이 필요해요</html>")).toEqual([]);
 });
 
+/** 트랙패드로 화면 폭의 80%만큼 좌우로 미는 것처럼 가로 휠 이벤트를 잇달아 보낸다. */
+const swipeWheel = async (page: Page, direction: 1 | -1) => {
+  // 모바일 에뮬레이션은 휠 값을 기기 픽셀로 받으므로 배율을 곱한다.
+  const ratio = await page.evaluate(() => window.devicePixelRatio);
+  const step = page.viewportSize()!.width * 0.1 * ratio * direction;
+  for (let index = 0; index < 8; index += 1) {
+    await page.mouse.wheel(step, 0);
+    await page.waitForTimeout(16);
+  }
+  // 손을 뗀 뒤 자리를 잡을 때까지 기다려야 다음 스크롤을 새 동작으로 본다.
+  await page.waitForTimeout(800);
+};
+
 test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 수 있다", async ({
   page,
   request,
@@ -468,6 +481,11 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   await page.mouse.up();
   await expect(gallery.getByText("2 / 3")).toBeVisible();
   await expect(gallery).toBeVisible();
+  // 트랙패드처럼 좌우로 스크롤해도 넘어간다.
+  await swipeWheel(page, 1);
+  await expect(gallery.getByText("3 / 3")).toBeVisible();
+  await swipeWheel(page, -1);
+  await expect(gallery.getByText("2 / 3")).toBeVisible();
   // 크게 보는 사진은 카드보다 크다.
   expect((await big(2).boundingBox())!.width).toBeGreaterThan(
     (await multi.boundingBox())!.width * 0.9
@@ -492,6 +510,18 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
   await page.mouse.up();
+  await expect(multi.getByText("1 / 3")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // 카드도 좌우 스크롤로 넘기고, 위아래 스크롤은 사진을 넘기지 않는다.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await swipeWheel(page, 1);
+  await expect(multi.getByText("2 / 3")).toBeVisible();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await swipeWheel(page, -1);
+  await expect(multi.getByText("1 / 3")).toBeVisible();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(500);
   await expect(multi.getByText("1 / 3")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
