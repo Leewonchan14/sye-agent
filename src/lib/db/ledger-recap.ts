@@ -19,27 +19,30 @@ const comments = schema.ledgerWeeklyComments;
  */
 export const getLedgerRecap = async (
   period: LedgerRecapPeriod,
-  key: string
+  key: string,
+  options: { excludeTrips?: boolean } = {}
 ): Promise<LedgerRecap> => {
+  const { excludeTrips = false } = options;
   const today = kst().format("YYYY-MM-DD");
   const month = period === "month" ? key : weekMonth(key);
   const range = recapRange(period, key, today);
 
   const [current, previous, ledger, [stored]] = await Promise.all([
-    getLedgerStats(range.from, range.to),
-    getLedgerStats(range.previousFrom, range.previousTo),
+    getLedgerStats(range.from, range.to, { excludeTrips }),
+    getLedgerStats(range.previousFrom, range.previousTo, { excludeTrips }),
     getLedgerMonth(month),
     getDb().select().from(comments).where(eq(comments.weekStart, key)).limit(1),
   ]);
 
   const expense = current.summary.expense;
   const total = ledger.budget.totalBudget;
-  const pace = getBudgetPace({
-    month,
-    today,
-    budget: total,
-    spent: ledger.summary.expense,
-  });
+  // 여행을 빼고 볼 때는 예산 사용량도 여행 지출을 뺀 금액으로 본다.
+  const spent = excludeTrips
+    ? ledger.entries
+        .filter((entry) => entry.kind === "expense" && entry.tripId == null)
+        .reduce((sum, entry) => sum + entry.amount, 0)
+    : ledger.summary.expense;
+  const pace = getBudgetPace({ month, today, budget: total, spent });
 
   return {
     period,
@@ -74,11 +77,12 @@ export const getLedgerRecap = async (
     categories: current.byCategory
       .slice(0, TOP_CATEGORIES)
       .map(({ name, amount }) => ({ name, amount })),
-    budget:
-      total != null && pace
-        ? { month, total, spent: ledger.summary.expense, pace }
+    budget: total != null && pace ? { month, total, spent, pace } : null,
+    // 하치와레 코멘트는 여행을 포함한 전체 합계를 보고 쓴 것이라 여행 제외일 때는 숨긴다.
+    comment:
+      !excludeTrips && !range.inProgress && stored?.expense === expense
+        ? stored.comment
         : null,
-    comment: !range.inProgress && stored?.expense === expense ? stored.comment : null,
   };
 };
 

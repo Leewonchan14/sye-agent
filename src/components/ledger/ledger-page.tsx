@@ -11,9 +11,11 @@ import {
   Wallet,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 
 import { CalendarView } from "@/components/ledger/calendar-view";
 import {
+  ExcludeTripsChip,
   ExpenseCategoryChips,
   type CategoryFilter,
 } from "@/components/ledger/category-chips";
@@ -41,6 +43,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
+import { withoutTrips } from "@/lib/ledger/exclude-trips";
 import {
   currentMonthKst,
   formatCompactWon,
@@ -349,9 +352,13 @@ export const LedgerPage = () => {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  // 내역·달력·통계 탭이 함께 쓰고, 다음에 열어도 이어서 보이도록 기기에 저장한다.
+  const [excludeTrips, setExcludeTrips] = useLocalStorageState("ledger.excludeTrips", {
+    defaultValue: false,
+  });
 
   const {
-    data: ledger,
+    data: fullLedger,
     isLoading,
     isError,
     error,
@@ -383,7 +390,18 @@ export const LedgerPage = () => {
     enabled: Boolean(token && otherMonth),
     ...LEDGER_LIVE_QUERY,
   });
-  const otherLedger = otherMonth ? otherQuery.data : undefined;
+  const hasTrips = (fullLedger?.trips.length ?? 0) > 0;
+  const tripsExcluded = excludeTrips && hasTrips;
+  // 화면에 보여 줄 내역·합계. 여행 제외를 켜면 여행에 묶인 내역을 뺀다.
+  // 입력·설정 창과 여행 탭은 늘 전체 데이터(fullLedger)를 쓴다.
+  const ledger = useMemo(
+    () => (fullLedger && tripsExcluded ? withoutTrips(fullLedger) : fullLedger),
+    [fullLedger, tripsExcluded]
+  );
+  const otherLedger = useMemo(() => {
+    const data = otherMonth ? otherQuery.data : undefined;
+    return data && tripsExcluded ? withoutTrips(data) : data;
+  }, [otherMonth, otherQuery.data, tripsExcluded]);
   const periodPending = Boolean(otherMonth) && !otherLedger;
   const loadError = isError ? error : otherQuery.error;
 
@@ -641,12 +659,20 @@ export const LedgerPage = () => {
                 value={period}
                 onChange={changePeriod}
               />
+              {hasTrips && (
+                <ExcludeTripsChip value={tripsExcluded} onChange={setExcludeTrips} />
+              )}
             </div>
           )}
         </div>
 
         <div className={cn("mt-4", hidesMonthSummary && "hidden")}>
-          <RecapCard period={period} weekStart={weekStart} month={month} />
+          <RecapCard
+            period={period}
+            weekStart={weekStart}
+            month={month}
+            excludeTrips={tripsExcluded}
+          />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
               Array.from({ length: 4 }, (_, index) => (
@@ -870,9 +896,17 @@ export const LedgerPage = () => {
                         <Wallet className="size-5" />
                       </div>
                       <p className="mt-3 text-sm font-medium text-ink">
-                        {isWeek ? "이 주에는 기록이 없어요" : "아직 기록이 없어요"}
+                        {tripsExcluded
+                          ? `${periodLabel}에는 여행 말고 기록이 없어요`
+                          : isWeek
+                            ? "이 주에는 기록이 없어요"
+                            : "아직 기록이 없어요"}
                       </p>
-                      <p className="mt-1 text-[13px] text-muted">첫 지출을 남겨보세요</p>
+                      <p className="mt-1 text-[13px] text-muted">
+                        {tripsExcluded
+                          ? "여행 제외를 끄면 여행 내역도 보여요"
+                          : "첫 지출을 남겨보세요"}
+                      </p>
                       <Button className="mt-4" size="sm" onClick={openAdd}>
                         <Plus /> 내역 추가
                       </Button>
@@ -893,9 +927,9 @@ export const LedgerPage = () => {
                 />
               )}
 
-              {tab === "recurring" && <RecurringTab ledger={ledger} />}
+              {tab === "recurring" && <RecurringTab ledger={fullLedger ?? ledger} />}
 
-              {tab === "trips" && <TripsTab ledger={ledger} />}
+              {tab === "trips" && <TripsTab ledger={fullLedger ?? ledger} />}
 
               {tab === "stats" && (
                 <StatsView
@@ -909,6 +943,8 @@ export const LedgerPage = () => {
                   expenseReference={ledger.expenseReference}
                   totalBudget={ledger.budget.totalBudget}
                   onEdit={openEdit}
+                  excludeTrips={tripsExcluded}
+                  onExcludeTripsChange={setExcludeTrips}
                 />
               )}
             </>
@@ -916,19 +952,19 @@ export const LedgerPage = () => {
         </div>
       </main>
 
-      {ledger && (
+      {fullLedger && (
         <>
           <EntryDialog
             open={entryOpen}
             onOpenChange={setEntryOpen}
-            ledger={ledger}
+            ledger={fullLedger}
             defaultDate={defaultEntryDate}
             entry={editingEntry}
           />
           <SettingsDialog
             open={settingsOpen}
             onOpenChange={setSettingsOpen}
-            ledger={ledger}
+            ledger={fullLedger}
             initialTab={settingsTab}
           />
           <PasteDialog open={pasteOpen} onOpenChange={setPasteOpen} />
