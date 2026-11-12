@@ -42,7 +42,7 @@ const GoalInput = ({
   value: string;
   onChange: (raw: string) => void;
 }) => (
-  <span className="flex items-center gap-2 text-[13px] text-muted">
+  <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
     최소
     <Input
       type="number"
@@ -88,7 +88,7 @@ const CategoryDialog = ({
         <DialogHeader>
           <DialogTitle>{isNew ? "카테고리 추가" : "카테고리 수정"}</DialogTitle>
           <DialogDescription>
-            하치와레는 기사를 이 카테고리로 나눠 담고, 목표보다 적으면 더 찾아요.
+            에이전트는 기사를 이 카테고리로 나눠 담고, 목표보다 적으면 더 찾아요.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -102,7 +102,7 @@ const CategoryDialog = ({
             onOpenChange(false);
           }}
         >
-          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             이름
             <Input
               value={draft.name}
@@ -112,14 +112,16 @@ const CategoryDialog = ({
               aria-invalid={duplicate || undefined}
             />
             {duplicate && (
-              <span className="text-xs text-error">같은 이름의 카테고리가 있어요.</span>
+              <span className="text-xs text-destructive">
+                같은 이름의 카테고리가 있어요.
+              </span>
             )}
           </label>
-          <div className="flex flex-col gap-2 text-[13px] text-muted">
+          <div className="flex flex-col gap-2 text-[13px] text-muted-foreground">
             <div className="flex items-center justify-between gap-3">
               <span>
                 전수 집계
-                <span className="block text-xs text-muted-soft">
+                <span className="block text-xs text-muted-foreground">
                   자사 보도처럼 찾은 기사를 모두 담아요. 목표 건수가 없어요.
                 </span>
               </span>
@@ -156,10 +158,10 @@ const CategoryDialog = ({
               </label>
             )}
           </div>
-          <label className="flex items-center justify-between gap-3 text-[13px] text-muted">
+          <label className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
             <span>
               리포트 최대 건수 (선택)
-              <span className="block text-xs text-muted-soft">
+              <span className="block text-xs text-muted-foreground">
                 넘는 기사는 관련도 낮은 순으로 체크가 해제돼요. 비우면 제한이 없어요.
               </span>
             </span>
@@ -182,7 +184,7 @@ const CategoryDialog = ({
               className="h-8 w-24"
             />
           </label>
-          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <div className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             세부 분류 (선택)
             <TagsEditor
               align="start"
@@ -190,7 +192,7 @@ const CategoryDialog = ({
               label="세부 분류"
               onChange={(subs) => setDraft((d) => ({ ...d, subs: subs.slice(0, 12) }))}
             />
-            <span className="text-xs text-muted-soft">
+            <span className="text-xs text-muted-foreground">
               리포트에서 이 순서대로 묶어 보여 줘요. 예: 여행업계, 항공업계
             </span>
           </div>
@@ -277,8 +279,8 @@ export const CategoryEditor = ({
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-lg font-medium text-ink">카테고리 목표</h2>
-          <p className="mt-0.5 text-[13px] text-muted">
+          <h2 className="text-lg font-medium text-foreground">카테고리 목표</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             목표보다 적으면 &ldquo;더 찾기&rdquo; 버튼이 나와요. 비워 두면 전수 집계
             섹션이에요. 리포트도 이 순서를 따라요.
           </p>
@@ -291,20 +293,20 @@ export const CategoryEditor = ({
           <Plus /> 카테고리 추가
         </Button>
       </div>
-      <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         {categories.map((c, i) => (
           <div
             key={c.key}
             data-category-key={c.key}
             className={cn(
-              "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-hairline/60 py-2.5 pr-2 pl-4 first:border-t-0 sm:gap-3",
+              "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-border/60 py-2.5 pr-2 pl-4 first:border-t-0 sm:gap-3",
               c.key in goals && "bg-primary/5"
             )}
           >
             <div className="min-w-0">
-              <p className="text-sm text-ink">{c.name}</p>
+              <p className="text-sm text-foreground">{c.name}</p>
               {c.subs?.length || c.maxItems ? (
-                <p className="mt-0.5 truncate text-xs text-muted">
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {[c.maxItems && `최대 ${c.maxItems}건`, ...(c.subs ?? [])]
                     .filter(Boolean)
                     .join(" · ")}
@@ -323,7 +325,7 @@ export const CategoryEditor = ({
                     variant="ghost"
                     size="icon-sm"
                     aria-label={`${c.name} 카테고리 관리`}
-                    className="text-muted"
+                    className="text-muted-foreground"
                   />
                 }
               >

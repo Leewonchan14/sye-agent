@@ -1,12 +1,12 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Page, PlaywrightWorkerArgs } from "@playwright/test";
 import pg from "pg";
-
-import { kst } from "../src/lib/kst";
 
 const databaseUrl = process.env.E2E_DATABASE_URL ?? "";
 if (!/\/[^/?]*e2e[^/?]*(\?|$)/.test(databaseUrl)) {
   throw new Error("E2E_DATABASE_URL은 이름에 e2e가 들어간 임시 DB여야 합니다.");
 }
+
+export const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3100";
 
 /**
  * 모든 스펙 파일이 같은 워커에서 이 pool을 함께 쓴다. 파일마다 afterAll에서 닫으면
@@ -18,80 +18,48 @@ export const pool = new pg.Pool({
   allowExitOnIdle: true,
 });
 
-export const today = () => kst().format("YYYY-MM-DD");
-export const thisMonth = () => today().slice(0, 7);
-export const lastMonth = () => kst().subtract(1, "month").format("YYYY-MM");
-export const daysAgo = (days: number) => kst().subtract(days, "day").format("YYYY-MM-DD");
-
-export const resetLedger = async () => {
-  await pool.query(`
-    truncate ledger_weekly_comments, auth_login_attempts, ledger_trips, ledger_entry_history, ledger_account, ledger_budgets, ledger_months,
-      ledger_entries, ledger_recurring, ledger_categories, ledger_assets restart identity cascade
-  `);
+/** 사용자와 사용자에 딸린 모든 데이터를 지운다 (user를 지우면 나머지는 cascade). */
+export const resetUsers = async () => {
+  await pool.query(`truncate "user", rate_limit, verification restart identity cascade`);
 };
 
-export const login = async (request: APIRequestContext): Promise<string> => {
-  const res = await request.post("/api/auth", {
-    data: { password: process.env.SITE_PASSWORD },
-  });
-  const { token } = (await res.json()) as { token: string };
-  return token;
-};
+export const PASSWORD = "e2e-password-123";
 
-export const openLedger = async (page: Page, token: string) => {
-  await page.addInitScript((value) => {
-    localStorage.setItem(
-      "trable-auth",
-      JSON.stringify({ state: { token: value }, version: 0 })
-    );
-  }, token);
-  await page.goto("/ledger");
-  await page.getByRole("heading", { name: "가계부" }).waitFor();
-  await page.getByRole("button", { name: "내역 추가" }).first().waitFor();
-};
+let seq = 0;
+/** 테스트마다 겹치지 않는 이메일 */
+export const uniqueEmail = (prefix = "user") =>
+  `${prefix}-${Date.now().toString(36)}-${(seq += 1)}@e2e.test`;
 
-/** 내역을 주 단위로 바꾸고 지난주로 옮긴다. 리캡도 지난주 주간 리캡으로 바뀐다. */
-export const showLastWeek = async (page: Page) => {
-  await page
-    .getByRole("group", { name: "기간 단위" })
-    .getByRole("button", { name: "주" })
-    .click();
-  await page.getByRole("button", { name: "이전 주" }).click();
-};
+/** Better Auth는 쿠키가 있는 POST의 Origin을 확인한다. */
+const originHeaders = { origin: baseURL };
 
-export const authHeaders = (token: string) => ({ "x-auth-token": token });
-
-/** 기본 분류를 만들고 이름으로 찾을 수 있게 돌려준다. */
-export const getCategories = async (request: APIRequestContext, token: string) => {
-  const res = await request.get("/api/ledger", { headers: authHeaders(token) });
-  const { ledger } = (await res.json()) as {
-    ledger: { categories: { id: number; name: string; kind: string }[] };
-  };
-  return (name: string, kind = "expense") => {
-    const category = ledger.categories.find((c) => c.name === name && c.kind === kind);
-    if (!category) throw new Error(`분류 없음: ${name}`);
-    return category.id;
-  };
-};
-
-export const addEntry = async (
+/** API로 가입한다 — 응답 쿠키가 이 요청 컨텍스트(또는 페이지 컨텍스트)에 남는다. */
+export const signUpWith = async (
   request: APIRequestContext,
-  token: string,
-  entry: {
-    entryDate: string;
-    kind?: "expense" | "income";
-    amount: number;
-    categoryId?: number | null;
-    memo?: string;
-    entryTime?: string | null;
-    tags?: string;
-    tripId?: number | null;
-  }
+  email = uniqueEmail(),
+  name = "테스트 사용자"
 ) => {
-  const res = await request.post("/api/ledger/entries", {
-    headers: authHeaders(token),
-    data: { kind: "expense", ...entry },
+  const res = await request.post("/api/auth/sign-up/email", {
+    headers: originHeaders,
+    data: { email, password: PASSWORD, name },
   });
-  if (!res.ok()) throw new Error(`기록 실패: ${await res.text()}`);
-  return ((await res.json()) as { entry: { id: number } }).entry.id;
+  if (!res.ok()) throw new Error(`가입 실패 ${res.status()}: ${await res.text()}`);
+  return email;
+};
+
+/** 페이지 브라우저 컨텍스트에 로그인된 새 사용자를 만든다. */
+export const signUpPage = async (page: Page, name?: string) =>
+  signUpWith(page.request, uniqueEmail(), name);
+
+/** 쿠키가 따로 노는 API 클라이언트 — 사용자 A·B를 동시에 흉내 낼 때 쓴다. */
+export const newUserClient = async (
+  playwright: PlaywrightWorkerArgs["playwright"],
+  prefix: string
+) => {
+  const request = await playwright.request.newContext({
+    baseURL,
+    extraHTTPHeaders: originHeaders,
+  });
+  const email = await signUpWith(request, uniqueEmail(prefix), prefix);
+  return { request, email };
 };

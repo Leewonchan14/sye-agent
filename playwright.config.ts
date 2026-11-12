@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * 가계부 e2e. 테스트가 DB를 비우므로 임시 DB에 연결된 서버가 먼저 떠 있어야 한다.
+ * e2e. 테스트가 DB를 비우므로 임시 DB에 연결된 서버가 먼저 떠 있어야 한다.
  * 실행 방법은 e2e/README.md를 참고한다.
  */
 export default defineConfig({

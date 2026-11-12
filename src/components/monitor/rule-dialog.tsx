@@ -77,7 +77,7 @@ export const RuleDialog = ({
         <DialogHeader>
           <DialogTitle>{isNew ? "수집 규칙 추가" : "수집 규칙 수정"}</DialogTitle>
           <DialogDescription>
-            하치와레는 수집할 때마다 이 규칙의 이름과 값을 그대로 읽어요.
+            에이전트는 수집할 때마다 이 규칙의 이름과 값을 그대로 읽어요.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -90,7 +90,7 @@ export const RuleDialog = ({
             onOpenChange(false);
           }}
         >
-          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             규칙 이름
             <Input
               value={draft.title}
@@ -100,7 +100,7 @@ export const RuleDialog = ({
               autoFocus
             />
           </label>
-          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <div className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             <span id="rule-kind-label">종류</span>
             <Select
               items={RULE_KIND_OPTIONS}
@@ -118,9 +118,11 @@ export const RuleDialog = ({
                 ))}
               </SelectContent>
             </Select>
-            {kindHint && <span className="text-xs text-muted-soft">{kindHint}</span>}
+            {kindHint && (
+              <span className="text-xs text-muted-foreground">{kindHint}</span>
+            )}
           </div>
-          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <div className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             값
             <div className="flex min-h-8 items-center">
               <RuleValueEditor
@@ -130,9 +132,9 @@ export const RuleDialog = ({
                 onChange={(value) => setDraft((d) => ({ ...d, value }))}
               />
             </div>
-            {valueError && <span className="text-xs text-error">{valueError}</span>}
+            {valueError && <span className="text-xs text-destructive">{valueError}</span>}
           </div>
-          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             출처 · 메모 (선택)
             <Textarea
               rows={2}

@@ -91,7 +91,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
   }
   if (error || !data) {
     return (
-      <p className="py-10 text-center text-sm text-error">
+      <p className="py-10 text-center text-sm text-destructive">
         {error?.message ?? "불러오지 못했어요."}
       </p>
     );
@@ -131,13 +131,13 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
         <p className="text-[12px] font-medium tracking-[0.12em] text-primary uppercase">
           데일리 모니터링
         </p>
-        <h1 className="mt-1 text-2xl font-medium tracking-tight text-balance text-ink">
+        <h1 className="mt-1 text-2xl font-medium tracking-tight text-balance text-foreground">
           {client.name}
         </h1>
       </header>
 
       <div
-        className="flex [scrollbar-width:none] gap-1 overflow-x-auto overflow-y-hidden border-b border-hairline"
+        className="flex [scrollbar-width:none] gap-1 overflow-x-auto overflow-y-hidden border-b border-border"
         role="tablist"
         aria-label="고객사 화면"
       >
@@ -149,13 +149,13 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
             aria-selected={view === t.id}
             onClick={() => setView(t.id)}
             className={cn(
-              "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3.5 text-sm whitespace-nowrap text-muted hover:text-ink",
-              view === t.id && "border-primary font-medium text-ink"
+              "-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 border-transparent px-3.5 text-sm whitespace-nowrap text-muted-foreground hover:text-foreground",
+              view === t.id && "border-primary font-medium text-foreground"
             )}
           >
             {t.label}
             {counts[t.id] !== undefined && (
-              <span className="rounded-full bg-canvas-card px-1.5 font-mono text-[11px] text-muted">
+              <span className="rounded-full bg-muted px-1.5 font-mono text-[11px] text-muted-foreground">
                 {counts[t.id]}
               </span>
             )}
@@ -174,12 +174,12 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
       )}
 
       {view === "daily" && !run && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-hairline px-6 py-14 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-14 text-center">
           <Newspaper className="size-6 text-primary" />
-          <h2 className="text-lg font-medium text-ink">아직 수집 결과가 없어요</h2>
-          <p className="max-w-md text-sm text-muted">
+          <h2 className="text-lg font-medium text-foreground">아직 수집 결과가 없어요</h2>
+          <p className="max-w-md text-sm text-muted-foreground">
             {client.autoCollect
-              ? `${nextCollectLabel(client, collectedToday)}에 하치와레가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
+              ? `${nextCollectLabel(client, collectedToday)}에 에이전트가 수집을 시작해요. 끝나면 여기에 기사가 쌓여요.`
               : "매일 자동 수집이 꺼져 있어요. 고객사 규칙에서 켜면 다음 수집 시각부터 모아요."}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
@@ -205,10 +205,10 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <p className="text-[12px] text-muted tabular-nums">
+              <p className="text-[12px] text-muted-foreground tabular-nums">
                 {kst(run.until).format("YYYY.MM.DD ddd")}
               </p>
-              <h2 className="mt-0.5 text-lg font-medium tracking-tight text-ink">
+              <h2 className="mt-0.5 text-lg font-medium tracking-tight text-foreground">
                 {kst(run.until).isSame(kst(), "day")
                   ? "오늘의 기사"
                   : `${kst(run.until).format("M월 D일")} 기사`}
@@ -238,7 +238,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
           />
           <div
             role="status"
-            className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-hairline bg-canvas-soft px-4 py-3 text-[13px] text-body"
+            className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-muted px-4 py-3 text-[13px] text-foreground"
           >
             {run.pendingSince ? (
               <span className="inline-flex items-center gap-1.5 font-medium text-primary">
@@ -246,7 +246,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
                 수집 중
               </span>
             ) : run.lastError && !items.length ? (
-              <span className="inline-flex items-center gap-1.5 font-medium text-error">
+              <span className="inline-flex items-center gap-1.5 font-medium text-destructive">
                 <TriangleAlert className="size-4" />
                 수집 실패
               </span>
@@ -256,36 +256,40 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
                 {kst(run.reportedAt).format("HH:mm")} 보고 완료
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 font-medium text-ink">
+              <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                 <Inbox className="size-4 text-primary" />
                 수집 완료 · 보고 전
               </span>
             )}
-            <span className="text-muted">{windowLabel(run.since, run.until)}</span>
+            <span className="text-muted-foreground">
+              {windowLabel(run.since, run.until)}
+            </span>
             {run.createdAt && (
-              <span className="text-muted">
+              <span className="text-muted-foreground">
                 {kst(run.createdAt).format("MM.DD HH:mm")} 수집 시작
               </span>
             )}
             {run.stats.sources?.map((s) => (
               <span key={s.name}>
                 {s.name}{" "}
-                <b className="font-mono font-medium text-ink tabular-nums">
+                <b className="font-mono font-medium text-foreground tabular-nums">
                   {s.count.toLocaleString()}
                 </b>
               </span>
             ))}
             {run.stats.measuredSec !== undefined && (
-              <span className="text-muted">{formatMeasured(run.stats.measuredSec)}</span>
+              <span className="text-muted-foreground">
+                {formatMeasured(run.stats.measuredSec)}
+              </span>
             )}
             {run.stats.usage && (
-              <span className="text-muted" title="캐시를 뺀 입력·출력 토큰">
+              <span className="text-muted-foreground" title="캐시를 뺀 입력·출력 토큰">
                 {formatUsage(run.stats.usage)}
               </span>
             )}
             {run.stats.blocked?.length ? (
               <span className="inline-flex items-center gap-1.5">
-                <span className="rounded-full bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">
+                <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
                   차단 {run.stats.blocked.length}
                 </span>
                 {run.stats.blocked.join(" · ")}
@@ -301,23 +305,23 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
               since={run.pendingSince}
               title={
                 run.pendingRequest === DAILY_COLLECT_REQUEST
-                  ? "하치와레가 기사를 모으고 있어요"
-                  : "하치와레가 기사를 더 찾고 있어요"
+                  ? "에이전트가 기사를 모으고 있어요"
+                  : "에이전트가 기사를 더 찾고 있어요"
               }
             />
           )}
 
           <Tabs value={tab} onValueChange={(value) => setTab(value as RunTab)}>
-            <TabsList aria-label="오늘의 기사 화면" className="h-9 bg-canvas-soft">
+            <TabsList aria-label="오늘의 기사 화면" className="h-9 bg-muted">
               {RUN_TABS.map((t) => (
                 <TabsTrigger
                   key={t.id}
                   value={t.id}
-                  className="px-3 text-[13px] text-muted data-active:bg-surface data-active:text-ink"
+                  className="px-3 text-[13px] text-muted-foreground data-active:bg-card data-active:text-foreground"
                 >
                   {t.label}
                   {t.id === "articles" && (
-                    <span className="rounded-full bg-canvas-card px-1.5 font-mono text-[11px] text-muted">
+                    <span className="rounded-full bg-muted px-1.5 font-mono text-[11px] text-muted-foreground">
                       {leadsIncluded}
                     </span>
                   )}
@@ -336,15 +340,15 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
                 onAskMore={onAskMore}
               />
 
-              <div className="sticky bottom-0 -mx-4 border-t border-hairline bg-canvas px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] md:-mx-8 md:px-8">
-                <div className="mb-2 flex min-h-5 items-center gap-2 text-[13px] text-muted">
+              <div className="sticky bottom-0 -mx-4 border-t border-border bg-background px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] md:-mx-8 md:px-8">
+                <div className="mb-2 flex min-h-5 items-center gap-2 text-[13px] text-muted-foreground">
                   {run.pendingSince ? (
                     <>
                       <LoadingDots />
-                      하치와레가 찾고 있어요 · {run.pendingRequest}
+                      에이전트가 찾고 있어요 · {run.pendingRequest}
                     </>
                   ) : run.lastError ? (
-                    <span className="inline-flex items-center gap-1.5 text-error">
+                    <span className="inline-flex items-center gap-1.5 text-destructive">
                       <TriangleAlert className="size-3.5" /> {run.lastError}
                     </span>
                   ) : (
@@ -352,7 +356,7 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
                   )}
                 </div>
                 <form
-                  className="flex items-center gap-2 rounded-xl border border-hairline bg-surface py-1.5 pr-1.5 pl-3.5"
+                  className="flex items-center gap-2 rounded-xl border border-border bg-card py-1.5 pr-1.5 pl-3.5"
                   onSubmit={(e) => {
                     e.preventDefault();
                     submitAsk(request, askCategory);
@@ -368,8 +372,8 @@ export const ClientView = ({ clientId }: { clientId: number }) => {
                     value={request}
                     onChange={(e) => setRequest(e.target.value)}
                     placeholder="예: 업계 이슈를 여행 트렌드 위주로 더 찾아줘"
-                    aria-label="하치와레에게 요청하기"
-                    className="h-8 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-soft"
+                    aria-label="에이전트에게 요청하기"
+                    className="h-8 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
                     disabled={Boolean(run.pendingSince)}
                   />
                   <Button

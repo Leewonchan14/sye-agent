@@ -14,7 +14,7 @@
  * 사용법:
  *   node scripts/mock-hermes-server.mjs 8971
  *
- *   HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
+ *   HERMES_API_URL=http://127.0.0.1:8971/p/monitor \
  *   HERMES_API_KEY=mock-key \
  *   npm run dev
  *
@@ -76,7 +76,7 @@ const buildTurn = (sessionId, userMessage) => {
   const steps = [
     {
       reasoning: `The user asked: ${userMessage}. Let me check the current time first.`,
-      narration: `"${userMessage}"라니…! 먼저 시각부터 확인해 볼게…!`,
+      narration: `"${userMessage}" 요청을 확인했어요. 먼저 시각부터 확인할게요.`,
       tool: {
         name: "terminal",
         preview: "date",
@@ -86,7 +86,7 @@ const buildTurn = (sessionId, userMessage) => {
     },
     {
       reasoning: "Got the time. Now the disk usage, then I can summarize.",
-      narration: "좋아, 시각 확인 완료! 이제 디스크도 볼게…!",
+      narration: "시각을 확인했어요. 이제 디스크 상태를 볼게요.",
       tool: {
         name: "terminal",
         preview: "df -h",
@@ -100,7 +100,7 @@ const buildTurn = (sessionId, userMessage) => {
     },
   ];
 
-  const answer = `다 확인했어~! 지금 시각이랑 디스크 상태 정리해서 알려줄게…! (목 서버 응답이야…!)`;
+  const answer = `확인을 마쳤어요. 현재 시각과 디스크 상태를 정리해 드릴게요. (목 서버 응답)`;
   const answerReasoning = "Everything checked out — time to write the summary.";
 
   return { steps, answer, answerReasoning, sessionId };
@@ -386,6 +386,6 @@ server.listen(port, "127.0.0.1", () => {
     `[mock-hermes] Hermes API server mock listening on http://127.0.0.1:${port}`
   );
   console.log(
-    `[mock-hermes] base URL 예: http://127.0.0.1:${port}/p/hachi (API key: ${apiKey}, turn: ${turnMs}ms)`
+    `[mock-hermes] base URL 예: http://127.0.0.1:${port}/p/monitor (API key: ${apiKey}, turn: ${turnMs}ms)`
   );
 });

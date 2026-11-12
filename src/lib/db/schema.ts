@@ -1,6 +1,7 @@
 import type { UIMessageChunk } from "ai";
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -11,19 +12,112 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  vector,
 } from "drizzle-orm/pg-core";
+
+/* ───────────────────────── 계정 (Better Auth) ───────────────────────── */
+// 필드 이름은 Better Auth 기본 스키마(camelCase 키)와 같아야 한다.
+
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const session = pgTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => ({ userIdx: index("session_user_idx").on(t.userId) })
+);
+
+export const account = pgTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({ userIdx: index("account_user_idx").on(t.userId) })
+);
+
+export const verification = pgTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({ identifierIdx: index("verification_identifier_idx").on(t.identifier) })
+);
+
+/** 로그인·회원가입 요청 제한 카운터 (서버리스라 메모리 대신 DB에 둔다). */
+export const rateLimit = pgTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
+
+/* ───────────────────────── 채팅 ───────────────────────── */
 
 export const sessionState = pgTable(
   "session_state",
   {
     sessionId: text("session_id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     title: text("title"),
     messages: jsonb("messages").notNull(),
     messagesText: text("messages_text"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
+    userUpdatedIdx: index("session_state_user_updated_idx").on(
+      table.userId,
+      table.updatedAt
+    ),
     titleTrgmIdx: index("session_state_title_trgm_idx").using(
       "gin",
       sql`${table.title} gin_trgm_ops`
@@ -39,13 +133,16 @@ export const instructions = pgTable(
   "instructions",
   {
     id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
     content: text("content").notNull(),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
-    activeIdx: index("instructions_active_idx").on(table.isActive),
+    userActiveIdx: index("instructions_user_active_idx").on(table.userId, table.isActive),
   })
 );
 
@@ -53,13 +150,16 @@ export const suggestions = pgTable(
   "suggestions",
   {
     id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
     prompt: text("prompt").notNull(),
     sortOrder: integer("sort_order"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({
-    sortOrderIdx: index("suggestions_sort_order_idx").on(table.sortOrder),
+    userSortIdx: index("suggestions_user_sort_idx").on(table.userId, table.sortOrder),
   })
 );
 
@@ -110,208 +210,21 @@ export const chatTurnFrames = pgTable(
   })
 );
 
-export const kakaoChat = pgTable(
-  "kakao_chat",
-  {
-    id: serial("id").primaryKey(),
-    date: timestamp("date", { withTimezone: true }).notNull(),
-    user: text("user").notNull(),
-    message: text("message").notNull(),
-    embedding: vector("embedding", { dimensions: 384 }),
-  },
-  (table) => ({
-    dateIdx: index("kakao_chat_date_idx").on(table.date),
-    embeddingIdx: index("kakao_chat_embedding_idx").using(
-      "hnsw",
-      table.embedding.op("vector_cosine_ops")
-    ),
-    dedupIdx: uniqueIndex("kakao_chat_dedup_idx").on(
-      table.date,
-      table.user,
-      table.message
-    ),
-  })
-);
-
-export const ledgerCategories = pgTable(
-  "ledger_categories",
-  {
-    id: serial("id").primaryKey(),
-    name: text("name").notNull(),
-    kind: text("kind").notNull().default("expense"), // expense | income
-    emoji: text("emoji").notNull().default("🧾"),
-    icon: text("icon").notNull().default("tag"),
-    color: text("color").notNull().default("neutral"),
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (t) => ({
-    kindIdx: index("ledger_categories_kind_idx").on(t.kind, t.sortOrder),
-    nameUniq: uniqueIndex("ledger_categories_kind_name_uniq").on(t.kind, t.name),
-  })
-);
-
-export const ledgerAssets = pgTable(
-  "ledger_assets",
-  {
-    id: serial("id").primaryKey(),
-    name: text("name").notNull(),
-    kind: text("kind").notNull().default("card"), // cash | bank | card
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (t) => ({ nameUniq: uniqueIndex("ledger_assets_name_uniq").on(t.name) })
-);
-
-/** 여행. 분류(무엇에 썼나)와 별개로 어느 여행의 지출인지 묶는다. */
-export const ledgerTrips = pgTable(
-  "ledger_trips",
-  {
-    id: serial("id").primaryKey(),
-    name: text("name").notNull(),
-    startDate: text("start_date").notNull(), // YYYY-MM-DD (KST)
-    endDate: text("end_date").notNull(), // YYYY-MM-DD (KST)
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (t) => ({ nameUniq: uniqueIndex("ledger_trips_name_uniq").on(t.name) })
-);
-
-/** 매달 같은 날 자동으로 내역을 만드는 규칙. lastDate까지 생성을 마쳤다는 뜻이다. */
-export const ledgerRecurring = pgTable("ledger_recurring", {
-  id: serial("id").primaryKey(),
-  kind: text("kind").notNull().default("expense"), // expense | income
-  amount: integer("amount").notNull(),
-  categoryId: integer("category_id").references(() => ledgerCategories.id, {
-    onDelete: "set null",
-  }),
-  memo: text("memo").notNull().default(""),
-  dayOfMonth: integer("day_of_month").notNull(),
-  startDate: text("start_date").notNull(), // YYYY-MM-DD (KST)
-  endDate: text("end_date"),
-  lastDate: text("last_date"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
-
-export const ledgerEntries = pgTable(
-  "ledger_entries",
-  {
-    id: serial("id").primaryKey(),
-    entryDate: text("entry_date").notNull(), // YYYY-MM-DD (KST)
-    entryTime: text("entry_time"), // HH:mm (KST), 모르면 null
-    kind: text("kind").notNull().default("expense"), // expense | income
-    amount: integer("amount").notNull(),
-    categoryId: integer("category_id").references(() => ledgerCategories.id, {
-      onDelete: "set null",
-    }),
-    assetId: integer("asset_id").references(() => ledgerAssets.id, {
-      onDelete: "set null",
-    }),
-    tripId: integer("trip_id").references(() => ledgerTrips.id, {
-      onDelete: "set null",
-    }),
-    recurringId: integer("recurring_id").references(() => ledgerRecurring.id, {
-      onDelete: "set null",
-    }),
-    memo: text("memo").notNull().default(""),
-    note: text("note").notNull().default(""), // 자세히 남기고 싶은 메모
-    tags: text("tags").notNull().default(""),
-    member: text("member").notNull().default("wonchan"), // wonchan | yeeun
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }), // null이면 살아 있는 기록
-  },
-  (t) => ({
-    dateIdx: index("ledger_entries_date_idx").on(t.entryDate),
-    memberIdx: index("ledger_entries_member_idx").on(t.member),
-    tripIdx: index("ledger_entries_trip_idx").on(t.tripId),
-    // 반복 규칙은 같은 날짜에 한 번만 내역을 만든다.
-    recurringDateUniq: uniqueIndex("ledger_entries_recurring_date_uniq").on(
-      t.recurringId,
-      t.entryDate
-    ),
-  })
-);
-
-/** 로그인 시도 기록. 비밀번호가 틀린 시도만 남고, 성공하면 지운다. */
-export const authLoginAttempts = pgTable(
-  "auth_login_attempts",
-  {
-    id: serial("id").primaryKey(),
-    ip: text("ip").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    createdIdx: index("auth_login_attempts_created_idx").on(t.createdAt),
-  })
-);
-
-/** 모임통장 한 개의 잔액 기준점. id=1 한 줄만 쓴다. */
-export const ledgerAccount = pgTable("ledger_account", {
-  id: integer("id").primaryKey().default(1),
-  openingBalance: integer("opening_balance").notNull().default(0),
-  checkedBalance: integer("checked_balance"),
-  checkedAt: timestamp("checked_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-/** 내역 변경 이력. 원본이 지워져도 남도록 FK를 걸지 않는다. */
-export const ledgerEntryHistory = pgTable(
-  "ledger_entry_history",
-  {
-    id: serial("id").primaryKey(),
-    entryId: integer("entry_id").notNull(),
-    action: text("action").notNull(), // create | update | delete | restore
-    source: text("source").notNull().default("web"), // web | agent
-    before: jsonb("before"),
-    after: jsonb("after"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    createdIdx: index("ledger_entry_history_created_idx").on(t.createdAt),
-  })
-);
-
-export const ledgerMonths = pgTable("ledger_months", {
-  month: text("month").primaryKey(), // YYYY-MM
-  totalBudget: integer("total_budget"),
-  note: text("note").notNull().default(""),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-export const ledgerBudgets = pgTable(
-  "ledger_budgets",
-  {
-    month: text("month").notNull(),
-    categoryId: integer("category_id")
-      .notNull()
-      .references(() => ledgerCategories.id, { onDelete: "cascade" }),
-    amount: integer("amount").notNull(),
-  },
-  (t) => ({ pk: primaryKey({ columns: [t.month, t.categoryId] }) })
-);
-
-/**
- * 주간·월간 리캡의 하치와레 코멘트. expense는 코멘트를 쓸 때의 지출 합계다.
- * weekStart는 리캡 키다: 주간은 월요일(YYYY-MM-DD), 월간은 달(YYYY-MM).
- */
-export const ledgerWeeklyComments = pgTable("ledger_weekly_comments", {
-  weekStart: text("week_start").primaryKey(), // 주간 YYYY-MM-DD(월요일) 또는 월간 YYYY-MM
-  expense: integer("expense").notNull(),
-  comment: text("comment"),
-  attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 /* ───────────────────────── 언론 모니터링 대시보드 ───────────────────────── */
 
 /**
- * 모니터링 고객사(예: 홍콩관광청). 카테고리·규칙·리포트 서식을 고객사마다 들고 있고,
+ * 모니터링 고객사(예: 어느 브랜드). 카테고리·규칙·리포트 서식을 고객사마다 들고 있고,
  * Hermes 모니터링 스킬은 수집 전에 이 행을 읽어 규칙을 적용한다.
  */
 export const monitorClients = pgTable(
   "monitor_clients",
   {
     id: serial("id").primaryKey(),
+    /** 이 고객사를 만든 사용자. 고객사·규칙·일정은 사용자마다 따로 둔다. */
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Hermes가 고객사를 찾는 키 — 전체에서 유일하다. */
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     /** [{ key, name, goal, subs? }] — 리포트 섹션 순서 그대로 */
@@ -322,7 +235,7 @@ export const monitorClients = pgTable(
     reportTitle: text("report_title").notNull().default(""),
     greeting: text("greeting").notNull().default(""),
     closing: text("closing").notNull().default(""),
-    /** 매일 정해진 시각에 하치와레가 자동으로 수집할지 */
+    /** 매일 정해진 시각에 AI가 자동으로 수집할지 */
     autoCollect: boolean("auto_collect").notNull().default(true),
     /** 수집 시작 시각(HH:mm, KST). 비우면 모니터링 기간이 끝나는 시각 */
     collectTime: text("collect_time"),
@@ -331,7 +244,10 @@ export const monitorClients = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
-  (t) => ({ slugUniq: uniqueIndex("monitor_clients_slug_uniq").on(t.slug) })
+  (t) => ({
+    slugUniq: uniqueIndex("monitor_clients_slug_uniq").on(t.slug),
+    userIdx: index("monitor_clients_user_idx").on(t.userId, t.sortOrder),
+  })
 );
 
 /** 한 번의 수집(보통 하루치). 리포트를 복사하면 reportedAt이 찍혀 다음 수집의 중복 기준이 된다. */
@@ -360,7 +276,7 @@ export const monitorRuns = pgTable(
     lastError: text("last_error"),
     /** 매일 자동 수집의 날짜(YYYY-MM-DD, KST). 같은 날 두 번 시작하지 않게 막는다. 수동 수집은 null. */
     collectKey: text("collect_key"),
-    /** 자동 수집 진행 — running → (실패 시 retried) → done. 재시도와 알림을 한 번만 하게 막는다. */
+    /** 자동 수집 진행 — running → (실패 시 retried) → done. 재시도를 한 번만 하게 막는다. */
     autoState: text("auto_state"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -429,9 +345,12 @@ export const monitorItems = pgTable(
   })
 );
 
-/** 위기·이슈 트래커(예: 모델 논란). 브랜드 언급을 감시하고 보고 시점마다 스냅샷을 쌓는다. */
+/** 위기·이슈 트래커(예: 제품 논란). 브랜드 언급을 감시하고 보고 시점마다 스냅샷을 쌓는다. */
 export const monitorIssues = pgTable("monitor_issues", {
   id: serial("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
   clientId: integer("client_id").references(() => monitorClients.id, {
     onDelete: "set null",
   }),
@@ -454,9 +373,9 @@ export const monitorIssues = pgTable("monitor_issues", {
   lastAutoSlot: text("last_auto_slot"),
   /** 자동 집계 진행 — running → (실패 시 retried) → done */
   autoState: text("auto_state"),
-  /** 보고 초안을 받는 사람(예: 김슬기 매니저님). 비우면 "담당 매니저님" */
+  /** 보고 초안을 받는 사람(예: 홍길동 매니저님). 비우면 "담당 매니저님" */
   reportRecipient: text("report_recipient").notNull().default(""),
-  /** 보고 초안 서식. 비우면 하치와레가 기본 형식으로 쓴다. */
+  /** 보고 초안 서식. 비우면 AI가 기본 형식으로 쓴다. */
   reportTemplate: text("report_template").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
@@ -480,7 +399,7 @@ export const monitorIssueSnapshots = pgTable(
     reportText: text("report_text"),
     /** 정기 보고(15시 등)인지, 중간 확인인지 */
     isReport: boolean("is_report").notNull().default(true),
-    /** 이 집계에 쓴 하치와레 작업량 { tokens, tools } */
+    /** 이 집계에 쓴 AI 작업량 { tokens, tools } */
     usage: jsonb("usage"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -510,88 +429,5 @@ export const monitorIssueArticles = pgTable(
       t.snapshotId,
       t.publishedAt
     ),
-  })
-);
-
-/* ───────────────────────── 데이트 장소 (하치와레 매일 조사) ───────────────────────── */
-
-/** 조사 조건 — 한 행(id = 1)만 쓴다. */
-export const dateSpotSettings = pgTable("date_spot_settings", {
-  id: integer("id").primaryKey(),
-  enabled: boolean("enabled").notNull().default(true),
-  /** 매일 조사를 시작하는 시각 (HH:mm, KST) */
-  collectTime: text("collect_time").notNull().default("09:00"),
-  /** 하루에 받을 장소 수 */
-  count: integer("count").notNull().default(5),
-  areas: text("areas")
-    .array()
-    .notNull()
-    .default(sql`ARRAY['서울']::text[]`),
-  themes: text("themes")
-    .array()
-    .notNull()
-    .default(sql`'{}'::text[]`),
-  /** 하치와레에게 따로 전할 말 (예: "웨이팅 긴 곳은 빼 줘") */
-  memo: text("memo").notNull().default(""),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-/** 하루치 조사. 매일 자동 조사와 "더 찾아 줘"가 같은 날짜 행에 장소를 쌓는다. */
-export const dateSpotDigests = pgTable("date_spot_digests", {
-  id: serial("id").primaryKey(),
-  /** YYYY-MM-DD (KST) */
-  dayKey: text("day_key").notNull().unique(),
-  /** 하치와레 한마디 */
-  note: text("note"),
-  pendingHermesRunId: text("pending_hermes_run_id"),
-  pendingSince: timestamp("pending_since", { withTimezone: true }),
-  callbackTokenHash: text("callback_token_hash"),
-  callbackTokenExpiresAt: timestamp("callback_token_expires_at", { withTimezone: true }),
-  lastError: text("last_error"),
-  /** 자동 조사 진행 — running → (실패 시 retried) → done */
-  autoState: text("auto_state"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
-
-export const dateSpots = pgTable(
-  "date_spots",
-  {
-    id: serial("id").primaryKey(),
-    digestId: integer("digest_id")
-      .notNull()
-      .references(() => dateSpotDigests.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    area: text("area").notNull().default(""),
-    category: text("category").notNull().default(""),
-    summary: text("summary").notNull().default(""),
-    reason: text("reason").notNull().default(""),
-    /** 근거가 된 인스타그램 게시물. 같은 게시물은 두 번 추천하지 않는다. */
-    instagramUrl: text("instagram_url").notNull().unique(),
-    instagramAuthor: text("instagram_author"),
-    postedAt: timestamp("posted_at", { withTimezone: true }),
-    address: text("address"),
-    priceHint: text("price_hint"),
-    tags: text("tags")
-      .array()
-      .notNull()
-      .default(sql`'{}'::text[]`),
-    /**
-     * 게시물 사진들(인스타그램 CDN 주소, 여러 장이면 게시물 순서대로 최대 10장).
-     * 주소가 4~5일 뒤 만료되므로 사진 파일은 저장하지 않고, 만료가 가까우면 공식 임베드에서 다시 읽는다.
-     */
-    photoUrls: text("photo_urls")
-      .array()
-      .notNull()
-      .default(sql`'{}'::text[]`),
-    /** 사진 주소 중 가장 먼저 만료되는 시각 */
-    photoExpiresAt: timestamp("photo_expires_at", { withTimezone: true }),
-    /** 마지막으로 사진을 찾아본 시각 — 사진이 없는 게시물을 계속 다시 찾지 않게 한다. */
-    photoCheckedAt: timestamp("photo_checked_at", { withTimezone: true }),
-    /** like(가 보고 싶어) | pass(별로) | visited(다녀왔어) — 다음 조사의 취향 힌트가 된다. */
-    reaction: text("reaction"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (t) => ({
-    digestIdx: index("date_spots_digest_idx").on(t.digestId),
   })
 );

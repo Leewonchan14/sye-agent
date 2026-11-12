@@ -1,1 +1,0 @@
-ALTER TABLE "monitor_issues" DROP COLUMN "collect_times";

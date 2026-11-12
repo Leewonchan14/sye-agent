@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { monitorErrorResponse, readJson } from "@/lib/monitor/api";
 import { startSetupDraft } from "@/lib/monitor/draft";
 
@@ -14,15 +14,15 @@ const bodySchema = z.object({
 
 /** 고객사 등록 — 평소 요청 문장으로 카테고리·규칙 초안을 만들게 한다. */
 export const POST = async (req: Request) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
   try {
     const { name, request } = bodySchema.parse(await readJson(req));
     return Response.json(
-      { runId: await startSetupDraft(name, request) },
+      { draftId: await startSetupDraft(user.id, name, request) },
       { status: 202 }
     );
   } catch (error) {
-    return monitorErrorResponse(error, "하치와레에게 초안을 맡기지 못했어요.");
+    return monitorErrorResponse(error, "에이전트에게 초안을 맡기지 못했어요.");
   }
 };

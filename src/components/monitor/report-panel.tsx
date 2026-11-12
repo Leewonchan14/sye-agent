@@ -103,19 +103,19 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-      <div className="min-w-0 rounded-xl border border-hairline bg-surface px-5 py-6 sm:px-8">
+      <div className="min-w-0 rounded-xl border border-border bg-card px-5 py-6 sm:px-8">
         <pre
           ref={preRef}
-          className="font-sans text-[14px] leading-7 [overflow-wrap:anywhere] break-keep whitespace-pre-wrap text-ink"
+          className="font-sans text-[14px] leading-7 [overflow-wrap:anywhere] break-keep whitespace-pre-wrap text-foreground"
         >
           {text}
         </pre>
       </div>
 
-      <aside className="flex flex-col gap-4 rounded-xl border border-hairline bg-canvas-soft p-4 lg:sticky lg:top-4">
-        <h3 className="text-sm font-medium text-ink">보내기 전에</h3>
+      <aside className="flex flex-col gap-4 rounded-xl border border-border bg-muted p-4 lg:sticky lg:top-4">
+        <h3 className="text-sm font-medium text-foreground">보내기 전에</h3>
         <div
-          className="inline-flex rounded-full bg-canvas-card p-1"
+          className="inline-flex rounded-full bg-muted p-1"
           role="radiogroup"
           aria-label="리포트 형식"
         >
@@ -127,8 +127,8 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
               aria-checked={format === f.id}
               onClick={() => setFormat(f.id)}
               className={cn(
-                "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-body",
-                format === f.id && "bg-surface text-ink ring-1 ring-hairline"
+                "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground",
+                format === f.id && "bg-card text-foreground ring-1 ring-border"
               )}
             >
               {f.label}
@@ -136,19 +136,19 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
           ))}
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[13px]">
-          <dt className="text-muted">포함 기사</dt>
+          <dt className="text-muted-foreground">포함 기사</dt>
           <dd className="text-right font-mono tabular-nums">{leads.length}건</dd>
           {client.categories
             .filter((c) => c.goal !== null)
             .map((c) => (
               <div key={c.key} className="contents">
-                <dt className="truncate text-muted">{c.name}</dt>
+                <dt className="truncate text-muted-foreground">{c.name}</dt>
                 <dd className="text-right font-mono tabular-nums">
                   {leads.filter((i) => i.category === c.key).length} / {c.goal}
                 </dd>
               </div>
             ))}
-          <dt className="text-muted">기자·시각 누락</dt>
+          <dt className="text-muted-foreground">기자·시각 누락</dt>
           <dd
             className={cn(
               "text-right font-mono text-success tabular-nums",
@@ -157,19 +157,19 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
           >
             {missing}건
           </dd>
-          <dt className="text-muted">부정 기사</dt>
+          <dt className="text-muted-foreground">부정 기사</dt>
           <dd
             className={cn(
-              "text-right font-mono text-muted tabular-nums",
-              negative > 0 && "text-error"
+              "text-right font-mono text-muted-foreground tabular-nums",
+              negative > 0 && "text-destructive"
             )}
           >
             {negative}건
           </dd>
-          <dt className="text-muted">중요 기사</dt>
+          <dt className="text-muted-foreground">중요 기사</dt>
           <dd
             className={cn(
-              "text-right font-mono text-muted tabular-nums",
+              "text-right font-mono text-muted-foreground tabular-nums",
               important > 0 && "text-warning"
             )}
           >
@@ -179,14 +179,14 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
         <Button onClick={copy} disabled={!leads.length}>
           <Copy /> 리포트 복사
         </Button>
-        <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
           {run.reportedAt ? (
             <>
               <p className="flex items-center gap-1.5 text-[13px] font-medium text-success">
                 <Check className="size-3.5" />
                 {kst(run.reportedAt).format("M월 D일 HH:mm")}에 보고 완료
               </p>
-              <p className="text-[12px] text-muted">{exclusionNote}</p>
+              <p className="text-[12px] text-muted-foreground">{exclusionNote}</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -198,7 +198,7 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
             </>
           ) : (
             <>
-              <p className="text-[12px] text-muted">
+              <p className="text-[12px] text-muted-foreground">
                 고객사에 보낸 뒤 눌러 주세요. {exclusionNote} 잘못 눌러도 되돌릴 수
                 있어요.
               </p>
@@ -212,7 +212,7 @@ export const ReportPanel = ({ client, run, items, mutations, onCopied }: Props) 
             </>
           )}
         </div>
-        <div className="border-t border-hairline pt-3">
+        <div className="border-t border-border pt-3">
           <Button
             variant="outline"
             size="sm"

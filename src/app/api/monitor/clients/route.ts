@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { createMonitorClient } from "@/lib/db/monitor";
 import { monitorErrorResponse, readJson } from "@/lib/monitor/api";
 import { startCollectNow } from "@/lib/monitor/daily-collect";
@@ -23,11 +23,11 @@ const bodySchema = z.object({
 });
 
 export const POST = async (req: Request) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
   try {
     const { collectNow, ...body } = bodySchema.parse(await readJson(req));
-    const client = await createMonitorClient(body);
+    const client = await createMonitorClient({ ...body, userId: user.id });
     let collectError: string | null = null;
     if (collectNow) {
       await startCollectNow(publicOrigin(req), client).catch((error: unknown) => {

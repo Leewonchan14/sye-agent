@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { getMonitorClientPayload, updateMonitorClient } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId, readJson } from "@/lib/monitor/api";
 import { reconcileRunPending } from "@/lib/monitor/hermes";
@@ -16,8 +16,8 @@ export const GET = async (
   req: Request,
   ctx: { params: Promise<{ clientId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const clientId = parseId((await ctx.params).clientId);
   if (!clientId)
@@ -25,10 +25,10 @@ export const GET = async (
   const runId = parseId(new URL(req.url).searchParams.get("runId")) ?? undefined;
 
   try {
-    let payload = await getMonitorClientPayload(clientId, runId);
+    let payload = await getMonitorClientPayload(user.id, clientId, runId);
     if (payload.run?.pendingSince) {
       await reconcileRunPending(payload.run.id);
-      payload = await getMonitorClientPayload(clientId, payload.run.id);
+      payload = await getMonitorClientPayload(user.id, clientId, payload.run.id);
     }
     return Response.json(payload);
   } catch (error) {
@@ -77,8 +77,8 @@ export const PATCH = async (
   req: Request,
   ctx: { params: Promise<{ clientId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const clientId = parseId((await ctx.params).clientId);
   if (!clientId)
@@ -86,7 +86,7 @@ export const PATCH = async (
 
   try {
     const patch = patchSchema.parse(await readJson(req));
-    const client = await updateMonitorClient(clientId, patch);
+    const client = await updateMonitorClient(user.id, clientId, patch);
     return Response.json({ client });
   } catch (error) {
     return monitorErrorResponse(error, "고객사 설정을 저장하지 못했어요.");

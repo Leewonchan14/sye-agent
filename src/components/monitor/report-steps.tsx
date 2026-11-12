@@ -32,7 +32,7 @@ export const ReportSteps = ({
     { label: "보고 완료", go: "report" },
   ];
   const hint = pending
-    ? "하치와레가 기사를 모으고 있어요. 끝나면 여기에 쌓여요."
+    ? "에이전트가 기사를 모으고 있어요. 끝나면 여기에 쌓여요."
     : failed
       ? "수집이 실패했어요. 아래 입력창으로 다시 요청할 수 있어요."
       : reported
@@ -56,18 +56,18 @@ export const ReportSteps = ({
                 aria-current={active ? "step" : undefined}
                 onClick={() => onGo(step.go)}
                 className={cn(
-                  "flex h-full w-full flex-col items-center gap-1 rounded-lg border border-hairline bg-surface px-1 py-2 text-[12px] text-muted transition-colors outline-none hover:bg-canvas-soft focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-row sm:justify-center sm:gap-1.5 sm:text-[13px]",
+                  "flex h-full w-full flex-col items-center gap-1 rounded-lg border border-border bg-card px-1 py-2 text-[12px] text-muted-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-row sm:justify-center sm:gap-1.5 sm:text-[13px]",
                   done && "text-success",
                   active &&
-                    "border-primary bg-primary/10 font-medium text-ink hover:bg-primary/10",
-                  active && failed && "border-error bg-error/10"
+                    "border-primary bg-primary/10 font-medium text-foreground hover:bg-primary/10",
+                  active && failed && "border-destructive bg-destructive/10"
                 )}
               >
                 <span
                   className={cn(
-                    "grid size-4 shrink-0 place-items-center rounded-full bg-canvas-strong text-[10px] tabular-nums",
+                    "grid size-4 shrink-0 place-items-center rounded-full bg-muted text-[10px] tabular-nums",
                     done && "bg-success/15",
-                    active && "bg-primary text-surface"
+                    active && "bg-primary text-card"
                   )}
                 >
                   {done ? <Check className="size-3" /> : i + 1}
@@ -78,7 +78,7 @@ export const ReportSteps = ({
           );
         })}
       </ol>
-      <p className="text-[13px] text-body" aria-live="polite">
+      <p className="text-[13px] text-foreground" aria-live="polite">
         {hint}
       </p>
     </nav>

@@ -31,8 +31,8 @@ export const Toaster = (props: ToasterProps) => (
         "--normal-text": "var(--popover-foreground)",
         "--normal-border": "var(--border)",
         "--error-bg": "var(--color-canvas-soft, var(--popover))",
-        "--error-text": "var(--color-error)",
-        "--error-border": "var(--color-error)",
+        "--error-text": "var(--destructive)",
+        "--error-border": "var(--destructive)",
         "--border-radius": "var(--radius)",
       } as React.CSSProperties
     }

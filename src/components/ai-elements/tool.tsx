@@ -6,10 +6,15 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { CheckCircleIcon, ChevronDownIcon, ClockIcon, XCircleIcon } from "lucide-react";
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  WrenchIcon,
+  XCircleIcon,
+} from "lucide-react";
 
 import { Spinner } from "@/components/ui/spinner";
 import type { ComponentProps, ReactNode } from "react";
@@ -46,23 +51,23 @@ export type ToolHeaderProps = {
 );
 
 const statusColors: Record<ToolPart["state"], string> = {
-  "approval-requested": "bg-[#b85d65]/10 text-[#b85d65]",
-  "approval-responded": "bg-[#7db8a0]/10 text-[#7db8a0]",
-  "input-available": "bg-[#d96c75]/10 text-[#d96c75]",
-  "input-streaming": "bg-[#d96c75]/10 text-[#d96c75]",
-  "output-available": "bg-[#7db8a0]/10 text-[#7db8a0]",
-  "output-denied": "bg-[#b85d65]/10 text-[#b85d65]",
-  "output-error": "bg-[#c64545]/10 text-[#c64545]",
+  "approval-requested": "bg-warning/10 text-warning",
+  "approval-responded": "bg-success/10 text-success",
+  "input-available": "bg-muted text-muted-foreground",
+  "input-streaming": "bg-muted text-muted-foreground",
+  "output-available": "bg-success/10 text-success",
+  "output-denied": "bg-destructive/10 text-destructive",
+  "output-error": "bg-destructive/10 text-destructive",
 };
 
 const statusLabels: Record<ToolPart["state"], string> = {
   "approval-requested": "기다리는 중",
-  "approval-responded": "왔어…!",
-  "input-available": "하는 중…!",
-  "input-streaming": "준비 중…!",
-  "output-available": "다 했어…!",
-  "output-denied": "안 된대…",
-  "output-error": "앗…!",
+  "approval-responded": "승인됨",
+  "input-available": "실행 중",
+  "input-streaming": "준비 중",
+  "output-available": "완료",
+  "output-denied": "거부됨",
+  "output-error": "오류",
 };
 
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
@@ -79,7 +84,7 @@ const toolNameKoreanMap: Record<string, string> = {
   /* SDK types */
   invoke: "시키기",
   result: "결과",
-  /* Hermes(hachi) 도구 */
+  /* Hermes 도구 */
   terminal: "터미널",
   browser_exec: "브라우저 실행",
   skill_view: "스킬 보기",
@@ -139,31 +144,16 @@ export const ToolHeader = ({
       {...props}
     >
       <div className="flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger render={<span className="inline-flex" />}>
-            <img
-              src="/munjackgui-thinking.png"
-              alt=""
-              className="size-7 rounded-full object-cover"
-            />
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={8} align="start">
-            <img
-              src="/munjackgui-thinking.png"
-              alt=""
-              className="w-36 rounded-md bg-background object-cover"
-            />
-          </TooltipContent>
-        </Tooltip>
+        <WrenchIcon className="size-4 text-muted-foreground" />
         <span className="text-sm font-medium text-foreground">
-          {title ?? derivedName}…!
+          {title ?? derivedName}
         </span>
         <Badge className={cn("gap-1 rounded-full text-xs", statusColors[state])}>
           {statusIcons[state]}
           {statusLabels[state]}
         </Badge>
       </div>
-      <ChevronDownIcon className="size-4 text-[#b85d65] transition-transform group-data-[state=open]:rotate-180" />
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
   );
 };
@@ -187,7 +177,7 @@ export type ToolInputProps = ComponentProps<"div"> & {
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
   <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
     <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-      시킨 일이야…!
+      입력
     </h4>
     <div className="overflow-hidden rounded-md bg-accent">
       <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
@@ -221,7 +211,7 @@ export const ToolOutput = ({
   return (
     <div className={cn("space-y-2", className)} {...props}>
       <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {errorText ? "에구…!" : "결과야…!"}
+        {errorText ? "오류" : "결과"}
       </h4>
       <div
         className={cn(

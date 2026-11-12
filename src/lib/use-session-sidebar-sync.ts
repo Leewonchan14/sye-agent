@@ -8,26 +8,19 @@ import type { UIMessage } from "ai";
 
 interface UseSessionSidebarSyncOptions {
   sessionId: string;
-  token: string;
 }
 
 /**
  * useMutation that saves session state (with snapshot + rollback + invalidation).
  */
-export const useSessionSidebarSync = ({
-  sessionId,
-  token,
-}: UseSessionSidebarSyncOptions) => {
+export const useSessionSidebarSync = ({ sessionId }: UseSessionSidebarSyncOptions) => {
   const queryClient = useQueryClient();
 
   const saveSessionMutation = useMutation({
     mutationFn: async (messages: UIMessage[]) => {
       const r = await fetch("/api/sessions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-auth-token": token,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, messages }),
       });
       if (!r.ok) throw new Error("Failed to save session state");

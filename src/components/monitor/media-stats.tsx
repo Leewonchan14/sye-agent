@@ -46,10 +46,10 @@ const PAGE = 10;
 
 /** 논조 막대의 순서와 색 — 부정을 맨 앞에 둬 바로 눈에 띄게 한다. */
 const SENTIMENT_BAR: { key: keyof SentimentCounts; label: string; tone: string }[] = [
-  { key: "negative", label: SENTIMENT_LABEL.negative, tone: "bg-error" },
-  { key: "neutral", label: SENTIMENT_LABEL.neutral, tone: "bg-muted-soft" },
+  { key: "negative", label: SENTIMENT_LABEL.negative, tone: "bg-destructive" },
+  { key: "neutral", label: SENTIMENT_LABEL.neutral, tone: "bg-muted-foreground" },
   { key: "positive", label: SENTIMENT_LABEL.positive, tone: "bg-success" },
-  { key: "unknown", label: "미분류", tone: "bg-canvas-strong" },
+  { key: "unknown", label: "미분류", tone: "bg-muted" },
 ];
 
 const lastLabel = (iso: string | null) => (iso ? kst(iso).format("M.D") : "—");
@@ -69,8 +69,8 @@ const Chip = ({
     aria-checked={active}
     onClick={onClick}
     className={cn(
-      "rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap text-muted transition-colors hover:text-body",
-      active && "bg-surface text-ink ring-1 ring-hairline"
+      "rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground",
+      active && "bg-card text-foreground ring-1 ring-border"
     )}
   >
     {children}
@@ -88,12 +88,14 @@ const Tile = ({
   note?: string;
   tone?: string;
 }) => (
-  <div className="flex flex-col gap-0.5 rounded-xl border border-hairline bg-surface px-4 py-3">
-    <span className="text-[12px] text-muted">{label}</span>
-    <span className={cn("font-mono text-2xl font-medium text-ink tabular-nums", tone)}>
+  <div className="flex flex-col gap-0.5 rounded-xl border border-border bg-card px-4 py-3">
+    <span className="text-[12px] text-muted-foreground">{label}</span>
+    <span
+      className={cn("font-mono text-2xl font-medium text-foreground tabular-nums", tone)}
+    >
       {value.toLocaleString()}
     </span>
-    {note && <span className="text-[12px] text-muted">{note}</span>}
+    {note && <span className="text-[12px] text-muted-foreground">{note}</span>}
   </div>
 );
 
@@ -117,12 +119,14 @@ const SentimentBar = ({ counts }: { counts: SentimentCounts }) => {
           />
         ))}
       </div>
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
         {SENTIMENT_BAR.map((p) => (
           <li key={p.key} className="inline-flex items-center gap-1.5">
             <span className={cn("size-2 rounded-full", p.tone)} aria-hidden />
             {p.label}
-            <b className="font-mono font-medium text-ink tabular-nums">{counts[p.key]}</b>
+            <b className="font-mono font-medium text-foreground tabular-nums">
+              {counts[p.key]}
+            </b>
           </li>
         ))}
       </ul>
@@ -140,19 +144,19 @@ const CountBar = ({
   negative: number;
 }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
-    <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-canvas-card">
+    <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
       <span
         className="absolute inset-y-0 left-0 rounded-full bg-primary"
         style={{ width: `${(count / max) * 100}%` }}
       />
     </span>
-    <span className="w-8 text-right font-mono text-[13px] text-ink tabular-nums">
+    <span className="w-8 text-right font-mono text-[13px] text-foreground tabular-nums">
       {count}
     </span>
     <span
       className={cn(
-        "w-10 text-right font-mono text-[12px] text-muted-soft tabular-nums",
-        negative > 0 && "text-error"
+        "w-10 text-right font-mono text-[12px] text-muted-foreground tabular-nums",
+        negative > 0 && "text-destructive"
       )}
       title="부정 기사"
     >
@@ -182,7 +186,7 @@ const LoadMoreSentinel = ({
       className="flex justify-center py-2"
       aria-hidden
     >
-      <Spinner className="size-4 text-muted-soft" />
+      <Spinner className="size-4 text-muted-foreground" />
     </InView>
   ) : null;
 
@@ -199,28 +203,30 @@ const MediaTable = ({
     <section className="flex flex-col gap-2" aria-labelledby="stats-media">
       <h3
         id="stats-media"
-        className="flex items-center gap-1.5 text-sm font-medium text-ink"
+        className="flex items-center gap-1.5 text-sm font-medium text-foreground"
       >
         <Newspaper className="size-4 text-primary" /> 매체별 노출
-        <span className="font-mono text-[12px] font-normal text-muted">
+        <span className="font-mono text-[12px] font-normal text-muted-foreground">
           {media.length}곳
         </span>
       </h3>
-      <ol className="overflow-hidden rounded-xl border border-hairline bg-surface">
+      <ol className="overflow-hidden rounded-xl border border-border bg-card">
         {media.slice(0, limit).map((m, i) => (
           <li
             key={m.media}
-            className="grid grid-cols-[20px_minmax(0,7.5rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-t border-hairline/60 px-4 py-2.5 first:border-t-0"
+            className="grid grid-cols-[20px_minmax(0,7.5rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-t border-border/60 px-4 py-2.5 first:border-t-0"
             title={m.categories
               .map((c) => `${categoryName(c.key)} ${c.count}`)
               .join(" · ")}
           >
-            <span className="font-mono text-[12px] text-muted-soft tabular-nums">
+            <span className="font-mono text-[12px] text-muted-foreground tabular-nums">
               {i + 1}
             </span>
-            <span className="truncate text-[14px] font-medium text-ink">{m.media}</span>
+            <span className="truncate text-[14px] font-medium text-foreground">
+              {m.media}
+            </span>
             <CountBar count={m.count} max={max} negative={m.sentiment.negative} />
-            <span className="col-start-2 col-end-4 text-[12px] text-muted">
+            <span className="col-start-2 col-end-4 text-[12px] text-muted-foreground">
               기자 {m.reporters}명 · 최근 {lastLabel(m.lastAt)}
             </span>
           </li>
@@ -248,15 +254,17 @@ const ReporterRow = ({
 }) => {
   const [open, setOpen] = useState(false);
   return (
-    <li className="border-t border-hairline/60 first:border-t-0">
+    <li className="border-t border-border/60 first:border-t-0">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="grid w-full grid-cols-[20px_minmax(0,7.5rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 px-4 py-2.5 text-left hover:bg-canvas-soft"
+        className="grid w-full grid-cols-[20px_minmax(0,7.5rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 px-4 py-2.5 text-left hover:bg-muted"
       >
-        <span className="font-mono text-[12px] text-muted-soft tabular-nums">{rank}</span>
-        <span className="flex min-w-0 items-center gap-1 text-[14px] font-medium text-ink">
+        <span className="font-mono text-[12px] text-muted-foreground tabular-nums">
+          {rank}
+        </span>
+        <span className="flex min-w-0 items-center gap-1 text-[14px] font-medium text-foreground">
           <ChevronRight
             className={cn(
               "size-3.5 shrink-0 text-primary transition-transform",
@@ -270,34 +278,34 @@ const ReporterRow = ({
           max={max}
           negative={reporter.sentiment.negative}
         />
-        <span className="col-start-2 col-end-4 truncate text-[12px] text-muted">
+        <span className="col-start-2 col-end-4 truncate text-[12px] text-muted-foreground">
           {reporter.media} ·{" "}
           {reporter.categories.map((c) => categoryName(c.key)).join(", ")} · 최근{" "}
           {lastLabel(reporter.lastAt)}
         </span>
       </button>
       {open && (
-        <ul className="grid gap-1.5 bg-canvas-soft px-4 py-3 pl-11">
+        <ul className="grid gap-1.5 bg-muted px-4 py-3 pl-11">
           {reporter.articles.map((a) => (
             <li key={a.url} className="flex min-w-0 items-baseline gap-2 text-[13px]">
-              <span className="shrink-0 font-mono text-[12px] text-muted tabular-nums">
+              <span className="shrink-0 font-mono text-[12px] text-muted-foreground tabular-nums">
                 {a.publishedAt ? kst(a.publishedAt).format("MM.DD") : "—"}
               </span>
               <a
                 href={a.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="min-w-0 truncate text-body hover:underline"
+                className="min-w-0 truncate text-foreground hover:underline"
                 title={a.title}
               >
                 {a.title}
               </a>
-              <ExternalLink className="size-3 shrink-0 text-muted-soft" />
+              <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
               <SentimentPill sentiment={a.sentiment} hideNeutral />
             </li>
           ))}
           {reporter.count > reporter.articles.length && (
-            <li className="text-[12px] text-muted">
+            <li className="text-[12px] text-muted-foreground">
               외 {reporter.count - reporter.articles.length}건
             </li>
           )}
@@ -322,15 +330,15 @@ const ReporterTable = ({
     <section className="flex flex-col gap-2" aria-labelledby="stats-reporters">
       <h3
         id="stats-reporters"
-        className="flex items-center gap-1.5 text-sm font-medium text-ink"
+        className="flex items-center gap-1.5 text-sm font-medium text-foreground"
       >
         <UserRound className="size-4 text-primary" /> 기자별 보도
-        <span className="font-mono text-[12px] font-normal text-muted">
+        <span className="font-mono text-[12px] font-normal text-muted-foreground">
           {reporters.length}명
         </span>
       </h3>
       {reporters.length ? (
-        <ol className="overflow-hidden rounded-xl border border-hairline bg-surface">
+        <ol className="overflow-hidden rounded-xl border border-border bg-card">
           {reporters.slice(0, limit).map((r, i) => (
             <ReporterRow
               key={`${r.reporter}-${r.media}`}
@@ -342,7 +350,7 @@ const ReporterTable = ({
           ))}
         </ol>
       ) : (
-        <p className="rounded-xl border border-dashed border-hairline px-4 py-6 text-center text-sm text-muted">
+        <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
           기자를 확인한 기사가 없어요.
         </p>
       )}
@@ -352,7 +360,7 @@ const ReporterTable = ({
         onMore={() => setLimit((l) => l + PAGE)}
       />
       {noReporter > 0 && (
-        <p className="text-[12px] text-muted">
+        <p className="text-[12px] text-muted-foreground">
           기자를 확인하지 못한 기사 {noReporter}건은 빠져 있어요.
         </p>
       )}
@@ -389,7 +397,7 @@ export const MediaStats = ({ client }: { client: MonitorClientView }) => {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2">
         <div
-          className="inline-flex rounded-full bg-canvas-card p-1"
+          className="inline-flex rounded-full bg-muted p-1"
           role="radiogroup"
           aria-label="기간"
         >
@@ -400,7 +408,7 @@ export const MediaStats = ({ client }: { client: MonitorClientView }) => {
           ))}
         </div>
         <div
-          className="inline-flex rounded-full bg-canvas-card p-1"
+          className="inline-flex rounded-full bg-muted p-1"
           role="radiogroup"
           aria-label="집계 범위"
         >
@@ -428,7 +436,7 @@ export const MediaStats = ({ client }: { client: MonitorClientView }) => {
         </Select>
         {isPlaceholderData && <Spinner className="size-4" />}
       </div>
-      <p className="-mt-3 text-[12px] text-muted">
+      <p className="-mt-3 text-[12px] text-muted-foreground">
         {SCOPES.find((s) => s.id === scope)?.hint} 같은 기사가 여러 날 나와도 한 번만
         세요.
       </p>
@@ -438,11 +446,11 @@ export const MediaStats = ({ client }: { client: MonitorClientView }) => {
           <Spinner />
         </div>
       ) : error || !data ? (
-        <p className="py-10 text-center text-sm text-error">
+        <p className="py-10 text-center text-sm text-destructive">
           {error?.message ?? "통계를 불러오지 못했어요."}
         </p>
       ) : !data.totals.articles ? (
-        <p className="rounded-xl border border-dashed border-hairline px-6 py-14 text-center text-sm text-muted">
+        <p className="rounded-xl border border-dashed border-border px-6 py-14 text-center text-sm text-muted-foreground">
           최근 {data.days}일 동안 집계할 기사가 없어요.
           {scope === "included" && " 'AI가 고른 후보 전체'로 바꿔 보세요."}
         </p>
@@ -465,7 +473,7 @@ export const MediaStats = ({ client }: { client: MonitorClientView }) => {
               label="부정 기사"
               value={data.totals.sentiment.negative}
               note={`전체의 ${Math.round((data.totals.sentiment.negative / data.totals.articles) * 100)}%`}
-              tone={data.totals.sentiment.negative > 0 ? "text-error" : undefined}
+              tone={data.totals.sentiment.negative > 0 ? "text-destructive" : undefined}
             />
           </div>
           <SentimentBar counts={data.totals.sentiment} />

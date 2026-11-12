@@ -65,7 +65,7 @@ export const asImportance = (
   value: string | null | undefined
 ): MonitorImportance | null => IMPORTANCES.find((s) => s === value) ?? null;
 
-/** 하치와레 작업량 — tokens는 캐시를 뺀 입력 + 출력 */
+/** 에이전트 작업량 — tokens는 캐시를 뺀 입력 + 출력 */
 export interface MonitorUsage {
   tokens: number;
   tools: number;
@@ -74,7 +74,7 @@ export interface MonitorUsage {
 export interface MonitorRunStats {
   sources?: { name: string; count: number }[];
   blocked?: string[];
-  /** 하치와레가 적어 보낸 값 — 정확하지 않아 화면에 쓰지 않는다. */
+  /** 에이전트가 적어 보낸 값 — 정확하지 않아 화면에 쓰지 않는다. */
   durationSec?: number;
   /** 앱이 잰 수집 소요 시간(시작 ~ 결과 수신) */
   measuredSec?: number;
@@ -314,7 +314,7 @@ export const agentRunSchema = z
     items: z.array(agentItemSchema).max(500),
     /**
      * 결과를 여러 번 나눠 보낼 때 마지막이 아닌 묶음은 false.
-     * 생략하면 마지막 묶음으로 보고 대기 상태를 푼다(화면 갱신·완료 알림이 이때 일어난다).
+     * 생략하면 마지막 묶음으로 보고 대기 상태를 푼다(화면 갱신이 이때 일어난다).
      */
     final: z.boolean().optional(),
   })

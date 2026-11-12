@@ -158,10 +158,7 @@ export const ClientWizard = ({
             {STEPS.map((label, i) => (
               <span
                 key={label}
-                className={cn(
-                  "h-1 rounded-full bg-canvas-strong",
-                  i <= step && "bg-primary"
-                )}
+                className={cn("h-1 rounded-full bg-muted", i <= step && "bg-primary")}
               />
             ))}
           </div>
@@ -178,22 +175,22 @@ export const ClientWizard = ({
           }}
         >
           {step === 0 && (
-            <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+            <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
               고객사 이름
               <Input
                 autoFocus
                 value={name}
                 maxLength={40}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="예: 홍콩관광청"
+                placeholder="예: 예시 브랜드"
               />
             </label>
           )}
 
           {step === 1 && (
             <>
-              <label className="flex flex-col gap-1.5 text-[13px] text-muted">
-                평소 하치와레에게 하던 요청 (선택)
+              <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
+                평소 모니터링을 맡길 때 하던 요청 (선택)
                 <Textarea
                   rows={3}
                   maxLength={MAX_REQUEST}
@@ -201,8 +198,8 @@ export const ClientWizard = ({
                   onChange={(e) => setRequest(e.target.value)}
                   placeholder="예: 전일 오전 9시부터 지금까지 게재된 기사를 카테고리별로 찾아줘"
                 />
-                <span className="text-xs text-muted-soft">
-                  적어 두면 수집할 때마다 하치와레가 이 요청을 함께 읽어요.
+                <span className="text-xs text-muted-foreground">
+                  적어 두면 수집할 때마다 에이전트가 이 요청을 함께 읽어요.
                 </span>
               </label>
               <div>
@@ -214,17 +211,19 @@ export const ClientWizard = ({
                   onClick={() =>
                     startDraft.mutate(
                       { name: trimmedName, request: request.trim() },
-                      { onSuccess: ({ runId }) => setDraftRunId(runId) }
+                      { onSuccess: ({ draftId }) => setDraftRunId(draftId) }
                     )
                   }
                 >
                   {drafting ? <Spinner className="size-3.5" /> : <Sparkles />}
-                  {drafting ? "하치와레가 초안을 만드는 중" : "하치와레에게 초안 받기"}
+                  {drafting ? "AI가 초안을 만드는 중" : "AI로 초안 받기"}
                 </Button>
-                {draftError && <p className="mt-1.5 text-xs text-error">{draftError}</p>}
+                {draftError && (
+                  <p className="mt-1.5 text-xs text-destructive">{draftError}</p>
+                )}
               </div>
 
-              <div className="flex flex-col gap-2 text-[13px] text-muted">
+              <div className="flex flex-col gap-2 text-[13px] text-muted-foreground">
                 기사를 나눌 카테고리
                 {categories.map((c) => (
                   <div key={c.id} className="flex items-center gap-2">
@@ -271,11 +270,11 @@ export const ClientWizard = ({
                   </div>
                 ))}
                 {duplicate && (
-                  <span className="text-xs text-error">
+                  <span className="text-xs text-destructive">
                     같은 이름의 카테고리가 있어요.
                   </span>
                 )}
-                <span className="text-xs text-muted-soft">
+                <span className="text-xs text-muted-foreground">
                   오른쪽 칸은 최소 건수예요. 비우면 찾은 기사를 모두 담아요.
                 </span>
                 <div>
@@ -295,7 +294,7 @@ export const ClientWizard = ({
 
           {step === 2 && (
             <>
-              <div className="flex flex-col gap-1.5 text-[13px] text-muted">
+              <div className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
                 기사를 모을 기간
                 <PeriodPicker
                   value={period}
@@ -303,14 +302,14 @@ export const ClientWizard = ({
                   onChange={setPeriod}
                   className="w-full"
                 />
-                <span className="text-xs text-muted-soft">
+                <span className="text-xs text-muted-foreground">
                   매일 {endTime}에 이 기간의 기사를 모아요. 시각은 등록 후 바꿀 수 있어요.
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-4 text-[13px] text-muted">
+              <div className="flex items-center justify-between gap-4 text-[13px] text-muted-foreground">
                 <span>
                   평일만 수집
-                  <span className="block text-xs text-muted-soft">
+                  <span className="block text-xs text-muted-foreground">
                     토·일은 쉬고, 월요일에 금요일부터 모아요.
                   </span>
                 </span>
@@ -320,10 +319,10 @@ export const ClientWizard = ({
                   onChange={setWeekdays}
                 />
               </div>
-              <div className="flex items-center justify-between gap-4 text-[13px] text-muted">
+              <div className="flex items-center justify-between gap-4 text-[13px] text-muted-foreground">
                 <span>
                   등록하고 바로 한 번 수집
-                  <span className="block text-xs text-muted-soft">
+                  <span className="block text-xs text-muted-foreground">
                     몇 분 뒤 첫 결과를 볼 수 있어요.
                   </span>
                 </span>

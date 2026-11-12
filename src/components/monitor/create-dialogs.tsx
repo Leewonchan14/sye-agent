@@ -82,15 +82,15 @@ export const CreateIssueDialog = ({
             );
           }}
         >
-          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             이슈 이름
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="차예련 학폭 의혹"
+              placeholder="예: 신제품 리콜 이슈"
             />
           </label>
-          <div className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <div className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             관련 고객사
             <Select
               items={clientItems}
@@ -109,20 +109,20 @@ export const CreateIssueDialog = ({
               </SelectContent>
             </Select>
           </div>
-          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             검색어 (쉼표로 구분)
             <Input
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="차예련 학폭, 85년생 여배우 학폭"
+              placeholder="예: 제품명 리콜, 제품명 결함"
             />
           </label>
-          <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+          <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
             감시할 브랜드 단어 (쉼표로 구분)
             <Input
               value={brandTerms}
               onChange={(e) => setBrandTerms(e.target.value)}
-              placeholder="파나소닉, 나노케어, 드라이어 앰버서더"
+              placeholder="예: 브랜드명, 대표 제품명"
             />
           </label>
         </form>

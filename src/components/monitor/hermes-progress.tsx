@@ -20,7 +20,7 @@ const formatElapsed = (ms: number) => {
   return minutes ? `${minutes}분 ${seconds}초` : `${seconds}초`;
 };
 
-/** 하치와레가 언제 시작했고 어디까지 왔는지. pending이 바뀌면 key로 새로 시작한다. */
+/** 에이전트가 언제 시작했고 어디까지 왔는지. pending이 바뀌면 key로 새로 시작한다. */
 export const HermesProgress = ({
   kind,
   id,
@@ -51,16 +51,16 @@ export const HermesProgress = ({
 
   return (
     <section
-      aria-label="하치와레 진행 상황"
-      className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-surface px-4 py-3.5"
+      aria-label="에이전트 진행 상황"
+      className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-card px-4 py-3.5"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <p className="inline-flex items-center gap-2 text-sm font-medium text-ink">
+        <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
           <Spinner className="size-3.5 text-primary" /> {title}
         </p>
-        <p className="text-[13px] text-muted tabular-nums">
+        <p className="text-[13px] text-muted-foreground tabular-nums">
           {kst(since).format("HH:mm")} 시작 ·{" "}
-          <span className="text-ink">
+          <span className="text-foreground">
             {formatElapsed(now - new Date(since).valueOf())}
           </span>{" "}
           경과
@@ -71,15 +71,15 @@ export const HermesProgress = ({
           <li key={stage} aria-current={i === reached ? "step" : undefined}>
             <span
               className={cn(
-                "block h-1.5 rounded-full bg-canvas-strong",
+                "block h-1.5 rounded-full bg-muted",
                 i <= reached && progress && "bg-primary",
                 i === reached && progress && "animate-pulse"
               )}
             />
             <span
               className={cn(
-                "mt-1 block text-[11px] text-muted-soft",
-                i === reached && progress && "font-medium text-ink"
+                "mt-1 block text-[11px] text-muted-foreground",
+                i === reached && progress && "font-medium text-foreground"
               )}
             >
               {stage}
@@ -87,18 +87,18 @@ export const HermesProgress = ({
           </li>
         ))}
       </ol>
-      <p className="text-[13px] text-body">
+      <p className="text-[13px] text-foreground">
         {progress ? (
           <>
-            지금: <span className="text-ink">{progress.activity}</span>
-            <span className="text-muted tabular-nums">
+            지금: <span className="text-foreground">{progress.activity}</span>
+            <span className="text-muted-foreground tabular-nums">
               {" "}
               · 작업 {progress.steps}번째
               {lastAt !== null && ` · ${formatElapsed(now - lastAt)} 전 활동`}
             </span>
           </>
         ) : (
-          <span className="text-muted">진행 상황을 불러오는 중이에요.</span>
+          <span className="text-muted-foreground">진행 상황을 불러오는 중이에요.</span>
         )}
       </p>
       {quiet && (

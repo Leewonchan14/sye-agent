@@ -1,8 +1,9 @@
 import type { UIMessage } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { getActiveInstructions } from "@/lib/db/instructions";
+import { claimSession, SessionAccessError } from "@/lib/db/session";
 import { pruneChatTurns, startChatTurn } from "@/lib/db/turn";
 import { agentErrorMessage } from "@/lib/error-text";
 import { ensureHermesSession } from "@/lib/hermes/client";
@@ -13,8 +14,6 @@ import {
 } from "@/lib/hermes/config";
 import { startHermesRun } from "@/lib/hermes/run-client";
 import { runTurnStream } from "@/lib/hermes/turn-stream";
-import { buildLedgerAgentInstructions } from "@/lib/ledger/agent";
-import { publicOrigin } from "@/lib/monitor/origin";
 import { extractMessageText } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -31,11 +30,11 @@ const softDeadlineMs = Number(process.env.CHAT_SOFT_DEADLINE_MS ?? 240_000);
  * DB의 활성 사용자 지시 사항(+선택 env 문구)을 `instructions`로 만든다.
  * Hermes는 이 값을 프로필 기본 프롬프트(SOUL) 위에 덧입힌다.
  */
-const buildInstructions = async (req: Request): Promise<string | undefined> => {
+const buildInstructions = async (userId: string): Promise<string | undefined> => {
   const sections: string[] = [];
 
   try {
-    const activeList = await getActiveInstructions();
+    const activeList = await getActiveInstructions(userId);
     const userPart = activeList
       .map((instruction) => `[${instruction.label}]\n${instruction.content}`)
       .join("\n\n---\n\n");
@@ -48,21 +47,18 @@ const buildInstructions = async (req: Request): Promise<string | undefined> => {
   const extra = (process.env.HERMES_SYSTEM_MESSAGE ?? "").trim();
   if (extra) sections.push(extra);
 
-  const ledger = buildLedgerAgentInstructions(publicOrigin(req));
-  if (ledger) sections.push(ledger);
-
   return sections.length > 0 ? sections.join("\n\n") : undefined;
 };
 
 /**
- * 채팅 백엔드 — Hermes Agent(hachi 프로필)의 **디태치 런**(`/v1/runs`)으로 턴을 돌린다.
+ * 채팅 백엔드 — Hermes Agent의 **디태치 런**(`/v1/runs`)으로 턴을 돌린다.
  *
  * 턴은 Vercel 함수 수명과 분리돼 있다: 함수가 죽어도 런은 계속되고, 브라우저는 커서를 들고
  * 재개 라우트로 이어받는다(자세한 흐름은 `turn-stream.ts` 주석 참고).
  */
 export const POST = async (req: Request) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const missing = missingHermesEnv();
   if (missing.length > 0) {
@@ -100,7 +96,17 @@ export const POST = async (req: Request) => {
   const userText = extractMessageText(lastMessage).trim();
   if (!userText) throw new Error("보낼 사용자 메시지가 비어 있어요.");
 
-  const config = getHermesConfig();
+  // 세션을 이 사용자에게 묶는다 — 다른 사용자의 세션 ID로는 이어 쓸 수 없다.
+  try {
+    await claimSession(user.id, sessionId);
+  } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return Response.json({ error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
+
+  const config = getHermesConfig(user.id);
   const hermesSessionId = toHermesSessionId(config, sessionId);
 
   // 오래된 턴 로그 청소 (best-effort) — 대화 흐름을 막지 않는다.
@@ -109,7 +115,7 @@ export const POST = async (req: Request) => {
   const stream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      const instructions = await buildInstructions(req);
+      const instructions = await buildInstructions(user.id);
       await ensureHermesSession(config, hermesSessionId, userText);
 
       const hermesRunId = await startHermesRun(config, {

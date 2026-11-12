@@ -6,7 +6,6 @@ import {
   countRunLeads,
   createCollectNowRun,
   getIssueRow,
-  getLatestSnapshot,
   getRunRow,
   listActiveAutoRuns,
   listAutoCollectClients,
@@ -33,7 +32,7 @@ import {
 } from "@/lib/monitor/schedule";
 import type { MonitorClientView } from "@/lib/monitor/types";
 
-/** 하치와레에게 넘기지 못했을 때 다시 확인하는 간격 */
+/** 에이전트에게 넘기지 못했을 때 다시 확인하는 간격 */
 const RETRY_MS = 5 * 60 * 1000;
 /** 대시보드에서 바꾼 시각을 놓치지 않도록 다음 시각이 멀어도 이 간격마다 확인한다. */
 const MAX_CHECK_MS = 30 * 60 * 1000;
@@ -41,7 +40,7 @@ const MAX_CHECK_MS = 30 * 60 * 1000;
 const ACTIVE_CHECK_MS = 90 * 1000;
 /** 콜백 토큰 유효 시간과 같다. 이보다 오래 끝나지 않으면 실패로 본다. */
 const STALE_MS = 3 * 60 * 60 * 1000;
-const STALE_ERROR = "하치와레가 3시간 안에 결과를 보내지 않았어요.";
+const STALE_ERROR = "에이전트가 3시간 안에 결과를 보내지 않았어요.";
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -94,22 +93,17 @@ const startIssue = (origin: string, { issue, lastReportAt }: AutoIssue) =>
   });
 
 /**
- * Oracle 스크립트가 부르는 "할 일 있어?" 처리.
- * 고객사는 정한 시각에, 감시 중인 이슈는 시작 시각과 간격대로 하치와레에게 맡긴다.
- * 끝난 자동 작업은 결과가 없으면 한 번 다시 시도하고, 완료·실패를 notifications로 돌려준다.
+ * 예약 스크립트가 부르는 "할 일 있어?" 처리 — 모든 사용자의 고객사·이슈를 본다.
+ * 고객사는 정한 시각에, 감시 중인 이슈는 시작 시각과 간격대로 에이전트에게 맡긴다.
+ * Hermes 장기 기억은 hermes.ts가 고객사·이슈 소유자 범위로 나눈다.
+ * 끝난 자동 작업은 결과가 없으면 한 번 다시 시도한다. 결과는 대시보드에서만 보여 주고 따로 알리지 않는다.
  * 스크립트는 nextCheckAt까지 호출하지 않으므로 1분 주기로 돌아도 DB가 깨지 않는다.
  */
-export const runDailyCollectTick = async (
-  origin: string,
-  now = kst(),
-  siteOrigin = origin
-) => {
+export const runDailyCollectTick = async (origin: string, now = kst()) => {
   const collectKey = now.format("YYYY-MM-DD");
-  const monitorUrl = `${siteOrigin}/monitor`;
   const started: string[] = [];
   const failed: { client: string; error: string }[] = [];
   const upcoming: number[] = [];
-  const notifications: string[] = [];
   let active = false;
 
   /* 돌고 있던 자동 수집 마무리 */
@@ -136,28 +130,18 @@ export const runDailyCollectTick = async (
           started.push(`retry:${client.slug}`);
           active = true;
           continue;
-        } catch (error) {
+        } catch {
           await advanceRunAutoState(run.id, "retried", "done");
-          notifications.push(
-            `⚠️ ${client.name} 자동 수집을 다시 시도하지 못했어요. ${errorText(error)}\n${monitorUrl}`
-          );
           continue;
         }
       }
-      if (await advanceRunAutoState(run.id, "retried", "done")) {
-        notifications.push(
-          `⚠️ ${client.name} 자동 수집이 두 번 모두 실패했어요. ${current.lastError}\n${monitorUrl}`
-        );
-      }
+      // 두 번 모두 실패 — 오류는 런에 남아 대시보드에 보인다.
+      await advanceRunAutoState(run.id, "retried", "done");
       continue;
     }
 
     const state = current.autoState ?? "";
-    if (state && (await advanceRunAutoState(run.id, state, "done"))) {
-      notifications.push(
-        `📰 ${client.name} 기사 ${leads}건을 모았어요. 확인하고 보고해 주세요.\n${monitorUrl}`
-      );
-    }
+    if (state) await advanceRunAutoState(run.id, state, "done");
   }
 
   /* 오늘 수집 시작 */
@@ -218,24 +202,14 @@ export const runDailyCollectTick = async (
             started.push(`retry:issue:${issue.id}`);
             active = true;
             continue;
-          } catch (error) {
+          } catch {
             await advanceIssueAutoState(issue.id, "retried", "done");
-            notifications.push(
-              `⚠️ ${issue.title} 자동 집계를 다시 시도하지 못했어요. ${errorText(error)}\n${monitorUrl}`
-            );
             continue;
           }
         }
-        if (await advanceIssueAutoState(issue.id, "retried", "done")) {
-          notifications.push(
-            `⚠️ ${issue.title} 자동 집계가 두 번 모두 실패했어요. ${current.lastError}\n${monitorUrl}`
-          );
-        }
-      } else if (await advanceIssueAutoState(issue.id, issue.autoState, "done")) {
-        const latest = await getLatestSnapshot(issue.id);
-        notifications.push(
-          `🚨 ${issue.title} 집계 완료: +${latest?.added ?? 0}건, 브랜드 언급 ${latest?.brandMentions ?? 0}건\n${monitorUrl}`
-        );
+        await advanceIssueAutoState(issue.id, "retried", "done");
+      } else {
+        await advanceIssueAutoState(issue.id, issue.autoState, "done");
       }
     }
 
@@ -265,7 +239,6 @@ export const runDailyCollectTick = async (
   return {
     started,
     failed,
-    notifications,
     nextCheckAt: new Date(Math.min(...checks)).toISOString(),
   };
 };

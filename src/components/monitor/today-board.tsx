@@ -14,8 +14,8 @@ const TONE_TEXT: Record<Tone, string> = {
   todo: "font-medium text-primary",
   done: "text-success",
   busy: "text-primary",
-  bad: "text-error",
-  idle: "text-muted",
+  bad: "text-destructive",
+  idle: "text-muted-foreground",
 };
 
 const nextLabel = (iso: string) => {
@@ -68,16 +68,16 @@ export const TodayBoard = ({
 
   const card = (active: boolean, needsAction: boolean) =>
     cn(
-      "flex w-[172px] shrink-0 flex-col gap-0.5 rounded-xl border border-hairline bg-surface px-3 py-2.5 text-left transition-colors outline-none hover:bg-canvas-soft focus-visible:ring-3 focus-visible:ring-ring/50",
+      "flex w-[172px] shrink-0 flex-col gap-0.5 rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
       needsAction && "border-primary/50",
-      active && "bg-canvas-card"
+      active && "bg-muted"
     );
 
   return (
     <section aria-label="오늘 요약" className="flex flex-col gap-2">
-      <h2 className="text-[13px] font-medium text-body">
+      <h2 className="text-[13px] font-medium text-foreground">
         오늘 할 일
-        <span className="ml-1.5 font-normal text-muted">
+        <span className="ml-1.5 font-normal text-muted-foreground">
           {todo ? `보고 전 ${todo}곳` : "보고할 곳 없음"}
         </span>
       </h2>
@@ -89,7 +89,9 @@ export const TodayBoard = ({
             className={card(isSelected("client", client.id), statuses[i].tone === "todo")}
             onClick={() => onSelectClient(client.id)}
           >
-            <span className="truncate text-sm font-medium text-ink">{client.name}</span>
+            <span className="truncate text-sm font-medium text-foreground">
+              {client.name}
+            </span>
             <span
               className={cn("truncate text-xs tabular-nums", TONE_TEXT[statuses[i].tone])}
             >
@@ -106,13 +108,15 @@ export const TodayBoard = ({
               className={card(isSelected("issue", issue.id), false)}
               onClick={() => onSelectIssue(issue.id)}
             >
-              <span className="truncate text-sm font-medium text-ink">{issue.title}</span>
+              <span className="truncate text-sm font-medium text-foreground">
+                {issue.title}
+              </span>
               <span
                 className={cn("truncate text-xs tabular-nums", TONE_TEXT[status.tone])}
               >
                 {status.text}
               </span>
-              <span className="truncate text-xs text-muted tabular-nums">
+              <span className="truncate text-xs text-muted-foreground tabular-nums">
                 누적 {issue.totalAdded.toLocaleString()}건 · 언급 {issue.brandMentions}건
               </span>
             </button>

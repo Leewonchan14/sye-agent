@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { createMonitorIssue } from "@/lib/db/monitor";
 import { monitorErrorResponse, readJson } from "@/lib/monitor/api";
 
@@ -15,10 +15,11 @@ const bodySchema = z.object({
 });
 
 export const POST = async (req: Request) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
   try {
-    const issue = await createMonitorIssue(bodySchema.parse(await readJson(req)));
+    const body = bodySchema.parse(await readJson(req));
+    const issue = await createMonitorIssue({ ...body, userId: user.id });
     return Response.json({ issue }, { status: 201 });
   } catch (error) {
     return monitorErrorResponse(error, "이슈를 만들지 못했어요.");

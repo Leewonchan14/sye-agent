@@ -1,4 +1,5 @@
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { isSessionOwner } from "@/lib/db/session";
 import { getChatTurn, updateChatTurn } from "@/lib/db/turn";
 import { getHermesConfig } from "@/lib/hermes/config";
 import { stopHermesRun } from "@/lib/hermes/run-client";
@@ -15,16 +16,19 @@ export const POST = async (
   req: Request,
   ctx: { params: Promise<{ sessionId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const { sessionId } = await ctx.params;
+  if (!(await isSessionOwner(user.id, sessionId))) {
+    return Response.json({ error: "이 대화에 접근할 수 없습니다." }, { status: 403 });
+  }
   const turn = await getChatTurn(sessionId);
   if (!turn || turn.status !== "running") {
     return Response.json({ ok: true, status: turn?.status ?? "none" });
   }
 
-  await stopHermesRun(getHermesConfig(), turn.hermesRunId);
+  await stopHermesRun(getHermesConfig(user.id), turn.hermesRunId);
   await updateChatTurn(sessionId, { status: "cancelled" });
 
   return Response.json({ ok: true, status: "cancelled" });

@@ -12,7 +12,7 @@ import { TodayBoard } from "@/components/monitor/today-board";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { useMonitorOverview, useSetupMutations } from "@/lib/monitor/queries";
+import { useMonitorOverview } from "@/lib/monitor/queries";
 import type { MonitorOverview } from "@/lib/monitor/types";
 import { cn } from "@/lib/utils";
 
@@ -52,8 +52,8 @@ const ChipButton = ({
     aria-pressed={active}
     onClick={onClick}
     className={cn(
-      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium whitespace-nowrap text-muted ring-1 ring-transparent transition-colors hover:bg-canvas-soft hover:text-body",
-      active && "bg-canvas-card text-ink ring-hairline"
+      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium whitespace-nowrap text-muted-foreground ring-1 ring-transparent transition-colors hover:bg-muted hover:text-foreground",
+      active && "bg-muted text-foreground ring-border"
     )}
   >
     {children}
@@ -63,7 +63,9 @@ const ChipButton = ({
 /** 고객사와 이슈를 섞이지 않게 종류별로 한 줄씩 보여 준다. */
 const NavRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-    <span className="shrink-0 text-xs font-medium text-muted sm:w-[88px]">{label}</span>
+    <span className="shrink-0 text-xs font-medium text-muted-foreground sm:w-[88px]">
+      {label}
+    </span>
     <div className="-m-1 flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1.5 overflow-x-auto p-1">
       {children}
     </div>
@@ -72,7 +74,6 @@ const NavRow = ({ label, children }: { label: string; children: React.ReactNode 
 
 export const MonitorPage = () => {
   const { data, isLoading, error } = useMonitorOverview();
-  const { createPresets } = useSetupMutations();
   const [stored, setStored] = useLocalStorageState<Selection | null>("monitor.selected", {
     defaultValue: null,
   });
@@ -81,6 +82,10 @@ export const MonitorPage = () => {
   const [wizardKey, setWizardKey] = useState(0);
   const selected = resolveSelection(stored, data);
   const empty = data && !data.clients.length && !data.issues.length;
+  const openClientWizard = () => {
+    setWizardKey((k) => k + 1);
+    setClientDialog(true);
+  };
 
   return (
     <SidebarLayout activeNav="monitor">
@@ -104,14 +109,7 @@ export const MonitorPage = () => {
               </ChipButton>
             ))}
             {data && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setWizardKey((k) => k + 1);
-                  setClientDialog(true);
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={openClientWizard}>
                 <Plus /> 고객사
               </Button>
             )}
@@ -125,7 +123,9 @@ export const MonitorPage = () => {
               >
                 <Siren className="size-3.5 text-primary" />
                 {i.title}
-                {!i.isActive && <span className="text-[11px] text-muted-soft">종료</span>}
+                {!i.isActive && (
+                  <span className="text-[11px] text-muted-foreground">종료</span>
+                )}
               </ChipButton>
             ))}
             {data && (
@@ -150,27 +150,26 @@ export const MonitorPage = () => {
             <Spinner />
           </div>
         )}
-        {error && <p className="py-10 text-center text-sm text-error">{error.message}</p>}
+        {error && (
+          <p className="py-10 text-center text-sm text-destructive">{error.message}</p>
+        )}
 
         {empty && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-hairline px-6 py-16 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-16 text-center">
             <Newspaper className="size-7 text-primary" />
-            <h1 className="text-xl font-medium text-ink">
+            <h1 className="text-xl font-medium text-foreground">
               언론 모니터링을 시작해 볼까요?
             </h1>
-            <p className="max-w-md text-sm text-muted">
-              홍콩관광청·파나소닉코리아를 채팅에서 정해 둔 규칙과 함께 바로 만들 수
-              있어요. 하치와레가 수집을 마치면 기사가 여기에 쌓여요.
+            <p className="max-w-md text-sm text-muted-foreground">
+              고객사를 추가하면 정한 시각마다 에이전트가 기사를 모아 여기에 쌓아요. 특정
+              이슈의 보도량만 따로 지켜보려면 이슈를 추가하세요.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              <Button
-                onClick={() => createPresets.mutate()}
-                disabled={createPresets.isPending}
-              >
-                기본 고객사 만들기
+              <Button onClick={openClientWizard}>
+                <Plus /> 고객사 추가
               </Button>
-              <Button variant="outline" onClick={() => setClientDialog(true)}>
-                직접 추가
+              <Button variant="outline" onClick={() => setIssueDialog(true)}>
+                <Plus /> 이슈 추가
               </Button>
             </div>
           </div>

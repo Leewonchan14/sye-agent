@@ -466,7 +466,7 @@ class TurnStreamRelay {
     const content = asString(event.content);
     const marker =
       event.truncated === true
-        ? "\n\n… (여기까지만 보여줄게…! 턴이 끝나면 전체 결과로 다시 채운대…!)"
+        ? "\n\n… (일부만 표시합니다. 턴이 끝나면 전체 결과로 다시 채워집니다.)"
         : "";
     this.emit({
       type: "tool-output-available",
@@ -528,7 +528,7 @@ class TurnStreamRelay {
     if (failed) {
       this.emit({
         type: "error",
-        errorText: errorText || "하치 실행이 끊겼어요.",
+        errorText: errorText || "AI 실행이 끊겼어요.",
       } as UIMessageChunk);
     }
     this.emit({
@@ -547,7 +547,7 @@ class TurnStreamRelay {
       // (읽기 전용 릴레이의 카운터를 쓰면 실제 저장된 프레임보다 앞서 버린다).
       await finalizeChatTurnIfOwnerGone(this.sessionId, {
         status: status === "completed" ? "completed" : failed ? "failed" : "cancelled",
-        error: failed ? errorText || "하치 실행이 끊겼어요." : null,
+        error: failed ? errorText || "AI 실행이 끊겼어요." : null,
       });
       this.writeToClient({
         type: "message-metadata",
@@ -561,7 +561,7 @@ class TurnStreamRelay {
       status: status === "completed" ? "completed" : failed ? "failed" : "cancelled",
       nextOffset: this.offset,
       hermesSeq: this.hermesSeq,
-      error: failed ? errorText || "하치 실행이 끊겼어요." : null,
+      error: failed ? errorText || "AI 실행이 끊겼어요." : null,
     });
     await this.emitMetadata(true);
   }

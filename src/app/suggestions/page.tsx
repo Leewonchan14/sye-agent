@@ -9,8 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAuthStore } from "@/lib/auth-store";
 import { DEFAULT_SUGGESTIONS } from "@/lib/data/default-suggestions";
 import { Trash2 } from "lucide-react";
 
@@ -22,22 +20,18 @@ interface Suggestion {
   createdAt: string | null;
 }
 
-const fetchSuggestions = async (token: string) => {
-  const res = await fetch("/api/suggestions", {
-    headers: { "x-auth-token": token },
-  });
+const fetchSuggestions = async () => {
+  const res = await fetch("/api/suggestions", {});
   if (!res.ok) throw new Error("불러오기 실패");
   return res.json() as Promise<{ suggestions: Suggestion[] }>;
 };
 
 const saveData = async ({
-  token,
   label,
   prompt,
   id,
   sortOrder,
 }: {
-  token: string;
   label: string;
   prompt: string;
   id?: number;
@@ -45,7 +39,7 @@ const saveData = async ({
 }) => {
   const res = await fetch("/api/suggestions", {
     method: "POST",
-    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, label, prompt, sortOrder }),
   });
   const data = await res.json();
@@ -53,17 +47,16 @@ const saveData = async ({
   return data as { suggestion: Suggestion };
 };
 
-const deleteData = async ({ token, id }: { token: string; id: number }) => {
+const deleteData = async ({ id }: { id: number }) => {
   const res = await fetch("/api/suggestions", {
     method: "DELETE",
-    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
   });
   if (!res.ok) throw new Error("삭제 실패");
 };
 
 const SuggestionsContent = () => {
-  const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const confirmDialog = useConfirmDialog();
 
@@ -78,8 +71,7 @@ const SuggestionsContent = () => {
 
   const { data, isLoading } = useQuery({
     queryKey: ["suggestions"],
-    queryFn: () => fetchSuggestions(token!),
-    enabled: !!token,
+    queryFn: () => fetchSuggestions(),
   });
 
   const items = data?.suggestions ?? [];
@@ -110,7 +102,6 @@ const SuggestionsContent = () => {
     mutationFn: async () => {
       const res = await fetch("/api/suggestions", {
         method: "PATCH",
-        headers: { "x-auth-token": token! },
       });
       if (!res.ok) throw new Error("초기화 실패");
       return res.json() as Promise<{ ok: boolean; count: number }>;
@@ -124,11 +115,10 @@ const SuggestionsContent = () => {
   });
 
   const handleReset = useCallback(async () => {
-    if (!token) return;
     const ok = await confirmDialog.confirm({
-      title: "질문 초기화",
+      title: "예시 질문 초기화",
       description:
-        "모든 질문이 기본값으로 초기화됩니다. 직접 추가한 질문은 사라지니 주의해줘…!\n\n" +
+        "모든 질문이 기본값으로 초기화됩니다. 직접 추가한 질문은 사라집니다.\n\n" +
         `기본 질문 (${DEFAULT_SUGGESTIONS.length}개):\n` +
         DEFAULT_SUGGESTIONS.map((s, i) => `${i + 1}. ${s.label}`).join("\n"),
       destructive: true,
@@ -136,21 +126,19 @@ const SuggestionsContent = () => {
     });
     if (!ok) return;
     resetMutation.mutate();
-  }, [token, resetMutation, confirmDialog]);
+  }, [resetMutation, confirmDialog]);
 
   const handleSave = useCallback(() => {
-    if (!label.trim() || !prompt.trim() || !token) return;
+    if (!label.trim() || !prompt.trim()) return;
     saveMutation.mutate({
-      token,
       label: label.trim(),
       prompt: prompt.trim(),
       id: editId,
     });
-  }, [label, prompt, editId, token, saveMutation]);
+  }, [label, prompt, editId, saveMutation]);
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!token) return;
       const ok = await confirmDialog.confirm({
         title: "질문 삭제",
         description: "정말 삭제할까요?",
@@ -158,9 +146,9 @@ const SuggestionsContent = () => {
         confirmLabel: "삭제",
       });
       if (!ok) return;
-      deleteMutation.mutate({ token, id });
+      deleteMutation.mutate({ id });
     },
-    [token, deleteMutation, confirmDialog]
+    [deleteMutation, confirmDialog]
   );
 
   const startEdit = (item: Suggestion) => {
@@ -178,30 +166,13 @@ const SuggestionsContent = () => {
   const mutationError = saveMutation.error || deleteMutation.error;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-foreground">
       {/* Header */}
-      <div className="mt-16 mb-8 text-center md:mt-20">
-        <Tooltip>
-          <TooltipTrigger render={<span className="inline-flex" />}>
-            <img
-              src="/munjackgui-thinking.png"
-              alt="하치와레"
-              className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
-              style={{ backgroundColor: "var(--color-canvas-soft)" }}
-            />
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={8} align="center">
-            <img
-              src="/munjackgui-thinking.png"
-              alt=""
-              className="size-36 rounded-md bg-background object-cover"
-            />
-          </TooltipContent>
-        </Tooltip>
-        <h1 className="text-xl font-normal text-ink">추천 질문</h1>
+      <div className="mt-8 mb-6">
+        <h2 className="text-xl font-semibold tracking-tight">예시 질문</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          채팅 화면에 표시될 추천 질문을 관리한다는 거야…! 자주 묻는 걸 등록해두면 버튼
-          하나로 바로 보낼 수 있어…♪
+          새 채팅 화면에 보이는 예시 질문이에요. 자주 묻는 질문을 등록해 두면 버튼 하나로
+          바로 보낼 수 있어요.
         </p>
         <div className="mt-4">
           <Button
@@ -219,29 +190,29 @@ const SuggestionsContent = () => {
       {/* Content sections */}
       <div className="space-y-4 pb-12">
         {/* Edit / New form */}
-        <div className="rounded-xl border border-hairline bg-surface p-5">
-          <h2 className="mb-3 text-sm font-medium text-ink">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-sm font-medium text-foreground">
             {editId ? "질문 수정" : "새 질문 등록"}
           </h2>
-          <p className="mb-3 text-xs text-muted-soft">
+          <p className="mb-3 text-xs text-muted-foreground">
             {editId
               ? "내용을 수정하고 저장하면 바로 반영됩니다."
-              : "저장하면 채팅 화면에 추천 질문으로 표시된다는 거야…!"}
+              : "저장하면 새 채팅 화면에 예시 질문으로 표시됩니다."}
           </p>
           <div className="space-y-3">
             <Input
-              placeholder="이름 (예: 오늘 뭐하지?)"
+              placeholder="이름 (예: 주요 뉴스 정리)"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
             <Textarea
-              placeholder={`하치와레에게 보낼 메시지를 입력해줘…!\n\n예시:\n- "사랑해!"\n- "데이트 코스 추천해줘…!"\n- "분위기 좋은 맛집 알려줘…!"`}
+              placeholder={`버튼을 누르면 보낼 메시지를 입력하세요.\n\n예시:\n- "오늘 국내 주요 뉴스를 정리해 줘"\n- "이 글을 세 줄로 요약해 줘"`}
               rows={4}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
             />
             {mutationError && (
-              <p className="text-sm text-error">
+              <p className="text-sm text-destructive">
                 {mutationError instanceof Error ? mutationError.message : "오류 발생"}
               </p>
             )}
@@ -263,8 +234,8 @@ const SuggestionsContent = () => {
         </div>
 
         {/* All suggestions list */}
-        <div className="rounded-xl border border-hairline bg-surface p-5">
-          <h2 className="mb-3 text-sm font-medium text-ink">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-sm font-medium text-foreground">
             등록된 질문
             {!isLoading && (
               <Badge variant="secondary" className="ml-1.5 font-normal">
@@ -285,7 +256,7 @@ const SuggestionsContent = () => {
                   className={`rounded-lg border p-3 transition-colors ${
                     editId === item.id
                       ? "border-primary/40 bg-primary/5"
-                      : "border-hairline"
+                      : "border-border"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -297,7 +268,7 @@ const SuggestionsContent = () => {
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium">{item.label}</span>
                         {item.createdAt && (
-                          <span className="shrink-0 text-xs text-muted-soft">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             {new Date(item.createdAt).toLocaleDateString("ko-KR")}
                           </span>
                         )}
@@ -310,7 +281,7 @@ const SuggestionsContent = () => {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        className="text-muted-foreground hover:bg-error/10 hover:text-error"
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => handleDelete(item.id)}
                       >
                         <Trash2 className="size-3.5" />
@@ -329,7 +300,7 @@ const SuggestionsContent = () => {
 };
 
 const SuggestionsPage = () => (
-  <SidebarLayout>
+  <SidebarLayout activeNav="suggestions">
     <SuggestionsContent />
   </SidebarLayout>
 );

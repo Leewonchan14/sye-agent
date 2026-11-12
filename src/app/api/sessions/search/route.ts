@@ -1,12 +1,12 @@
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { searchSessions } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const GET = async (req: Request) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   try {
     const url = new URL(req.url);
@@ -14,7 +14,7 @@ export const GET = async (req: Request) => {
     const cursor = url.searchParams.get("cursor") ?? undefined;
     const limit = Number(url.searchParams.get("limit")) || 20;
 
-    const { results, nextCursor } = await searchSessions(q, {
+    const { results, nextCursor } = await searchSessions(user.id, q, {
       cursor,
       limit,
     });

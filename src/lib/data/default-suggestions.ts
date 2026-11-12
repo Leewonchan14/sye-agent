@@ -4,37 +4,27 @@ export interface DefaultSuggestion {
   sortOrder: number;
 }
 
+/** 새 사용자에게 채워 주는 예시 질문. 사용자는 설정에서 고치거나 지울 수 있다. */
 export const DEFAULT_SUGGESTIONS: DefaultSuggestion[] = [
-  { label: "사랑해!", prompt: "사랑해!", sortOrder: 1 },
-  { label: "데이트 코스 추천", prompt: "데이트 코스 추천해줘…!", sortOrder: 2 },
   {
-    label: "오늘 뭐하지?",
+    label: "오늘의 주요 뉴스",
+    prompt: "오늘 국내 주요 뉴스를 분야별로 정리해 줘.",
+    sortOrder: 1,
+  },
+  {
+    label: "브랜드 언급 분석",
     prompt:
-      "사당역이랑 충정로역 사이에서 만날건데 신림역, 신대방역, 영등포역, 서울대입구역, 부평역 등에서 만날거야 오늘 데이트 코스 추천해줘…!",
+      "우리 브랜드가 최근 일주일간 뉴스·블로그·커뮤니티에서 어떻게 언급됐는지 키워드 위주로 분석해 줘.",
+    sortOrder: 2,
+  },
+  {
+    label: "보도자료 초안",
+    prompt: "신제품 출시 보도자료 초안을 써 줘. 필요한 정보가 있으면 먼저 물어봐.",
     sortOrder: 3,
   },
   {
-    label: "퇴근후 만나자!",
-    prompt:
-      "퇴근후 (저녁 6시 이후) 충정로랑 서초 사이에서 만날건데 신림역, 신대방역, 영등포역, 서울대입구역 등에서 만날거야 오늘 데이트 코스 추천해줘…!",
+    label: "글 요약",
+    prompt: "아래 글을 핵심만 세 줄로 요약해 줘.\n\n",
     sortOrder: 4,
-  },
-  { label: "맛집 찾기", prompt: "분위기 좋은 맛집 알려줘…!", sortOrder: 5 },
-  {
-    label: "홍콩관광청 모니터링",
-    prompt:
-      "홍콩관광청에 대해 최근 한 달간 뉴스, 블로그, 인스타그램, 트위터, 커뮤니티에서 어떤 키워드가 나오는지 분석해줘…!",
-    sortOrder: 6,
-  },
-  {
-    label: "파나소닉 모니터링",
-    prompt:
-      "파나소닉 브랜드 모니터링 해줘…! 최근 일주일간 뉴스, 블로그, 인스타그램, 트위터, 커뮤니티랑 커뮤니티 반응이 궁금해…!",
-    sortOrder: 7,
-  },
-  {
-    label: "카톡 대화 검색",
-    prompt: "우리 봤던 영화 뭐였더라…!",
-    sortOrder: 8,
   },
 ];

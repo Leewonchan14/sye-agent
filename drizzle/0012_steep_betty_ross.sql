@@ -1,1 +1,0 @@
-ALTER TABLE "chat_turns" ADD COLUMN "user_text" text;

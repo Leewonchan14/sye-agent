@@ -9,8 +9,8 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import { TurnActivity } from "@/components/ai-elements/tool-group";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { extractMessageText, isEchoedThinking } from "@/lib/utils";
+import { Sparkles } from "lucide-react";
 
 interface MessageItemProps {
   message: UIMessage;
@@ -97,13 +97,13 @@ export const MessageItem = memo(
       );
     }
 
-    // Assistant messages: avatar + content (reasoning, text, tool calls)
+    // Assistant messages: content (reasoning, text, tool calls)
     return (
       <Message from="assistant">
         <div className="flex items-start gap-3">
-          <Avatar size="default" className="hidden md:inline-flex">
-            <AvatarImage src="/munjackgui.png" alt="하치와레" />
-          </Avatar>
+          <div className="hidden size-8 shrink-0 items-center justify-center rounded-full border bg-background md:flex">
+            <Sparkles className="size-4 text-muted-foreground" />
+          </div>
           <div className="min-w-0 flex-1">
             {/* Text & reasoning: overflow-visible so table popups/tooltips aren't clipped */}
             <MessageContent className="w-full overflow-visible">

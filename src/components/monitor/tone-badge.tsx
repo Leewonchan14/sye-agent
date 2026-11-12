@@ -24,8 +24,8 @@ import { cn } from "@/lib/utils";
 
 export const SENTIMENT_TONE: Record<MonitorSentiment, string> = {
   positive: "bg-success/10 text-success",
-  neutral: "bg-canvas-card text-muted",
-  negative: "bg-error/10 text-error",
+  neutral: "bg-muted text-muted-foreground",
+  negative: "bg-destructive/10 text-destructive",
 };
 
 const pillClass =
@@ -61,7 +61,7 @@ export const ImportancePill = ({
 const UNKNOWN = "unknown";
 
 /**
- * 하치와레가 매긴 논조·중요도를 보여 주고, 눌러서 고칠 수 있게 한다.
+ * 에이전트가 매긴 논조·중요도를 보여 주고, 눌러서 고칠 수 있게 한다.
  * 둘 다 비어 있으면 흐린 "논조" 버튼만 보인다.
  */
 export const ToneMenu = ({
@@ -87,13 +87,16 @@ export const ToneMenu = ({
         </span>
       ) : (
         <span
-          className={cn(pillClass, "bg-canvas-card text-muted-soft hover:text-muted")}
+          className={cn(
+            pillClass,
+            "bg-muted text-muted-foreground hover:text-muted-foreground"
+          )}
         >
           논조
         </span>
       )}
       <ImportancePill importance={importance} />
-      <ChevronDown className="size-3 text-muted-soft" />
+      <ChevronDown className="size-3 text-muted-foreground" />
     </DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="w-40">
       <DropdownMenuGroup>

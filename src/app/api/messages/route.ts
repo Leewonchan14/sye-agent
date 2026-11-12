@@ -1,12 +1,12 @@
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { getSessionState } from "@/lib/db/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const GET = async (req: Request) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId");
@@ -16,7 +16,7 @@ export const GET = async (req: Request) => {
   }
 
   try {
-    const state = await getSessionState(sessionId);
+    const state = await getSessionState(user.id, sessionId);
     return Response.json({ state: state ?? [] });
   } catch (error) {
     console.error("Failed to fetch session state:", error);

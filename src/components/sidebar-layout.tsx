@@ -1,176 +1,84 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut, Menu, Plus } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
+import { useEffect } from "react";
 
-import { useCallback, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
-import { useRouter } from "next/navigation";
-
-import { PasswordGate } from "@/components/password-gate";
-import { SessionSidebar } from "@/components/session-sidebar";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { useAuthStore } from "@/lib/auth-store";
+import { AppSidebar, type AppNav } from "@/components/app-sidebar";
+import { Separator } from "@/components/ui/separator";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
+import { useSession } from "@/lib/auth-client";
 
 interface Props {
   children: React.ReactNode;
-  /** Highlight this session in the sidebar. Empty string for search page. */
+  /** 사이드바에서 강조할 대화 */
   activeSessionId?: string;
-  /** Highlight a non-chat nav item in the sidebar. */
-  activeNav?: "ledger" | "monitor" | "dates";
-  /** Custom loading state */
+  /** 사이드바에서 강조할 메뉴 */
+  activeNav?: AppNav;
+  /** 상단 바 제목 */
+  title?: string;
+  /** 로그인 확인 중에 보여 줄 화면 */
   loading?: React.ReactNode;
 }
 
+const NAV_TITLES: Record<AppNav, string> = {
+  monitor: "언론 모니터링",
+  search: "대화 검색",
+  instructions: "지시 사항",
+  suggestions: "예시 질문",
+};
+
 /**
- * Shared layout that wraps any page with:
- * 1. Auth validation (PasswordGate)
- * 2. Desktop sidebar (SessionSidebar)
- * 3. Mobile top bar + sidebar overlay
+ * 로그인한 사용자용 공통 레이아웃 — shadcn Sidebar + 상단 바.
+ * 세션이 없으면 로그인 화면으로 보낸다.
  */
 export const SidebarLayout = ({
   children,
-  activeSessionId = "",
+  activeSessionId,
   activeNav,
+  title,
   loading,
 }: Props) => {
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useLocalStorageState("sidebar_open", {
-    defaultValue: false,
-  });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const { data, isPending } = useSession();
 
-  const token = useAuthStore((s) => s.token);
-  const logout = useAuthStore((s) => s.logout);
-  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (isPending || data) return;
+    const next =
+      pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname)}` : "";
+    router.replace(`/login${next}`);
+  }, [isPending, data, pathname, router]);
 
-  const {
-    data: isValid,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["auth-validate", token ?? ""],
-    queryFn: async () => {
-      if (!token) return await new Promise((res) => setTimeout(() => res(false), 3000));
-      const r = await fetch("/api/auth", {
-        headers: { "x-auth-token": token },
-      });
-      const d = await r.json();
-      return d.valid === true;
-    },
-    retry: 1,
-    staleTime: 0,
-  });
-
-  const onNew = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    router.push("/");
-  }, [router, queryClient]);
-
-  const onSelect = useCallback(
-    (id: string) => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      router.push(`/${id}`);
-    },
-    [router, queryClient]
-  );
-
-  const toggle = useCallback(() => setSidebarOpen((p) => !p), [setSidebarOpen]);
-
-  if (isLoading) {
+  if (isPending || !data) {
     return (
-      <div
-        className="flex min-h-dvh flex-col"
-        style={{ backgroundColor: "var(--color-canvas)" }}
-      >
-        {loading}
-      </div>
+      loading ?? (
+        <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
+          <Spinner />
+        </div>
+      )
     );
   }
 
-  if (!token || isValid === false || isError) {
-    return <PasswordGate onSuccess={() => {}} />;
-  }
+  const heading = title ?? (activeNav ? NAV_TITLES[activeNav] : "채팅");
 
   return (
-    <div
-      className="relative flex h-dvh flex-col md:flex-row"
-      style={{ backgroundColor: "var(--color-canvas)" }}
-    >
-      {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        <SessionSidebar
-          activeSessionId={activeSessionId}
-          activeNav={activeNav}
-          onSelect={onSelect}
-          onNew={onNew}
-          isOpen={sidebarOpen}
-          onToggle={toggle}
-        />
-      </div>
-
-      {/* Mobile top bar */}
-      <div
-        className="flex h-12 shrink-0 items-center gap-2 px-3 md:hidden"
-        style={{ borderBottom: "1px solid var(--color-hairline)" }}
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setMobileMenuOpen(true)}
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-        <Avatar size="sm">
-          <AvatarImage src="/munjackgui.png" alt="하치와레" />
-        </Avatar>
-        <span
-          className="flex-1 text-sm font-medium"
-          style={{ color: "var(--color-ink)" }}
-        >
-          하치와레 메이트
-        </span>
-        <Button variant="ghost" size="icon" onClick={onNew} aria-label="New chat">
-          <Plus className="h-5 w-5" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={logout} aria-label="Logout">
-          <LogOut className="h-5 w-5" />
-        </Button>
-      </div>
-
-      {/* Mobile sidebar overlay */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex md:hidden">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setMobileMenuOpen(false)}
+    <SidebarProvider className="h-dvh">
+      <AppSidebar activeSessionId={activeSessionId} activeNav={activeNav} />
+      <SidebarInset className="min-h-0 min-w-0">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+          <SidebarTrigger className="-ml-1" />
+          <Separator
+            orientation="vertical"
+            className="mr-1 data-vertical:h-4 data-vertical:self-center"
           />
-          <div className="relative h-full w-64">
-            <SessionSidebar
-              activeSessionId={activeSessionId}
-              activeNav={activeNav}
-              onSelect={(id) => {
-                onSelect(id);
-                setMobileMenuOpen(false);
-              }}
-              onNew={() => {
-                onNew();
-                setMobileMenuOpen(false);
-              }}
-              isOpen={true}
-              onToggle={() => setMobileMenuOpen(false)}
-            />
-          </div>
+          <h1 className="truncate text-sm font-medium">{heading}</h1>
+        </header>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+          {children}
         </div>
-      )}
-
-      {/* Content */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        {children}
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 };

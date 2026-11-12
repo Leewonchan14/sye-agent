@@ -1,2 +1,0 @@
-ALTER TABLE "monitor_issues" ADD COLUMN "collect_start" text DEFAULT '09:00' NOT NULL;--> statement-breakpoint
-ALTER TABLE "monitor_issues" ADD COLUMN "collect_gap_minutes" integer DEFAULT 360 NOT NULL;

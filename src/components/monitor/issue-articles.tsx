@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 30;
 
-/** 하치와레가 보낸 주소라 화면에 링크로 걸기 전에 http만 통과시킨다. */
+/** 에이전트가 보낸 주소라 화면에 링크로 걸기 전에 http만 통과시킨다. */
 const isWebUrl = (url: string | undefined): url is string =>
   Boolean(url && /^https?:\/\//i.test(url));
 
@@ -46,13 +46,13 @@ const ArticleRow = ({ article }: { article: MonitorIssueArticleView }) => (
       href={article.url}
       target="_blank"
       rel="noreferrer"
-      className="group flex items-start gap-3 rounded-lg px-2 py-2.5 hover:bg-canvas-soft"
+      className="group flex items-start gap-3 rounded-lg px-2 py-2.5 hover:bg-muted"
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-sm break-words text-ink group-hover:underline">
+        <span className="block text-sm break-words text-foreground group-hover:underline">
           {article.title}
         </span>
-        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{article.media || hostOf(article.url)}</span>
           {article.publishedAt && (
             <span className="font-mono tabular-nums">
@@ -60,14 +60,14 @@ const ArticleRow = ({ article }: { article: MonitorIssueArticleView }) => (
             </span>
           )}
           {article.brandMention && (
-            <span className="rounded-full bg-error/10 px-1.5 py-px font-medium text-error">
+            <span className="rounded-full bg-destructive/10 px-1.5 py-px font-medium text-destructive">
               브랜드 언급
             </span>
           )}
           <SentimentPill sentiment={article.sentiment} hideNeutral />
         </span>
       </span>
-      <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-soft" />
+      <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
     </a>
   </li>
 );
@@ -109,7 +109,7 @@ const ArticleList = ({ articles }: { articles: MonitorIssueArticleView[] }) => {
                 setVisible(PAGE_SIZE);
               }}
               className={cn(
-                "rounded-full border border-hairline px-2.5 py-1 text-[12px] text-body",
+                "rounded-full border border-border px-2.5 py-1 text-[12px] text-foreground",
                 active.id === f.id && "border-primary bg-primary/10 text-primary"
               )}
             >
@@ -118,7 +118,7 @@ const ArticleList = ({ articles }: { articles: MonitorIssueArticleView[] }) => {
           ))}
         </div>
       )}
-      <ul className="-mx-2 divide-y divide-hairline/60">
+      <ul className="-mx-2 divide-y divide-border/60">
         {shown.slice(0, visible).map((a) => (
           <ArticleRow key={a.id} article={a} />
         ))}
@@ -148,7 +148,7 @@ const NoSavedList = ({
 }) => {
   const last = snapshot.lastArticle;
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-canvas-soft p-4 text-[13px] text-body">
+    <div className="flex flex-col gap-3 rounded-lg bg-muted p-4 text-[13px] text-foreground">
       <p>
         이 집계는 기사 목록을 저장하기 전에 돌아서 {snapshot.added}건의 건수만 남아
         있어요. 같은 기간을 네이버 뉴스에서 볼 수 있어요.
@@ -173,21 +173,21 @@ const NoSavedList = ({
         ))}
       </div>
       {last?.title && (
-        <p className="min-w-0 border-t border-hairline/60 pt-3 break-words">
-          <span className="text-muted">마지막 기사 · </span>
+        <p className="min-w-0 border-t border-border/60 pt-3 break-words">
+          <span className="text-muted-foreground">마지막 기사 · </span>
           {isWebUrl(last.url) ? (
             <a
               href={last.url}
               target="_blank"
               rel="noreferrer"
-              className="text-ink underline underline-offset-4"
+              className="text-foreground underline underline-offset-4"
             >
               {last.title}
             </a>
           ) : (
-            <span className="text-ink">{last.title}</span>
+            <span className="text-foreground">{last.title}</span>
           )}
-          {last.media && <span className="text-muted"> · {last.media}</span>}
+          {last.media && <span className="text-muted-foreground"> · {last.media}</span>}
         </p>
       )}
     </div>
@@ -212,7 +212,7 @@ const SnapshotArticles = ({
     return snapshot.added > 0 ? (
       <NoSavedList snapshot={snapshot} previousAt={previousAt} keywords={keywords} />
     ) : (
-      <p className="rounded-lg border border-dashed border-hairline px-4 py-8 text-center text-sm text-muted">
+      <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
         이 구간에는 새로 나온 기사가 없었어요.
       </p>
     );
@@ -226,7 +226,7 @@ const SnapshotArticles = ({
   }
   if (error || !data) {
     return (
-      <p className="inline-flex items-center gap-1.5 py-4 text-sm text-error">
+      <p className="inline-flex items-center gap-1.5 py-4 text-sm text-destructive">
         <TriangleAlert className="size-3.5" />
         {error?.message ?? "기사 목록을 불러오지 못했어요."}
       </p>
@@ -235,7 +235,7 @@ const SnapshotArticles = ({
   return (
     <>
       {data.articles.length !== snapshot.added && (
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted-foreground">
           집계 {snapshot.added}건 중 목록이 저장된 {data.articles.length}건을 보여 줘요.
         </p>
       )}
@@ -277,13 +277,13 @@ export const IssueArticles = ({
   return (
     <section
       id="issue-articles"
-      className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-hairline bg-surface p-5"
+      className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-border bg-card p-5"
     >
       <div>
-        <h2 className="flex items-center gap-2 text-[15px] font-medium text-ink">
+        <h2 className="flex items-center gap-2 text-[15px] font-medium text-foreground">
           <Newspaper className="size-4 text-primary" /> 집계된 기사
         </h2>
-        <p className="mt-0.5 text-[13px] text-muted">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           집계 시점을 고르면 그때 늘어난 기사를 볼 수 있어요.
         </p>
       </div>
@@ -300,7 +300,7 @@ export const IssueArticles = ({
                 aria-current={s.id === active.id ? "true" : undefined}
                 onClick={() => setSelectedId(s.id)}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-full border border-hairline px-3 py-1.5 text-[13px] text-body",
+                  "flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[13px] text-foreground",
                   s.id === active.id && "border-primary bg-primary/10 text-primary"
                 )}
               >
@@ -318,7 +318,7 @@ export const IssueArticles = ({
           />
         </>
       ) : (
-        <p className="rounded-lg border border-dashed border-hairline px-4 py-8 text-center text-sm text-muted">
+        <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
           집계를 한 번 돌리면 여기에 기사가 보여요.
         </p>
       )}
