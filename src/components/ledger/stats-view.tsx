@@ -25,6 +25,7 @@ import {
 
 import {
   categoryChipClass,
+  ExcludeTripsChip,
   ExpenseCategoryChips,
   type CategoryFilter,
 } from "@/components/ledger/category-chips";
@@ -80,6 +81,9 @@ interface Props {
   /** 주별 리포트의 주(월요일). 내역·달력 탭과 같은 주를 함께 쓴다. */
   weekStart: string;
   onWeekChange: (weekStart: string) => void;
+  /** 여행 내역을 뺀 리포트. 내역·달력 탭과 같은 값을 함께 쓴다. */
+  excludeTrips: boolean;
+  onExcludeTripsChange: (value: boolean) => void;
 }
 
 const RANGES = [
@@ -1270,6 +1274,8 @@ export const StatsView = ({
   initialPeriod,
   weekStart,
   onWeekChange,
+  excludeTrips,
+  onExcludeTripsChange,
 }: Props) => {
   const token = useAuthStore((s) => s.token);
   const [range, setRange] = useState<RangeId>(initialPeriod);
@@ -1284,7 +1290,6 @@ export const StatsView = ({
         ? weekRange(weekStart, todayKst())
         : appliedRange;
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null);
-  const [excludeTrips, setExcludeTrips] = useState(false);
   const isTripReport = range === "trip";
   const activeTrip = trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null;
   const shouldExclude = !isTripReport && excludeTrips;
@@ -1421,14 +1426,7 @@ export const StatsView = ({
           )}
 
           {!isTripReport && trips.length > 0 && (
-            <button
-              type="button"
-              aria-pressed={excludeTrips}
-              onClick={() => setExcludeTrips((value) => !value)}
-              className={categoryChipClass(excludeTrips)}
-            >
-              여행 제외
-            </button>
+            <ExcludeTripsChip value={excludeTrips} onChange={onExcludeTripsChange} />
           )}
 
           {range === "month" && (

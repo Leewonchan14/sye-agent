@@ -20,15 +20,17 @@ export const GET = async (req: Request) => {
   const params = new URL(req.url).searchParams;
   const week = params.get("week");
   const month = params.get("month");
+  const options = { excludeTrips: params.get("excludeTrips") === "1" };
 
   try {
     const recap = month
-      ? await getLedgerRecap("month", normalizeMonth(month))
+      ? await getLedgerRecap("month", normalizeMonth(month), options)
       : await getLedgerRecap(
           "week",
           week
             ? weekStartOf(normalizeDate(week))
-            : lastCompletedRecapKey("week", kst().format("YYYY-MM-DD"))
+            : lastCompletedRecapKey("week", kst().format("YYYY-MM-DD")),
+          options
         );
     return Response.json({ recap });
   } catch (error) {

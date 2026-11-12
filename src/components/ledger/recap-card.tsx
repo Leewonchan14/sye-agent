@@ -82,18 +82,20 @@ interface Props {
   weekStart: string;
   /** 월간이면 그 달(YYYY-MM) */
   month: string;
+  /** 여행에 묶인 지출을 빼고 본다. */
+  excludeTrips?: boolean;
 }
 
 /** 내역에서 고른 주·달을 그대로 따라가는 리캡. */
-export const RecapCard = ({ period, weekStart, month }: Props) => {
+export const RecapCard = ({ period, weekStart, month, excludeTrips = false }: Props) => {
   const token = useAuthStore((s) => s.token);
   const key = period === "week" ? weekStart : month;
   const { data: recap, isPlaceholderData } = useQuery({
-    queryKey: ledgerKeys.recap(period, key),
+    queryKey: ledgerKeys.recap(period, key, excludeTrips ? "without-trips" : undefined),
     queryFn: async () => {
       const { recap } = await ledgerRequest<{ recap: LedgerRecap }>(
         token,
-        `/api/ledger/recap?${period}=${key}`
+        `/api/ledger/recap?${period}=${key}${excludeTrips ? "&excludeTrips=1" : ""}`
       );
       return recap;
     },
