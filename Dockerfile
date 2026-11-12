@@ -1,19 +1,22 @@
-FROM postgres:16-alpine
+# AI 어시스턴트 웹앱 — Next.js 서버 + PGlite(파일 저장, /data)
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build
 
-# pgvector를 PG16용으로 소스 빌드 (Alpine 패키지는 PG18용이므로)
-RUN set -eux; \
-    apk add --no-cache --virtual .build-deps \
-    git \
-    gcc \
-    musl-dev \
-    make \
-    clang21 \
-    llvm21 \
-    ; \
-    git clone --branch v0.8.1 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector; \
-    cd /tmp/pgvector; \
-    make USE_PGXS=1; \
-    make USE_PGXS=1 install; \
-    cd /; \
-    rm -rf /tmp/pgvector; \
-    apk del .build-deps
+FROM node:24-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3200 \
+    DATABASE_URL=pglite:/data/pglite
+COPY --from=build /app/package.json /app/package-lock.json /app/next.config.ts ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/drizzle ./drizzle
+VOLUME ["/data"]
+EXPOSE 3200
+# 서버가 뜰 때 instrumentation.ts가 PGlite 마이그레이션을 적용한다.
+CMD ["sh", "-c", "exec node_modules/.bin/next start -H 0.0.0.0 -p ${PORT}"]

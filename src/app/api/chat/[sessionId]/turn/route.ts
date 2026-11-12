@@ -1,4 +1,5 @@
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { isSessionOwner } from "@/lib/db/session";
 import { getChatTurn } from "@/lib/db/turn";
 
 export const runtime = "nodejs";
@@ -15,10 +16,13 @@ export const GET = async (
   req: Request,
   ctx: { params: Promise<{ sessionId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const { sessionId } = await ctx.params;
+  if (!(await isSessionOwner(user.id, sessionId))) {
+    return Response.json({ error: "이 대화에 접근할 수 없습니다." }, { status: 403 });
+  }
   const turn = await getChatTurn(sessionId);
 
   // 프레임이 하나도 없는 끝난 턴은 복구할 게 없다 (로그가 지워졌거나 시작 직후).

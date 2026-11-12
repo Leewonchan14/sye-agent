@@ -5,7 +5,6 @@ import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import { useAuthStore } from "@/lib/auth-store";
 
 interface Suggestion {
   id: number;
@@ -19,21 +18,16 @@ interface Props {
   onQuestionClick: (q: string) => void;
 }
 
-const fetchSuggestions = async (token: string) => {
-  const res = await fetch("/api/suggestions", {
-    headers: { "x-auth-token": token },
-  });
+const fetchSuggestions = async () => {
+  const res = await fetch("/api/suggestions");
   if (!res.ok) throw new Error("불러오기 실패");
   return res.json() as Promise<{ suggestions: Suggestion[] }>;
 };
 
 export const ExampleQuestions = ({ onQuestionClick }: Props) => {
-  const token = useAuthStore((s) => s.token);
-
   const { data } = useQuery({
     queryKey: ["suggestions"],
-    queryFn: () => fetchSuggestions(token!),
-    enabled: !!token,
+    queryFn: fetchSuggestions,
   });
 
   const suggestions = data?.suggestions ?? [];
@@ -55,7 +49,7 @@ export const ExampleQuestions = ({ onQuestionClick }: Props) => {
           variant="outline"
           size="sm"
           onClick={() => handleClick(s.prompt)}
-          className="rounded-full text-[13px]"
+          className="rounded-full"
         >
           {s.label}
         </Button>

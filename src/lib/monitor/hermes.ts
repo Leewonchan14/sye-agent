@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import {
   countRunItemsSince,
+  getClientOwnerId,
   getIssueRow,
   getRunRow,
   setCallbackToken,
@@ -34,10 +35,11 @@ const TERMINAL = new Set(["completed", "failed", "cancelled", "error"]);
 /** 시작 직후에는 상태 조회를 건너뛴다 (런 등록 지연 대비). */
 const GRACE_MS = 60_000;
 
-const ensureHermes = () => {
+/** 고객사·이슈 소유자의 Hermes 설정 — 장기 기억이 사용자마다 따로 쌓인다. */
+const ensureHermes = (ownerUserId: string | null) => {
   const missing = missingHermesEnv();
   if (missing.length) throw new Error(`Hermes 설정이 비어 있어요: ${missing.join(", ")}`);
-  return getHermesConfig();
+  return getHermesConfig(ownerUserId ?? undefined);
 };
 
 export const hashCallbackToken = (token: string) =>
@@ -76,7 +78,7 @@ const curlExample = (url: string, token: string, body: string) =>
     `curl -sS -X POST '${url}' -H 'Content-Type: application/json' -H 'x-monitor-token: ${token}' --data @/tmp/monitor_result.json`,
     `파일 본문 예: ${body}`,
     "응답이 201이면 성공이야. 실패하면 응답 메시지를 보고 고쳐서 다시 보내.",
-    '여러 번 나눠 보내야 하면 마지막 묶음을 뺀 나머지 본문에 "final": false를 넣어. 마지막 묶음에는 넣지 마 — 그걸 받아야 화면과 알림이 끝난 걸로 바뀌어.',
+    '여러 번 나눠 보내야 하면 마지막 묶음을 뺀 나머지 본문에 "final": false를 넣어. 마지막 묶음에는 넣지 마 — 그걸 받아야 화면이 끝난 걸로 바뀌어.',
   ].join("\n");
 
 export const startMoreSearch = async (options: {
@@ -91,9 +93,9 @@ export const startMoreSearch = async (options: {
   /** 매일 자동 수집 — 하루치 본 수집이라 소스별 통계까지 함께 받는다. */
   daily?: boolean;
 }) => {
-  const config = ensureHermes();
   const run = await getRunRow(options.runId);
   if (!run) throw new Error("수집 결과를 찾을 수 없어요.");
+  const config = ensureHermes(await getClientOwnerId(run.clientId));
 
   const token = await issueCallbackToken({ kind: "run", id: options.runId });
   const url = `${options.origin}/api/monitor/agent/runs`;
@@ -113,7 +115,8 @@ export const startMoreSearch = async (options: {
     "기자는 naver-search-api 스킬의 byline.py로 확인하고, fetch_failed나 not_on_page면 browser_exec로 원문을 열어 확인한 최종 결과를 reporterStatus에 넣어. 원문을 못 열었으면 기자 표기가 없다고 쓰지 마.",
     ...(options.daily
       ? [
-          "이 고객사 전용 모니터링 스킬이 있으면 그 스킬의 수집·검증 절차를 그대로 따라.",
+          // 스킬은 모든 사용자가 함께 쓰므로 고객사 이름으로 스킬을 고르게 하지 않는다 — 규칙은 위 JSON만 따른다.
+          "고객사별 설정은 위 카테고리와 고객사 규칙만 따라. 다른 고객사용으로 만든 스킬이나 기억은 쓰지 마.",
           "결과는 다 모은 뒤에 보내. 찾은 기사가 없어도 빈 items로 꼭 보내.",
         ]
       : []),
@@ -145,7 +148,7 @@ export const startMoreSearch = async (options: {
     await setRunPending(options.runId, { hermesRunId, request: options.request });
     return hermesRunId;
   } catch (error) {
-    await setRunPending(options.runId, null, "하치와레에게 요청하지 못했어요.");
+    await setRunPending(options.runId, null, "에이전트에게 요청하지 못했어요.");
     await setCallbackToken({ kind: "run", id: options.runId }, null);
     throw error;
   }
@@ -162,7 +165,9 @@ export const startIssueRecount = async (options: {
   reportRecipient: string;
   reportTemplate: string;
 }) => {
-  const config = ensureHermes();
+  const issue = await getIssueRow(options.issueId);
+  if (!issue) throw new Error("이슈를 찾을 수 없어요.");
+  const config = ensureHermes(issue.userId);
   const since = options.lastSnapshotAt
     ? kst(options.lastSnapshotAt).format("YYYY.MM.DD HH:mm")
     : null;
@@ -179,7 +184,7 @@ export const startIssueRecount = async (options: {
       : "집계 구간: 최초 보도부터 지금까지 (네이버 뉴스 기준, KST)",
     ...(options.isReport
       ? [
-          `정기 보고용 집계야. 고객사 담당자에게 보낼 보고 초안(reportText)도 써줘. 인사는 '${options.reportRecipient || "담당 매니저님"}, 안녕하세요. 웰컴 성예은입니다.'로 시작해.`,
+          `정기 보고용 집계야. 고객사 담당자에게 보낼 보고 초안(reportText)도 써줘. 인사는 '${options.reportRecipient || "담당자님"}, 안녕하세요.'로 시작해.`,
           ...(options.reportTemplate
             ? [
                 `보고 초안은 아래 서식을 그대로 따라 쓰고, 빈칸과 숫자만 이번 집계로 채워:\n${options.reportTemplate}`,
@@ -233,7 +238,7 @@ export const startIssueRecount = async (options: {
     await setIssuePending(options.issueId, hermesRunId);
     return hermesRunId;
   } catch (error) {
-    await setIssuePending(options.issueId, null, "하치와레에게 요청하지 못했어요.");
+    await setIssuePending(options.issueId, null, "에이전트에게 요청하지 못했어요.");
     await setCallbackToken({ kind: "issue", id: options.issueId }, null);
     throw error;
   }
@@ -244,8 +249,8 @@ const checkFinished = async (hermesRunId: string) => {
   const status = await getHermesRunStatus(getHermesConfig(), hermesRunId);
   if (!status || !TERMINAL.has(status.status)) return null;
   return status.status === "completed"
-    ? "하치와레가 결과를 보내지 않고 작업을 끝냈어요. 다시 시도해 주세요."
-    : status.error || "하치와레 작업이 중간에 실패했어요.";
+    ? "에이전트가 결과를 보내지 않고 작업을 끝냈어요. 다시 시도해 주세요."
+    : status.error || "에이전트 작업이 중간에 실패했어요.";
 };
 
 /**

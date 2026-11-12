@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { Providers } from "@/components/providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/site";
 
 import "./globals.css";
 
@@ -26,38 +27,14 @@ const SITE_URL = BASE_URL.startsWith("http") ? BASE_URL : `https://${BASE_URL}`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "하치와레 메이트",
-  description: "작고 귀여운 하치와레가 메이트로 도와줄게요♪",
-  icons: {
-    icon: [{ url: "/munjackgui.png", sizes: "384x384", type: "image/png" }],
-    apple: { url: "/munjackgui.png", sizes: "384x384", type: "image/png" },
-  },
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
+  description: APP_DESCRIPTION,
   openGraph: {
     url: SITE_URL,
-    title: "하치와레 메이트",
-    description: "하치와레 메이트가 도와줄게요♪",
-    images: [
-      {
-        url: "/munjackgui.png",
-        width: 384,
-        height: 384,
-        alt: "하치와레",
-      },
-      {
-        url: "/munjackgui-thinking.png",
-        width: 200,
-        height: 200,
-        alt: "하치와레 생각중",
-      },
-    ],
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
     type: "website",
     locale: "ko_KR",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "하치와레 메이트",
-    description: "하치와레 메이트가 도와줄게요♪",
-    images: ["/munjackgui.png"],
   },
 };
 

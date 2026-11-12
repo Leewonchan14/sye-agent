@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import {
-  getIssueRow,
+  assertIssueOwner,
   getMonitorIssuePayload,
   updateMonitorIssue,
 } from "@/lib/db/monitor";
@@ -22,16 +22,17 @@ export const GET = async (
   req: Request,
   ctx: { params: Promise<{ issueId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const issueId = parseId((await ctx.params).issueId);
   if (!issueId)
     return Response.json({ error: "issueId가 올바르지 않아요." }, { status: 400 });
 
   try {
+    await assertIssueOwner(user.id, issueId);
     await reconcileIssuePending(issueId);
-    return Response.json(await getMonitorIssuePayload(issueId));
+    return Response.json(await getMonitorIssuePayload(user.id, issueId));
   } catch (error) {
     return monitorErrorResponse(error, "이슈를 불러오지 못했어요.");
   }
@@ -57,8 +58,8 @@ export const PATCH = async (
   req: Request,
   ctx: { params: Promise<{ issueId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const issueId = parseId((await ctx.params).issueId);
   if (!issueId)
@@ -66,15 +67,14 @@ export const PATCH = async (
 
   try {
     const patch = patchSchema.parse(await readJson(req));
-    const row = await getIssueRow(issueId);
-    if (!row) return Response.json({ error: "이슈가 없어요." }, { status: 404 });
+    const row = await assertIssueOwner(user.id, issueId);
 
     // 일정을 바꾸면 이미 지난 시각을 뒤늦게 돌리지 않고 다음 시각부터 시작한다.
     const rescheduled =
       (patch.collectStart !== undefined && patch.collectStart !== row.collectStart) ||
       (patch.collectGapMinutes !== undefined &&
         patch.collectGapMinutes !== row.collectGapMinutes);
-    const issue = await updateMonitorIssue(issueId, {
+    const issue = await updateMonitorIssue(user.id, issueId, {
       ...patch,
       ...(rescheduled && {
         lastAutoSlot: issueCollectSlot({

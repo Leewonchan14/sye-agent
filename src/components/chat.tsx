@@ -1,9 +1,6 @@
 "use client";
 
-import { kst } from "@/lib/kst";
-
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { sample } from "lodash";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -23,10 +20,8 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { ExampleQuestions } from "@/components/example-questions";
-import { HeartsOverlay } from "@/components/hearts";
 import { MessageItem } from "@/components/message";
 import { SidebarLayout } from "@/components/sidebar-layout";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
@@ -36,7 +31,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { useAuthStore } from "@/lib/auth-store";
+import { Spinner } from "@/components/ui/spinner";
 import { chatErrorMessage } from "@/lib/error-text";
 import { useSessionSidebarSync } from "@/lib/use-session-sidebar-sync";
 import { extractMessageText } from "@/lib/utils";
@@ -121,13 +116,9 @@ export const ChatShell = ({ sessionId: initialSessionId }: { sessionId?: string 
 /* ── ChatInner ── */
 
 const ChatInner = ({ sessionId }: { sessionId: string }) => {
-  const tk = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
 
-  const { handleFinish } = useSessionSidebarSync({
-    sessionId,
-    token: tk ?? "",
-  });
+  const { handleFinish } = useSessionSidebarSync({ sessionId });
 
   /** 답을 받지 못한 사용자 메시지 — 복구할 턴이 없을 때 "다시 시도"를 띄운다. */
   const [unanswered, setUnanswered] = useState<string | null>(null);
@@ -142,9 +133,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: async () => {
-      const r = await fetch(`/api/messages?sessionId=${sessionId}`, {
-        headers: { "x-auth-token": tk },
-      });
+      const r = await fetch(`/api/messages?sessionId=${sessionId}`);
       const d = await r.json();
       // Prefer complete session state (preserves exact SSE structure)
       if (d.state) return d.state as UIMessage[];
@@ -168,12 +157,10 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { sessionId },
-      headers: { "x-auth-token": tk },
       // 끊긴 턴 이어받기 — 서버가 이 GET으로 프레임을 재생하고 런에 다시 붙는다.
       prepareReconnectToStreamRequest: () => ({
         api: `/api/chat/${sessionId}/stream`,
         headers: {
-          "x-auth-token": tk ?? "",
           "x-stream-offset": String(readStreamCursor(sessionId).offset),
         },
       }),
@@ -317,9 +304,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const recoverAfterStall = useCallback(async () => {
     stop();
     try {
-      const r = await fetch(`/api/chat/${sessionId}/turn`, {
-        headers: { "x-auth-token": tk ?? "" },
-      });
+      const r = await fetch(`/api/chat/${sessionId}/turn`, undefined);
       const turn = r.ok
         ? ((await r.json()) as { turn: { runId: string } | null }).turn
         : null;
@@ -343,7 +328,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     } catch (error) {
       console.error("[chat] stall recovery failed:", error);
     }
-  }, [sessionId, tk, stop, resumeStream, runResumeLoop]);
+  }, [sessionId, stop, resumeStream, runResumeLoop]);
 
   // 새 요청이 30초 동안 첫 응답도 못 받으면 매달린 것으로 보고 정리한다.
   useEffect(() => {
@@ -392,9 +377,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         let turn: { runId: string; userText: string | null } | null = null;
         setRecovering(true);
         for (let attempt = 0; attempt < attempts; attempt++) {
-          const r = await fetch(`/api/chat/${sessionId}/turn`, {
-            headers: { "x-auth-token": tk ?? "" },
-          });
+          const r = await fetch(`/api/chat/${sessionId}/turn`, undefined);
           if (r.ok) {
             const body = (await r.json()) as {
               turn: { runId: string; userText: string | null } | null;
@@ -454,7 +437,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     initialMessages,
     status,
     sessionId,
-    tk,
     setMessages,
     resumeStream,
     runResumeLoop,
@@ -473,12 +455,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     clearError();
     void fetch(`/api/chat/${sessionId}/cancel`, {
       method: "POST",
-      headers: { "x-auth-token": tk ?? "" },
     }).catch(() => {});
     stop();
-  }, [sessionId, tk, stop, setMessages, clearError]);
-
-  const [showHearts, setShowHearts] = useState(false);
+  }, [sessionId, stop, setMessages, clearError]);
 
   const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -535,11 +514,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       scheduleInvalidate();
       setUnanswered(null);
 
-      // "사랑해" easter egg — trigger hearts
-      if (trimmed.includes("사랑해") || trimmed.includes("좋아해")) {
-        setShowHearts(true);
-      }
-
       sendMessage(persistUserMessage(trimmed));
     },
     [status, sendMessage, scheduleInvalidate, promoteToSessionUrl, persistUserMessage]
@@ -552,11 +526,6 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       promoteToSessionUrl();
       scheduleInvalidate();
       setUnanswered(null);
-
-      // "사랑해" easter egg — trigger hearts
-      if (text.includes("사랑해") || text.includes("좋아해")) {
-        setShowHearts(true);
-      }
 
       sendMessage(persistUserMessage(text));
     },
@@ -640,12 +609,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const hasMsgs = messages.length > 0;
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      style={{ backgroundColor: "var(--color-canvas)" }}
-    >
-      <HeartsOverlay show={showHearts} onDone={() => setShowHearts(false)} />
-
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
       {/* Messages */}
       {showLoading ? (
         <ChatLoading />
@@ -653,7 +617,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         <MessageScrollerProvider autoScroll>
           <MessageScroller className="flex-1">
             <MessageScrollerViewport>
-              <MessageScrollerContent className="mx-auto w-full max-w-2xl px-4 pt-12">
+              <MessageScrollerContent className="mx-auto w-full max-w-2xl px-4 pt-8">
                 {messages.map((m, idx) => (
                   <MessageScrollerItem
                     key={m.id}
@@ -668,7 +632,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   </MessageScrollerItem>
                 ))}
                 {unanswered && !showLoader && (
-                  <div className="mx-auto mt-4 flex w-full max-w-2xl items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
+                  <div className="mx-auto mt-4 flex w-full max-w-2xl items-center justify-between gap-3 rounded-md border px-4 py-3">
                     <span className="text-sm text-muted-foreground">
                       응답을 받지 못했어요. 다시 시도할까요?
                     </span>
@@ -685,11 +649,9 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                   </div>
                 )}
                 {showLoader && (
-                  <div className="flex animate-bounce items-center gap-2 px-3 py-2">
-                    <Avatar size="sm" className="inline-flex md:hidden">
-                      <AvatarImage src="/munjackgui.png" alt="하치와레" />
-                    </Avatar>
-                    <span className="text-sm text-muted-foreground">생각 중이에요…♪</span>
+                  <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+                    <Spinner />
+                    생각하는 중…
                   </div>
                 )}
               </MessageScrollerContent>
@@ -698,7 +660,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
           </MessageScroller>
         </MessageScrollerProvider>
       ) : (
-        <div className="flex flex-1 flex-col items-center">
+        <div className="flex flex-1 flex-col items-center px-4">
           <EmptyState onQuestionClick={handleQuestionClick} />
         </div>
       )}
@@ -707,24 +669,12 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
       {!showLoading && (
         <div className="shrink-0 px-4 pb-6">
           <div className="mx-auto w-full max-w-2xl">
-            <PromptInput
-              onSubmit={handlePromptSubmit}
-              className="relative flex flex-col rounded-2xl border **:data-[slot=input-group]:focus-within:border **:data-[slot=input-group]:focus-within:ring-0"
-              style={{
-                borderColor: "var(--color-hairline)",
-                backgroundColor: "var(--color-canvas-soft)",
-              }}
-            >
+            <PromptInput onSubmit={handlePromptSubmit}>
               <PromptInputBody>
-                <PromptInputTextarea
-                  placeholder="뭐 하고 싶어…?"
-                  className="max-h-32 min-h-13 resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-[--color-ink] placeholder:text-[--color-muted-soft] focus:outline-none focus-visible:ring-0"
-                />
+                <PromptInputTextarea placeholder="무엇이든 물어보세요" />
               </PromptInputBody>
               <PromptInputFooter>
-                <PromptInputTools>
-                  <RotatingPhrase />
-                </PromptInputTools>
+                <PromptInputTools />
                 <PromptInputSubmit status={status} onStop={handleStop} />
               </PromptInputFooter>
             </PromptInput>
@@ -735,174 +685,25 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   );
 };
 
-/* ── Suggestion Chip ── */
-
 /* ── Chat Loading ── */
 
-const loadingPhrases = [
-  "잠시만 기다려줘…!",
-  "준비 중이야…♪",
-  "거의 다 왔어…!",
-  "데이터 불러오는 중…♪",
-  "예은님… 기다려줘…!",
-  "좋은 정보 찾는 중…♪",
-  "잠깐만…! 곧 갈게…!",
-];
-
-const ChatLoading = () => {
-  const phrase = useMemo(() => sample(loadingPhrases)!, []);
-
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4">
-      <img
-        src="/munjackgui.png"
-        alt="하치와레"
-        className="size-20 animate-bounce rounded-full object-cover"
-        style={{ backgroundColor: "var(--color-canvas-soft)" }}
-      />
-      <p
-        className="text-sm"
-        style={{ color: "var(--color-muted)" }}
-        suppressHydrationWarning
-      >
-        {phrase}
-      </p>
-    </div>
-  );
-};
-
-/* ── Rotating Phrase Badge ── */
-
-const phrases = [
-  "힘내자…!",
-  "같이 가자…!",
-  "야호…!",
-  "좋아…♪",
-  "예은니임…!",
-  "데이트 가쟈…!",
-  "맛난 거 먹쟈…!",
-  "무섭지 않아…!",
-  "둘이 함께…!",
-  "즐거워…♪",
-  "괜찮아…!",
-  "완전 최고…!",
-  "내가 도와줄게…!",
-  "잘 될 거야…!",
-  "…라는 거야…!",
-  "알고 있어?〜",
-  "사랑해…! 하고 말해봐…♪",
-  "좋아한다고… 말해줘…!",
-  "예은님 마음… 궁금해…!",
-  "파나소닉 분석해볼까…!",
-  "홍콩관광청 뉴스 볼래…!",
-  "파나소닉 조회 해볼래…!",
-  "브랜드 모니터링 해줘…!",
-  "브랜드 뉴스 수집…!",
-  "HKTB 분석…!",
-];
-
-const RotatingPhrase = () => {
-  const [phrase, setPhrase] = useState(() => sample(phrases)!);
-  const [fadeKey, setFadeKey] = useState(0);
-
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setPhrase(sample(phrases)!);
-      setFadeKey((p) => p + 1);
-    }, 3000);
-    return () => clearInterval(iv);
-  }, []);
-
-  return (
-    <span
-      className="flex items-center gap-1.5 text-[12px] font-medium"
-      style={{ color: "var(--color-muted)" }}
-    >
-      <img
-        src="/munjackgui.png"
-        alt="하치와레"
-        className="size-5 rounded-full object-cover"
-        draggable={false}
-      />
-      <span key={fadeKey} className="animate-bounce-fade-in">
-        {phrase}
-      </span>
-    </span>
-  );
-};
+const ChatLoading = () => (
+  <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+    <Spinner />
+    대화를 불러오는 중…
+  </div>
+);
 
 /* ── Empty State ── */
 
-const subPhrases = [
-  "어떻게든 되겠지…!!",
-  "서두르지 않아도 괜찮아…!",
-  "즐거운 기분… 계속… 가져가자…!",
-  "몇 번이라도… 계속 응원할게…!!",
-  "괜찮아, 항상 어떻게든 됐잖아…!!",
-  "그거 완전 최고잖아…!!",
-  "둘이 함께라면… 뭐든 즐거워…♪",
-  "안 되면… 다른 방법… 찾아보자…!",
-  "쉬고 싶을 땐… 쉬는 게… 최고야…!",
-  "예은님이라면… 분명 행복할 거야…!",
-  "오늘도 둘이서 즐겁게…♪",
-  "맛집…이라는 거야…!?",
-  "알고 있어?〜 그거 완전… 최고의 데이트 코스…라는 뜻이야!?",
-];
-
-const getTimeGreeting = (): string => {
-  const hour = kst().hour();
-  if (hour >= 6 && hour < 11) return "좋은 아침…! 예은님…♪";
-  if (hour >= 11 && hour < 14) return "예은님…! 점심은 챙겨 먹었어…?";
-  if (hour >= 14 && hour < 18) return "따스한 오후야…! 예은님…♪";
-  if (hour >= 18 && hour < 24) return "저녁이 왔어…! 둘이서 저녁 어때…?";
-  return "이 시간까지 깨어있구나…! 푹 쉬어야 해…!";
-};
-
-const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void }) => {
-  const [subIdx, setSubIdx] = useState(0);
-  const [fadeKey, setFadeKey] = useState(0);
-
-  const timeGreeting = useMemo(() => getTimeGreeting(), []);
-
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setSubIdx((p) => (p + 1) % subPhrases.length);
-      setFadeKey((p) => p + 1);
-    }, 3000);
-    return () => clearInterval(iv);
-  }, []);
-  return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center gap-1">
-      {/* Character icon */}
-      <div className="mb-5">
-        <img
-          src="/munjackgui.png"
-          alt="하치와레"
-          className="size-16 rounded-full object-cover"
-          style={{ backgroundColor: "var(--color-canvas-soft)" }}
-          draggable={false}
-        />
-      </div>
-      <h1
-        className="text-[22px] leading-snug font-normal"
-        style={{ color: "var(--color-ink)" }}
-      >
-        예은
-        <span style={{ color: "var(--color-muted)" }}>님…!</span>
-      </h1>
-      <p className="animate-fade-in text-[15px]" style={{ color: "var(--color-ink)" }}>
-        {timeGreeting}
-      </p>
-      <p
-        key={fadeKey}
-        className="animate-bounce-fade-in mt-1 text-[13px]"
-        style={{ color: "var(--color-muted)" }}
-      >
-        {subPhrases[subIdx]}
-      </p>
-      <div className="mt-5">
-        <ExampleQuestions onQuestionClick={onQuestionClick} />
-      </div>
+const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void }) => (
+  <div className="mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center gap-2">
+    <h1 className="text-2xl font-semibold tracking-tight">무엇을 도와드릴까요?</h1>
+    <p className="text-sm text-muted-foreground">
+      질문을 입력하거나 아래 예시를 눌러 시작하세요.
+    </p>
+    <div className="mt-6 w-full">
+      <ExampleQuestions onQuestionClick={onQuestionClick} />
     </div>
-  );
-};
+  </div>
+);

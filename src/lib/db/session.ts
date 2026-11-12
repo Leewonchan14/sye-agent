@@ -1,13 +1,51 @@
 import type { TextUIPart, UIMessage } from "ai";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
 
 import { getDb, schema } from "@/lib/db/db";
 
 const { sessionState } = schema;
 
 /** 세션의 전체 UIMessage[] 상태를 JSONB로 저장합니다. */
+export class SessionAccessError extends Error {
+  constructor() {
+    super("이 대화에 접근할 수 없습니다.");
+    this.name = "SessionAccessError";
+  }
+}
+
+/**
+ * 세션을 사용자에게 묶는다. 처음 보는 세션이면 빈 상태로 만들고,
+ * 이미 다른 사용자의 세션이면 SessionAccessError를 던진다.
+ */
+export const claimSession = async (userId: string, sessionId: string): Promise<void> => {
+  const db = getDb();
+  await db
+    .insert(sessionState)
+    .values({ sessionId, userId, messages: [] })
+    .onConflictDoNothing({ target: sessionState.sessionId });
+  await assertSessionOwner(userId, sessionId);
+};
+
+/** 세션이 이 사용자의 것인지. 세션이 없으면 false. */
+export const isSessionOwner = async (userId: string, sessionId: string) => {
+  const rows = await getDb()
+    .select({ userId: sessionState.userId })
+    .from(sessionState)
+    .where(eq(sessionState.sessionId, sessionId))
+    .limit(1);
+  return rows[0]?.userId === userId;
+};
+
+/** 세션 주인이 아니면(또는 세션이 없으면) SessionAccessError를 던진다. */
+export const assertSessionOwner = async (
+  userId: string,
+  sessionId: string
+): Promise<void> => {
+  if (!(await isSessionOwner(userId, sessionId))) throw new SessionAccessError();
+};
+
 export const saveSessionState = async (
+  userId: string,
   sessionId: string,
   messages: UIMessage[]
 ): Promise<void> => {
@@ -35,10 +73,11 @@ export const saveSessionState = async (
     )
     .join("\n");
 
-  await db
+  const saved = await db
     .insert(sessionState)
     .values({
       sessionId,
+      userId,
       title,
       messages,
       messagesText: allText || null,
@@ -52,16 +91,23 @@ export const saveSessionState = async (
         messagesText: allText || null,
         updatedAt: new Date(),
       },
-    });
+      // 다른 사용자의 세션은 덮어쓰지 않는다.
+      setWhere: eq(sessionState.userId, userId),
+    })
+    .returning();
+  if (saved.length === 0) throw new SessionAccessError();
 };
 
 /** 세션의 전체 UIMessage[] 상태를 불러옵니다. 없으면 null을 반환합니다. */
-export const getSessionState = async (sessionId: string): Promise<UIMessage[] | null> => {
+export const getSessionState = async (
+  userId: string,
+  sessionId: string
+): Promise<UIMessage[] | null> => {
   const db = getDb();
   const rows = await db
     .select({ messages: sessionState.messages })
     .from(sessionState)
-    .where(eq(sessionState.sessionId, sessionId))
+    .where(and(eq(sessionState.sessionId, sessionId), eq(sessionState.userId, userId)))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
@@ -103,23 +149,8 @@ const decodeCursor = (cursor: string): { updatedAt: string; sessionId: string } 
   return { updatedAt, sessionId };
 };
 
-export const listSessions = async (): Promise<SessionInfo[]> => {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: sessionState.sessionId,
-      title: sql<string>`COALESCE(${sessionState.messages}->0->'parts'->0->>'text', 'New Chat')`,
-      messageCount: sql<number>`jsonb_array_length(${sessionState.messages})`,
-      lastActivity: sessionState.updatedAt,
-    })
-    .from(sessionState)
-    .orderBy(desc(sessionState.updatedAt))
-    .limit(50);
-
-  return rows.map(toSessionInfo);
-};
-
 export const listSessionsPaginated = async (
+  userId: string,
   opts: { cursor?: string; limit?: number } = {}
 ): Promise<SessionsPage> => {
   const db = getDb();
@@ -135,18 +166,28 @@ export const listSessionsPaginated = async (
     })
     .from(sessionState);
 
+  // 빈 세션(제출 직전 claimSession으로 만든 행)은 목록에 띄우지 않는다.
+  const mine = and(
+    eq(sessionState.userId, userId),
+    sql`jsonb_array_length(${sessionState.messages}) > 0`
+  );
+
   let rows: SessionRow[];
 
   if (opts.cursor) {
     const { updatedAt, sessionId } = decodeCursor(opts.cursor);
     rows = await baseQuery
       .where(
-        sql`(${sessionState.updatedAt}, ${sessionState.sessionId}) < (${updatedAt}::timestamptz, ${sessionId})`
+        and(
+          mine,
+          sql`(${sessionState.updatedAt}, ${sessionState.sessionId}) < (${updatedAt}::timestamptz, ${sessionId})`
+        )
       )
       .orderBy(desc(sessionState.updatedAt), desc(sessionState.sessionId))
       .limit(take);
   } else {
     rows = await baseQuery
+      .where(mine)
       .orderBy(desc(sessionState.updatedAt), desc(sessionState.sessionId))
       .limit(take);
   }
@@ -181,6 +222,7 @@ const toDateString = (d: Date | string | null): string => {
 };
 
 export const searchSessions = async (
+  userId: string,
   query: string,
   opts: { cursor?: string; limit?: number } = {}
 ): Promise<{ results: SessionSearchResult[]; nextCursor: string | null }> => {
@@ -211,10 +253,13 @@ export const searchSessions = async (
       ''
     )`;
 
-  const searchCondition = sql`(
+  const searchCondition = and(
+    eq(sessionState.userId, userId),
+    sql`(
     ${sessionState.title} ILIKE ${pattern}
     OR ${sessionState.messagesText} ILIKE ${pattern}
-  )`;
+  )`
+  );
 
   const whereClause = opts.cursor
     ? (() => {
@@ -260,8 +305,4 @@ export const searchSessions = async (
     })),
     nextCursor,
   };
-};
-
-export const getOrCreateSession = (sessionId?: string): string => {
-  return sessionId ?? uuidv4();
 };

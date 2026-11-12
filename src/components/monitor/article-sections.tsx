@@ -44,10 +44,10 @@ interface Props {
 
 const FLAG_LABEL: Record<string, { label: string; tone: string }> = {
   new: { label: "방금 찾음", tone: "bg-primary/10 text-primary" },
-  dup: { label: "같은 보도자료", tone: "bg-canvas-card text-muted" },
+  dup: { label: "같은 보도자료", tone: "bg-muted text-muted-foreground" },
   reported: { label: "이전에 보고함", tone: "bg-warning/15 text-warning" },
-  "over-limit": { label: "최대 건수 초과", tone: "bg-canvas-card text-muted" },
-  blocked: { label: "원문 차단", tone: "bg-error/10 text-error" },
+  "over-limit": { label: "최대 건수 초과", tone: "bg-muted text-muted-foreground" },
+  blocked: { label: "원문 차단", tone: "bg-destructive/10 text-destructive" },
 };
 
 const Pill = ({
@@ -68,7 +68,7 @@ const Pill = ({
 );
 
 const ItemTime = ({ iso }: { iso: string | null }) => (
-  <div className="pt-0.5 font-mono text-[12px] leading-snug text-muted tabular-nums">
+  <div className="pt-0.5 font-mono text-[12px] leading-snug text-muted-foreground tabular-nums">
     {iso ? (
       <>
         {kst(iso).format("MM.DD")}
@@ -104,13 +104,13 @@ const ItemRow = ({
   return (
     <div
       className={cn(
-        "grid grid-cols-[24px_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-hairline/60 px-4 py-3.5 transition-colors first:border-t-0 hover:bg-canvas-soft sm:grid-cols-[24px_56px_minmax(0,1fr)_auto]",
+        "grid grid-cols-[24px_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-border/60 px-4 py-3.5 transition-colors first:border-t-0 hover:bg-muted sm:grid-cols-[24px_56px_minmax(0,1fr)_auto]",
         item.flags.includes("new") && "bg-primary/5"
       )}
     >
       <input
         type="checkbox"
-        className="row-span-2 mt-1 size-4 cursor-pointer accent-[var(--color-primary)] sm:row-span-1"
+        className="row-span-2 mt-1 size-4 cursor-pointer accent-[var(--primary)] sm:row-span-1"
         checked={item.included}
         aria-label="리포트에 포함"
         onChange={(e) =>
@@ -129,12 +129,12 @@ const ItemRow = ({
           href={link}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[15px] leading-snug font-medium break-words text-ink hover:underline hover:underline-offset-4"
+          className="text-[15px] leading-snug font-medium break-words text-foreground hover:underline hover:underline-offset-4"
         >
           {item.title}
         </a>
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted">
-          <span className="font-medium text-body">{item.media}</span>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted-foreground">
+          <span className="font-medium text-foreground">{item.media}</span>
           <span>{item.reporter ? reporterLabel(item.reporter) : "기자 미확인"}</span>
           <ToneMenu
             sentiment={item.sentiment}
@@ -163,7 +163,7 @@ const ItemRow = ({
           )}
         </div>
         {item.reason && (
-          <p className="flex items-baseline gap-1.5 text-[13px] text-body">
+          <p className="flex items-baseline gap-1.5 text-[13px] text-foreground">
             <Sparkles className="size-3 shrink-0 translate-y-0.5 text-primary" />
             <span>{item.reason}</span>
           </p>
@@ -186,9 +186,9 @@ const ItemRow = ({
                 {group.map((g) => (
                   <li
                     key={g.id}
-                    className="grid gap-x-3 text-[13px] text-body sm:grid-cols-[88px_104px_minmax(0,1fr)]"
+                    className="grid gap-x-3 text-[13px] text-foreground sm:grid-cols-[88px_104px_minmax(0,1fr)]"
                   >
-                    <span className="font-mono text-[12px] text-muted tabular-nums">
+                    <span className="font-mono text-[12px] text-muted-foreground tabular-nums">
                       {g.publishedAt ? kst(g.publishedAt).format("MM.DD HH:mm") : "—"}
                     </span>
                     <span>{g.media}</span>
@@ -211,11 +211,11 @@ const ItemRow = ({
 
       <div className="col-start-2 flex flex-col gap-2 sm:col-start-auto sm:items-end">
         <span
-          className="inline-flex items-center gap-1.5 font-mono text-[12px] whitespace-nowrap text-muted tabular-nums"
+          className="inline-flex items-center gap-1.5 font-mono text-[12px] whitespace-nowrap text-muted-foreground tabular-nums"
           title="AI 관련도"
         >
           관련도 {item.score}
-          <span className="h-1 w-10 overflow-hidden rounded-full bg-canvas-card">
+          <span className="h-1 w-10 overflow-hidden rounded-full bg-muted">
             <span
               className="block h-full rounded-full bg-primary"
               style={{ width: `${item.score}%` }}
@@ -298,12 +298,16 @@ const ItemRow = ({
 
 const GoalMeter = ({ count, goal }: { count: number; goal: number | null }) => {
   if (goal === null) {
-    return <span className="text-[13px] text-muted">전수 집계 · 대표 {count}건</span>;
+    return (
+      <span className="text-[13px] text-muted-foreground">
+        전수 집계 · 대표 {count}건
+      </span>
+    );
   }
   const short = count < goal;
   return (
-    <span className="inline-flex items-center gap-2 text-[13px] text-muted">
-      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-canvas-card">
+    <span className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
         <span
           className={cn("block h-full rounded-full bg-success", short && "bg-warning")}
           style={{ width: `${goal ? Math.min(100, (count / goal) * 100) : 100}%` }}
@@ -340,14 +344,14 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
   return (
     <div className="flex flex-col gap-8">
       {reportedCount > 0 && (
-        <p className="rounded-xl bg-warning/10 px-4 py-2.5 text-[13px] text-body">
+        <p className="rounded-xl bg-warning/10 px-4 py-2.5 text-[13px] text-foreground">
           이전에 보고한 기사 {reportedCount}건은 체크를 해제해 뒀어요. 다시 보내려면
           체크해 주세요.
         </p>
       )}
       {attention > 0 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-error/20 bg-error/5 px-4 py-2.5 text-[13px] text-body">
-          <TriangleAlert className="size-4 shrink-0 text-error" />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-[13px] text-foreground">
+          <TriangleAlert className="size-4 shrink-0 text-destructive" />
           <span>
             먼저 볼 기사{" "}
             {[negative && `부정 ${negative}건`, important && `중요 ${important}건`]
@@ -376,12 +380,17 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
         return (
           <section key={category.key} aria-labelledby={`cat-${category.key}`}>
             <div className="mb-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
-              <h2 id={`cat-${category.key}`} className="text-lg font-medium text-ink">
+              <h2
+                id={`cat-${category.key}`}
+                className="text-lg font-medium text-foreground"
+              >
                 {category.name}
               </h2>
               <GoalMeter count={included} goal={category.goal} />
               {category.goal === null && total > allLeads.length && (
-                <span className="text-[13px] text-muted">전재 포함 총 {total}건</span>
+                <span className="text-[13px] text-muted-foreground">
+                  전재 포함 총 {total}건
+                </span>
               )}
               <span className="flex-1" />
               {category.goal !== null && included < category.goal && (
@@ -396,7 +405,7 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
               )}
             </div>
             {leads.length ? (
-              <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
+              <div className="overflow-hidden rounded-xl border border-border bg-card">
                 {leads.map((item) => (
                   <ItemRow
                     key={item.id}
@@ -415,7 +424,7 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
                 ))}
               </div>
             ) : (
-              <p className="rounded-xl border border-dashed border-hairline px-4 py-6 text-center text-sm text-muted">
+              <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
                 {allLeads.length
                   ? "이 카테고리에는 부정·중요 기사가 없어요."
                   : "이 카테고리로 분류된 기사가 아직 없어요."}
@@ -427,15 +436,15 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
 
       {excluded.length > 0 && (
         <details className="group">
-          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
             <ChevronRight className="size-4 text-primary transition-transform group-open:rotate-90" />
-            AI가 제외한 후보 <span className="font-mono text-ink">{excluded.length}</span>
-            건
-            <Pill className="bg-canvas-card text-muted">
+            AI가 제외한 후보{" "}
+            <span className="font-mono text-foreground">{excluded.length}</span>건
+            <Pill className="bg-muted text-muted-foreground">
               규칙으로 제외 {excluded.filter((x) => x.excludedRule).length}
             </Pill>
             {excluded.some((x) => x.category && !categoryKeys.has(x.category)) && (
-              <Pill className="bg-canvas-card text-muted">
+              <Pill className="bg-muted text-muted-foreground">
                 지운 카테고리{" "}
                 {
                   excluded.filter((x) => x.category && !categoryKeys.has(x.category))
@@ -444,28 +453,26 @@ export const ArticleSections = ({ client, run, items, mutations, onAskMore }: Pr
               </Pill>
             )}
           </summary>
-          <div className="mt-3 overflow-hidden rounded-xl border border-hairline bg-surface">
+          <div className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
             {excluded.map((x) => (
               <div
                 key={x.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-t border-hairline/60 px-4 py-3 first:border-t-0"
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-t border-border/60 px-4 py-3 first:border-t-0"
               >
                 <div className="flex min-w-0 flex-col gap-1 opacity-70">
                   <a
                     href={x.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-medium break-words text-ink hover:underline"
+                    className="text-sm font-medium break-words text-foreground hover:underline"
                   >
                     {x.title} <ExternalLink className="inline size-3" />
                   </a>
-                  <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
-                    <span className="text-body">{x.media}</span>
-                    {x.excludedRule && (
-                      <Pill className="bg-canvas-card">{x.excludedRule}</Pill>
-                    )}
+                  <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+                    <span className="text-foreground">{x.media}</span>
+                    {x.excludedRule && <Pill className="bg-muted">{x.excludedRule}</Pill>}
                     {x.category && !categoryKeys.has(x.category) ? (
-                      <Pill className="bg-canvas-card">지운 카테고리</Pill>
+                      <Pill className="bg-muted">지운 카테고리</Pill>
                     ) : (
                       <span className="inline-flex items-center gap-1">
                         <X className="size-3" />

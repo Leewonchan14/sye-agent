@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { updateMonitorItem } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId, readJson } from "@/lib/monitor/api";
 import { importanceSchema, sentimentSchema } from "@/lib/monitor/types";
@@ -21,8 +21,8 @@ export const PATCH = async (
   req: Request,
   ctx: { params: Promise<{ itemId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const itemId = parseId((await ctx.params).itemId);
   if (!itemId)
@@ -30,7 +30,7 @@ export const PATCH = async (
 
   try {
     const patch = patchSchema.parse(await readJson(req));
-    const item = await updateMonitorItem(itemId, patch);
+    const item = await updateMonitorItem(user.id, itemId, patch);
     return Response.json({ item });
   } catch (error) {
     return monitorErrorResponse(error, "기사 상태를 바꾸지 못했어요.");

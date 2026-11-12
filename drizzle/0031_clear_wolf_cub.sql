@@ -1,1 +1,0 @@
-ALTER TABLE "ledger_entries" ADD COLUMN "note" text DEFAULT '' NOT NULL;

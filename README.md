@@ -1,93 +1,94 @@
-# 하치와레 메이트
+# AI 어시스턴트
 
-> "이원찬"과 "성예은"이 둘만 쓰는 개인 AI 메이트 — 작고 귀여운 하치와레가 대화로 도와줍니다
+> AI 채팅과 언론 모니터링을 한곳에서 쓰는 멀티 유저 웹앱
+
+- **AI 채팅** — Hermes Agent가 웹 검색·브라우저·도구를 써서 답한다. 대화는 사용자별로 저장·검색된다.
+- **언론 모니터링** — 고객사(브랜드)별 카테고리·수집 규칙·리포트 서식·자동 수집 일정을 정해 두면 매일 기사를 모아 리포트 초안을 만든다. 위기·이슈 트래커로 보도량 추이를 쌓는다.
+- **계정** — 이메일·비밀번호 회원가입/로그인(Better Auth). 대화, 지시 사항, 예시 질문, 모니터링 고객사·이슈·규칙은 모두 사용자마다 따로 저장되고 다른 사용자는 볼 수 없다.
+
+서비스 이름은 `NEXT_PUBLIC_APP_NAME`으로 바꿀 수 있다.
 
 ## 기술 스택
 
-| 계층        | 기술                        | 버전                           |
-| ----------- | --------------------------- | ------------------------------ |
-| Framework   | Next.js (App Router)        | 16.2.10                        |
-| AI SDK      | Vercel AI SDK               | 7.0.28                         |
-| Agent       | Hermes Agent (hachi 프로필) | -                              |
-| LLM         | Hermes API 서버             | 프로필 설정에 따름             |
-| Database    | Neon (Serverless Postgres)  | @neondatabase/serverless 1.1.0 |
-| UI          | shadcn/ui + Tailwind CSS    | v4.3                           |
-| Lint/Format | Prettier + ESLint           | -                              |
+| 계층      | 기술                                    |
+| --------- | --------------------------------------- |
+| Framework | Next.js 16 (App Router)                 |
+| AI SDK    | Vercel AI SDK 7                         |
+| Agent     | Hermes Agent API 서버                   |
+| Auth      | Better Auth (email/password)            |
+| Database  | Postgres (Neon) + Drizzle               |
+| UI        | shadcn/ui (기본 테마) + Tailwind CSS v4 |
 
 ## 설치
 
 ```bash
-git clone <repo-url>
-cd sye-agent
 npm install
-
-# .env 파일 생성
-cp .env.example .env
-# → SITE_PASSWORD, DATABASE_URL, HERMES_API_URL, HERMES_API_KEY 입력
-
-npm run dev
-# http://localhost:3000
+cp .env.example .env   # DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL, HERMES_API_URL, HERMES_API_KEY 입력
+npm run db:migrate
+npm run dev            # http://localhost:3000 → /signup 에서 계정을 만든다
 ```
+
+## Docker로 실행 (PGlite)
+
+DB 서버 없이 컨테이너 안의 PGlite(파일 저장, `./data/pglite`)로 띄운다. 마이그레이션은 서버가 뜰 때 자동 적용된다.
+
+```bash
+# .env.docker (git 무시): BETTER_AUTH_SECRET, HERMES_API_URL=http://172.17.0.1:8642/p/monitor,
+#   HERMES_API_KEY, MONITOR_INGEST_KEY, MONITOR_CALLBACK_ORIGIN=http://172.17.0.1:3200
+# ./data/monitor-ingest.key 에 MONITOR_INGEST_KEY와 같은 값
+docker compose up -d --build app monitor-tick
+```
+
+- `app` — 3200 포트를 `127.0.0.1`, `172.17.0.1`(Hermes 샌드박스 콜백), `APP_BIND_TAILNET`(기본 Tailscale IP)에만 연다.
+- `monitor-tick` — 1분마다 수집 시계를 부른다. 알림은 보내지 않는다.
+- `DATABASE_URL=pglite:<폴더>`면 PGlite, 그 밖에는 Postgres(Neon/node-postgres)를 쓴다.
 
 ## 환경 변수
 
-| 변수                    | 필수     | 설명                                                                                                                                                                                   |
-| ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SITE_PASSWORD`         | ✅       | 웹사이트 접속 비밀번호 (예: 0411)                                                                                                                                                      |
-| `DATABASE_URL`          | ✅       | Neon DB 연결 문자열                                                                                                                                                                    |
-| `HERMES_API_URL`        | ✅       | Hermes API 서버 base URL (프로필 프리픽스 포함). 배포: `http(s)://<hermes-host>:8642/p/hachi`, 로컬: SSH 터널 후 `http://127.0.0.1:8642/p/hachi`                                       |
-| `HERMES_API_KEY`        | ✅       | `~/.hermes/profiles/hachi/.env`의 `API_SERVER_KEY` (게이트웨이 default 프로필 키와 다른 값)                                                                                            |
-| `HERMES_SESSION_PREFIX` | -        | Hermes 세션 ID 프리픽스 (기본 `sye-`)                                                                                                                                                  |
-| `HERMES_SESSION_KEY`    | -        | 장기 기억 스코프 헤더 `X-Hermes-Session-Key` (기본 `sye-agent`)                                                                                                                        |
-| `HERMES_SYSTEM_MESSAGE` | -        | `system_message` 끝에 덧붙일 문구 (선택)                                                                                                                                               |
-| `MONITOR_INGEST_KEY`    | 모니터링 | Hermes가 `/api/monitor/agent/*`로 수집 결과를 보낼 때 쓰는 키(`x-monitor-key`). Hermes 쪽에도 같은 값을 넣는다. 형식은 `docs/monitor-agent.md`                                         |
-| `NEXT_PUBLIC_SITE_URL`  | 배포 시  | OG 태그 이미지 URL에 사용되는 사이트 도메인 (예: `https://<프로젝트>.vercel.app`). 설정하지 않으면 Vercel 배포 시 `VERCEL_URL`을, 로컬 개발 시 `localhost:3000`을 자동으로 사용합니다. |
+| 변수                    | 필수     | 설명                                                                                                             |
+| ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`          | ✅       | Postgres 연결 문자열 (Neon 권장)                                                                                 |
+| `BETTER_AUTH_SECRET`    | ✅       | 세션 서명 키. `openssl rand -base64 32`                                                                          |
+| `BETTER_AUTH_URL`       | -        | 사이트 주소 (예: `https://app.example.com`, 로컬 `http://localhost:3000`)                                        |
+| `HERMES_API_URL`        | ✅       | Hermes API 서버 base URL (프로필 프리픽스 포함). 예: `http(s)://<hermes-host>:8642/p/monitor`                    |
+| `HERMES_API_KEY`        | ✅       | 서빙 프로필의 `API_SERVER_KEY`                                                                                   |
+| `NEXT_PUBLIC_APP_NAME`  | -        | 서비스 이름 (기본 `AI 어시스턴트`)                                                                               |
+| `HERMES_SESSION_PREFIX` | -        | Hermes 세션 ID 프리픽스 (기본 `app-`)                                                                            |
+| `HERMES_SESSION_KEY`    | -        | 장기 기억 스코프 접두사 (기본 `app`). 실제 헤더는 `<값>:user:<userId>`로 사용자마다 갈린다                       |
+| `HERMES_SYSTEM_MESSAGE` | -        | 모든 대화에 덧붙일 운영자 지시                                                                                   |
+| `MONITOR_INGEST_KEY`    | 모니터링 | 예약 스크립트·Hermes가 `/api/monitor/agent/*`를 부를 때 쓰는 키(`x-monitor-key`). 형식은 `docs/monitor-agent.md` |
+| `AUTH_SECURE_COOKIES`   | -        | `true`면 Secure 쿠키를 쓴다. `BETTER_AUTH_URL`이 `https://`면 자동으로 켜진다                                    |
+| `AUTH_RATE_LIMIT`       | -        | `off`면 로그인·가입 요청 제한을 끈다 (e2e 테스트 서버 전용)                                                      |
+| `NEXT_PUBLIC_SITE_URL`  | -        | OG 태그용 사이트 도메인                                                                                          |
 
-### .env 파일 예시
+## Hermes `monitor` 프로필
 
-```env
-SITE_PASSWORD=0411
-DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
-HERMES_API_URL=https://hermes.example.com/p/hachi
-# hachi 프로필(~/.hermes/profiles/hachi/.env)의 API_SERVER_KEY
-HERMES_API_KEY=your_hachi_api_server_key
+서비스 전용 Hermes 프로필은 `monitor`다(`~/.hermes/profiles/monitor`, API 경로 `/p/monitor`).
+개인용 프로필의 스킬·도구·모델 설정을 복제한 뒤 서비스에 맞게 바꿨다.
 
-# 선택: OG 태그 이미지 URL의 도메인을 고정하려면 설정 (기본값: VERCEL_URL 또는 localhost)
-# NEXT_PUBLIC_SITE_URL=https://<프로젝트>.vercel.app
-```
+- `SOUL.md` — 캐릭터 없이 정중한 존댓말을 쓰는 서비스 어시스턴트. 여러 사용자가 함께 쓴다는 전제(대화 간 정보 공유 금지, 내부 정보 비공개)와 언론 모니터링 규칙을 담았다.
+- `memory.memory_enabled`·`user_profile_enabled: false` — 프로필 단위 `MEMORY.md`/`USER.md`는 모든 사용자의 프롬프트에 들어가므로 끈다.
+- `skills.creation_nudge_interval: 0` — 사용자 대화에서 공용 스킬을 자동으로 만들지 않는다.
+- 개인용·특정 고객사 전용 스킬(데이트·가계부·캐릭터 GIF·특정 고객사 모니터링·운영 DB 지시문 로더)은 넣지 않았다.
+- `API_SERVER_KEY`는 다른 프로필과 다른 값이다. 앱의 `HERMES_API_KEY`에 이 값을 넣는다.
 
-## Neon DB 설정
+## 계정과 데이터 분리
 
-1. Vercel Marketplace → Neon → **Create** → Vercel 프로젝트 연결
-2. 환경 변수 `DATABASE_URL`이 자동으로 Vercel에 설정됨
-3. Vercel Neon Console → **SQL Editor** → 아래 스키마 SQL 실행
-4. 로컬 개발: `.env`에 `DATABASE_URL` 직접 입력
+- 로그인·가입·로그아웃은 Better Auth가 `/api/auth/*`에서 처리한다. 세션은 httpOnly 쿠키다.
+- 가입 요청은 IP당 분당 3회, 로그인은 분당 5회로 제한한다(DB `rate_limit` 테이블).
+- `src/proxy.ts`가 로그인 쿠키가 없는 화면 요청을 `/login`으로 보낸다. 실제 검증은 각 API의 `requireUser`가 한다.
+- 소유자 컬럼(`user_id`): `session_state`(대화), `instructions`, `suggestions`, `monitor_clients`, `monitor_issues`.
+  턴 로그·런·기사·스냅샷은 대화/고객사/이슈를 통해 소유자가 정해진다.
+- 다른 사용자의 대화 ID로 이어 쓰거나(`/api/chat`), 재개·취소·조회하면 403을 돌려준다.
+- Hermes 장기 기억(`X-Hermes-Session-Key`)도 사용자마다 따로 둔다.
+- 이메일 인증·비밀번호 재설정은 아직 없다(메일 발송 설정이 필요하다).
 
-### SQL 스키마
+## Hermes Agent 백엔드
 
-```sql
-CREATE TABLE IF NOT EXISTS session_state (
-  session_id TEXT PRIMARY KEY,
-  messages JSONB NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-## 접속
-
-`.env` 파일의 `SITE_PASSWORD` 값으로 접속합니다.
-
-## API 인증
-
-모든 API (`/api/chat`, `/api/messages`)는 인증이 필요합니다.
-비밀번호 인증 성공 시 발급된 토큰을 `x-auth-token` 헤더에 포함하여 요청해야 합니다. (클라이언트에서 자동 처리)
-
-## Hermes Agent 백엔드 (hachi 프로필)
-
-에이전트 실행은 **Hermes Agent의 hachi 프로필**(멀티플렉스 게이트웨이 API 서버)이 담당하는 유일한 채팅 백엔드다.
+에이전트 실행은 **Hermes Agent 서빙 프로필**(멀티플렉스 게이트웨이 API 서버)이 담당하는 유일한 채팅 백엔드다.
 앱은 Hermes의 **디태치 런 API**(`/v1/runs`)로 턴을 돌리고, 런 이벤트를 AI SDK UI 메시지 스트림으로 중계한다.
 
-- 세션 매핑: 앱 세션 ID → Hermes 세션 ID `sye-<sessionId>` (결정적 매핑, 별도 DB 컬럼 없음)
+- 세션 매핑: 앱 세션 ID → Hermes 세션 ID `app-<sessionId>` (결정적 매핑, 별도 DB 컬럼 없음)
 - 히스토리: Hermes가 대화 트랜스크립트를 소유하고, Neon `session_state`는 사이드바·검색용으로 계속 저장된다
 - 지시 사항(`instructions` 테이블)의 활성 항목은 매 요청 `instructions`로 전달된다
 
@@ -135,7 +136,7 @@ SSE도 끊긴다. 세션 채팅 스트림(`/api/sessions/{id}/chat/stream`)은 �
 
 ### Hermes(서버) 쪽 준비
 
-멀티플렉스 게이트웨이(`gateway.multiplex_profiles: true`)에서 `/p/hachi/*`는 **default 프로필이 소유한 공유 리스너**(기본 `127.0.0.1:8642`)가 서빙하고, 인증만 hachi 프로필 키를 쓴다 — 그래서 키를 두 곳에 **서로 다른 값**으로 넣는다.
+멀티플렉스 게이트웨이(`gateway.multiplex_profiles: true`)에서 `/p/monitor/*`는 **default 프로필이 소유한 공유 리스너**(기본 `127.0.0.1:8642`)가 서빙하고, 인증만 서빙 프로필 키를 쓴다 — 그래서 키를 두 곳에 **서로 다른 값**으로 넣는다.
 
 1. **default 프로필** — `~/.hermes/.env` (리스너를 여는 주체)
 
@@ -145,7 +146,7 @@ SSE도 끊긴다. 세션 채팅 스트림(`/api/sessions/{id}/chat/stream`)은 �
    API_SERVER_HOST=0.0.0.0     # 외부(Vercel 등)에서 접속할 때만. 기본은 127.0.0.1
    ```
 
-2. **hachi 프로필** — `~/.hermes/profiles/hachi/.env` (`/p/hachi` 인증 전용, 자체 리스너 없음)
+2. **서빙 프로필** — `~/.hermes/profiles/monitor/.env` (`/p/monitor` 인증 전용, 자체 리스너 없음)
 
    ```bash
    API_SERVER_KEY=<openssl rand -hex 32>   # default 키와 다른 값, 16자 이상
@@ -156,7 +157,7 @@ SSE도 끊긴다. 세션 채팅 스트림(`/api/sessions/{id}/chat/stream`)은 �
    ```bash
    systemctl --user restart hermes-gateway.service
    ss -ltn | grep 8642
-   curl -s -H "Authorization: Bearer <hachi 키>" http://127.0.0.1:8642/p/hachi/v1/models
+   curl -s -H "Authorization: Bearer <서빙 프로필 키>" http://127.0.0.1:8642/p/monitor/v1/models
    ```
 
 4. 외부에서 접속한다면 호스트 방화벽까지 (Oracle 이미지 기본 규칙은 마지막이 REJECT → 그 **앞**에 삽입)
@@ -167,30 +168,30 @@ SSE도 끊긴다. 세션 채팅 스트림(`/api/sessions/{id}/chat/stream`)은 �
    # 그리고 OCI VCN Security List(또는 NSG)에 TCP 8642 수신 규칙 추가
    ```
 
-- 키 스코프: `/p/hachi/*`는 hachi 키만 통과(default 키는 401), unprefixed `/v1/*`는 default 키만 통과
+- 키 스코프: `/p/monitor/*`는 서빙 프로필 키만 통과(default 키는 401), unprefixed `/v1/*`는 default 키만 통과
 - 노출하지 않으려면 SSH 터널만 써도 된다(아래 로컬 개발) — 이 엔드포인트는 터미널 실행 권한을 가진 에이전트라, 공개 시 Bearer 키가 유일한 방어선이다
-- 승인(approval): hachi 기본값은 `approvals.mode: smart` — 승인 대기(`approval.request`)가 발생하면 웹앱에는 승인 UI가 없어 그 턴이 실패한다. 무인 운영이 필요하면 hachi `config.yaml`의 `approvals` 설정을 점검할 것
+- 승인(approval): 서빙 프로필 기본값은 `approvals.mode: smart` — 승인 대기(`approval.request`)가 발생하면 웹앱에는 승인 UI가 없어 그 턴이 실패한다. 무인 운영이 필요하면 서빙 프로필 `config.yaml`의 `approvals` 설정을 점검할 것
 
 ### 로컬 개발
 
 ```bash
 # 1) 목 서버로 띄우기 (Hermes 없이)
 node scripts/mock-hermes-server.mjs 8971
-HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
+HERMES_API_URL=http://127.0.0.1:8971/p/monitor \
 HERMES_API_KEY=mock-key \
 npm run dev
 
 # 1-1) 이어받기(resume) 경로까지 로컬에서 보려면 소프트 데드라인을 짧게:
 MOCK_TURN_MS=9000 node scripts/mock-hermes-server.mjs 8971   # 턴이 9초 동안 흐르는 목
-HERMES_API_URL=http://127.0.0.1:8971/p/hachi \
+HERMES_API_URL=http://127.0.0.1:8971/p/monitor \
 HERMES_API_KEY=mock-key \
 CHAT_SOFT_DEADLINE_MS=3000 \
 npm run dev    # → 3초마다 스트림이 끊기고 브라우저가 이어받아 완주한다
 
 # 2) 실제 Hermes에 붙이기 — SSH 터널(공개 노출 없음)
 ssh -N -L 8642:127.0.0.1:8642 <hermes-host>
-# .env: HERMES_API_URL=http://127.0.0.1:8642/p/hachi
-#       HERMES_API_KEY=<hachi 키>
+# .env: HERMES_API_URL=http://127.0.0.1:8642/p/monitor
+#       HERMES_API_KEY=<서빙 프로필 키>
 npm run dev
 ```
 
@@ -260,10 +261,10 @@ Vercel에 배포 시 Neon DB는 Vercel Marketplace에서 자동 연결됩니다.
 
 Hermes 백엔드 env:
 
-| 변수                    | 값                                                                            |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `HERMES_API_URL`        | `http(s)://<hermes-host>:8642/p/hachi` (프로필 프리픽스 포함, 끝 슬래시 없이) |
-| `HERMES_API_KEY`        | hachi 프로필의 `API_SERVER_KEY`                                               |
-| `CHAT_SOFT_DEADLINE_MS` | 선택 — 스트림을 스스로 닫는 시각 (기본 240000ms = Vercel 300s 한도보다 짧게)  |
+| 변수                    | 값                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `HERMES_API_URL`        | `http(s)://<hermes-host>:8642/p/monitor` (프로필 프리픽스 포함, 끝 슬래시 없이) |
+| `HERMES_API_KEY`        | 서빙 프로필의 `API_SERVER_KEY`                                                  |
+| `CHAT_SOFT_DEADLINE_MS` | 선택 — 스트림을 스스로 닫는 시각 (기본 240000ms = Vercel 300s 한도보다 짧게)    |
 
 Git push는 사용자가 직접 실행합니다.

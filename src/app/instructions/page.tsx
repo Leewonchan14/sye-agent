@@ -9,8 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAuthStore } from "@/lib/auth-store";
 import { Pencil, Trash2 } from "lucide-react";
 
 interface Instructions {
@@ -21,28 +19,24 @@ interface Instructions {
   createdAt: string | null;
 }
 
-const fetchData = async (token: string) => {
-  const res = await fetch("/api/instructions", {
-    headers: { "x-auth-token": token },
-  });
+const fetchData = async () => {
+  const res = await fetch("/api/instructions", {});
   if (!res.ok) throw new Error("불러오기 실패");
   return res.json() as Promise<{ instructions: Instructions[] }>;
 };
 
 const saveData = async ({
-  token,
   label,
   content,
   id,
 }: {
-  token: string;
   label: string;
   content: string;
   id?: number;
 }) => {
   const res = await fetch("/api/instructions", {
     method: "POST",
-    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, label, content }),
   });
   const data = await res.json();
@@ -50,10 +44,10 @@ const saveData = async ({
   return data as { instruction: Instructions };
 };
 
-const toggleActive = async ({ token, id }: { token: string; id: number }) => {
+const toggleActive = async ({ id }: { id: number }) => {
   const res = await fetch("/api/instructions", {
     method: "PATCH",
-    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
   });
   const data = await res.json();
@@ -61,17 +55,16 @@ const toggleActive = async ({ token, id }: { token: string; id: number }) => {
   return data as { instruction: Instructions };
 };
 
-const deleteInstruction = async ({ token, id }: { token: string; id: number }) => {
+const deleteInstruction = async ({ id }: { id: number }) => {
   const res = await fetch("/api/instructions", {
     method: "DELETE",
-    headers: { "x-auth-token": token, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
   });
   if (!res.ok) throw new Error("삭제 실패");
 };
 
 const InstructionsContent = () => {
-  const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const confirmDialog = useConfirmDialog();
 
@@ -88,8 +81,7 @@ const InstructionsContent = () => {
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["instructions"],
-    queryFn: () => fetchData(token!),
-    enabled: !!token,
+    queryFn: () => fetchData(),
   });
 
   const items = data?.instructions ?? [];
@@ -131,38 +123,34 @@ const InstructionsContent = () => {
   });
 
   const handleCreate = useCallback(() => {
-    if (!newLabel.trim() || !newContent.trim() || !token) return;
+    if (!newLabel.trim() || !newContent.trim()) return;
     createMutation.mutate({
-      token,
       label: newLabel.trim(),
       content: newContent.trim(),
     });
-  }, [newLabel, newContent, token, createMutation]);
+  }, [newLabel, newContent, createMutation]);
 
   const handleUpdate = useCallback(
     (id: number) => {
-      if (!draftLabel.trim() || !draftContent.trim() || !token) return;
+      if (!draftLabel.trim() || !draftContent.trim()) return;
       updateMutation.mutate({
-        token,
         label: draftLabel.trim(),
         content: draftContent.trim(),
         id,
       });
     },
-    [draftLabel, draftContent, token, updateMutation]
+    [draftLabel, draftContent, updateMutation]
   );
 
   const handleToggle = useCallback(
     (id: number) => {
-      if (!token) return;
-      toggleMutation.mutate({ token, id });
+      toggleMutation.mutate({ id });
     },
-    [token, toggleMutation]
+    [toggleMutation]
   );
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!token) return;
       const ok = await confirmDialog.confirm({
         title: "지시 사항 삭제",
         description: "정말 삭제할까요?",
@@ -170,9 +158,9 @@ const InstructionsContent = () => {
         confirmLabel: "삭제",
       });
       if (!ok) return;
-      deleteMutation.mutate({ token, id });
+      deleteMutation.mutate({ id });
     },
-    [token, deleteMutation, confirmDialog]
+    [deleteMutation, confirmDialog]
   );
 
   const startEdit = (item: Instructions) => {
@@ -186,60 +174,43 @@ const InstructionsContent = () => {
     createMutation.error ?? toggleMutation.error ?? deleteMutation.error;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-foreground">
       {/* Header */}
-      <div className="mt-16 mb-8 text-center md:mt-20">
-        <Tooltip>
-          <TooltipTrigger render={<span className="inline-flex" />}>
-            <img
-              src="/munjackgui-thinking.png"
-              alt="하치와레"
-              className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
-              style={{ backgroundColor: "var(--color-canvas-soft)" }}
-            />
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={8} align="center">
-            <img
-              src="/munjackgui-thinking.png"
-              alt=""
-              className="size-36 rounded-md bg-background object-cover"
-            />
-          </TooltipContent>
-        </Tooltip>
-        <h1 className="text-xl font-normal text-ink">지시 사항</h1>
+      <div className="mt-8 mb-6">
+        <h2 className="text-xl font-semibold tracking-tight">지시 사항</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          하치와레가 더 똑똑하게…! 데이트 스타일이나 추가하고 싶은 규칙을 알려주면 그걸
-          기억해서 더 찰떡같은 추천을 해준다는 거야…!
+          대화할 때마다 AI에게 함께 전달할 규칙이에요. 켜 둔 지시 사항만 적용되고, 내
+          계정에서만 쓰여요.
         </p>
       </div>
 
       {/* Content sections */}
       <div className="space-y-4 pb-12">
         {/* New instruction form */}
-        <div className="rounded-xl border border-hairline bg-surface p-5">
-          <h2 className="mb-3 text-sm font-medium text-ink">새 지시 사항 등록</h2>
-          <p className="mb-3 text-xs text-muted-soft">
-            저장하면 바로 적용할 수 있게 등록된다는 거야…!
+        <div className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 text-sm font-medium text-foreground">새 지시 사항 등록</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            저장하면 다음 메시지부터 바로 적용돼요.
           </p>
           <div className="space-y-3">
             <Input
-              placeholder="이름 (예: 데이트 스타일 v2)"
+              placeholder="이름 (예: 답변 스타일)"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
             />
             <Textarea
-              placeholder={`하치와레에게 추가로 알려줄 내용을 입력해줘…!\n\n예시:\n- "요즘 감성적인 카페 위주로 추천해줘"\n- "예은이는 걱정이 많아서 자주 안아줘…!"\n- "데이트 코스 추천할 때 교통편도 같이 알려줘…!"\n- "브랜드 언급을 모니터링할 때 부정적인 키워드가 보이면 바로 알려줘"\n- "인플루언서 분석 결과에서 1천 팔로워 이상만 알려줘"\n- "경쟁사 비교할 때 우리 브랜드의 점유율 변화를 강조해줘"`}
+              placeholder={`AI에게 항상 지켜 달라고 할 내용을 적어 주세요.\n\n예시:\n- "답변은 핵심부터 짧게 정리해 줘"\n- "브랜드 언급을 모니터링할 때 부정적인 키워드가 보이면 바로 알려줘"\n- "경쟁사와 비교할 때 우리 브랜드의 점유율 변화를 강조해 줘"`}
               rows={10}
               value={newContent}
               onChange={(e) => setNewContent(e.target.value)}
             />
             {isError && (
-              <p className="text-sm text-error">
+              <p className="text-sm text-destructive">
                 {error instanceof Error ? error.message : "불러오기 실패"}
               </p>
             )}
             {topFormError && (
-              <p className="text-sm text-error">
+              <p className="text-sm text-destructive">
                 {topFormError instanceof Error ? topFormError.message : "오류 발생"}
               </p>
             )}
@@ -256,8 +227,8 @@ const InstructionsContent = () => {
         </div>
 
         {/* All instructions list */}
-        <div className="rounded-xl border border-hairline bg-surface p-5">
-          <h2 className="mb-3 text-sm font-medium text-ink">
+        <div className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 text-sm font-medium text-foreground">
             등록된 지시 사항
             {!isLoading && (
               <Badge variant="secondary" className="ml-1.5 font-normal">
@@ -285,7 +256,7 @@ const InstructionsContent = () => {
                   <div
                     key={item.id}
                     className={`rounded-lg border p-3 transition-colors ${
-                      isEditing ? "border-primary/40 bg-primary/5" : "border-hairline"
+                      isEditing ? "border-primary/40 bg-primary/5" : "border-border"
                     }`}
                   >
                     {isEditing ? (
@@ -303,7 +274,7 @@ const InstructionsContent = () => {
                           onChange={(e) => setDraftContent(e.target.value)}
                         />
                         {saveError && (
-                          <p className="text-sm text-error">
+                          <p className="text-sm text-destructive">
                             {saveError instanceof Error ? saveError.message : "오류 발생"}
                           </p>
                         )}
@@ -340,7 +311,7 @@ const InstructionsContent = () => {
                               {item.label}
                             </span>
                             {item.createdAt && (
-                              <span className="shrink-0 text-xs text-muted-soft">
+                              <span className="shrink-0 text-xs text-muted-foreground">
                                 {new Date(item.createdAt).toLocaleDateString("ko-KR")}
                               </span>
                             )}
@@ -372,7 +343,7 @@ const InstructionsContent = () => {
                             className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors disabled:opacity-50 ${
                               item.isActive
                                 ? "border-primary bg-primary"
-                                : "border-border bg-canvas-soft"
+                                : "border-border bg-muted"
                             }`}
                             onClick={() => handleToggle(item.id)}
                           >
@@ -387,7 +358,7 @@ const InstructionsContent = () => {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            className="text-muted-foreground hover:bg-error/10 hover:text-error"
+                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => handleDelete(item.id)}
                             disabled={deleteMutation.isPending}
                             title="삭제"
@@ -410,7 +381,7 @@ const InstructionsContent = () => {
 };
 
 const InstructionsPage = () => (
-  <SidebarLayout>
+  <SidebarLayout activeNav="instructions">
     <InstructionsContent />
   </SidebarLayout>
 );

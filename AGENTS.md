@@ -7,7 +7,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Project context
 
-이 프로젝트는 연인(이원찬, 성예은) 둘만 사용할 사이트를 만드는 중입니다.
+이 프로젝트는 일반 사용자를 위한 멀티 유저 서비스입니다. 기능은 **AI 채팅**과 **언론 모니터링** 두 가지입니다.
+
+- 계정은 Better Auth(이메일·비밀번호)로 관리합니다. API 라우트는 `requireUser(req)`(`src/lib/auth.ts`)로 사용자를 확인하세요.
+- 사용자 데이터는 반드시 `user_id`로 소유자를 구분하고, id로 조회·수정할 때도 소유자를 함께 확인하세요. 다른 사용자의 데이터가 보이거나 바뀌면 안 됩니다.
+- 특정 인물·고객사·캐릭터(페르소나)를 전제로 한 문구나 기본값을 넣지 마세요. placeholder·예시 문구·테스트 데이터에도 실존 인물·브랜드·사건(예: 연예인 의혹, 실제 고객사 이름)을 쓰지 말고 "예시 브랜드", "제품명", "홍길동" 같은 가상의 값을 쓰세요. 서비스 이름은 `APP_NAME`(`src/lib/site.ts`)을 쓰세요.
 
 # Export convention
 
@@ -15,6 +19,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # UI & Components
 
+- **shadcn/ui**를 기본 테마(neutral) 그대로 사용하세요. 색은 `bg-background`, `text-muted-foreground`, `border` 같은 shadcn 토큰만 쓰고, 임의의 hex 색이나 별도 브랜드 팔레트를 만들지 마세요.
 - **shadcn/ui**를 적극 사용하세요. 컴포넌트 추가, 검색, 설치 등은 `shadcn` MCP 도구를 통해 수행할 수 있습니다.
 - UI 관련 질문이 있으면 먼저 `shadcn` MCP를 검색(`search_tool_bm25`)하여 필요한 도구가 있는지 확인하세요.
 - 새로운 UI 컴포넌트를 직접 만들기 전에 **반드시 `shadcn` MCP로 먼저 검색**하여 이미 존재하는 컴포넌트가 있는지 확인한 후, 없을 때만 직접 구현하세요.

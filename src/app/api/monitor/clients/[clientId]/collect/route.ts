@@ -1,4 +1,4 @@
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { getClientView } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId } from "@/lib/monitor/api";
 import { startCollectNow } from "@/lib/monitor/daily-collect";
@@ -12,15 +12,18 @@ export const POST = async (
   req: Request,
   ctx: { params: Promise<{ clientId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const clientId = parseId((await ctx.params).clientId);
   if (!clientId)
     return Response.json({ error: "clientId가 올바르지 않아요." }, { status: 400 });
 
   try {
-    const runId = await startCollectNow(publicOrigin(req), await getClientView(clientId));
+    const runId = await startCollectNow(
+      publicOrigin(req),
+      await getClientView(user.id, clientId)
+    );
     return Response.json({ runId }, { status: 202 });
   } catch (error) {
     return monitorErrorResponse(error, "수집을 시작하지 못했어요.");

@@ -46,9 +46,11 @@ export const SaveBar = ({
   count > 0 ? (
     <div
       role="status"
-      className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/40 bg-surface px-4 py-2.5 shadow-sm"
+      className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/40 bg-card px-4 py-2.5 shadow-sm"
     >
-      <p className={cn("min-w-0 text-[13px] text-body", error && "text-error")}>
+      <p
+        className={cn("min-w-0 text-[13px] text-foreground", error && "text-destructive")}
+      >
         {error ?? `저장하지 않은 변경 ${count}개`}
       </p>
       <div className="flex items-center gap-2">
@@ -101,7 +103,7 @@ export const AutoCollectEditor = ({
   const status = !auto
     ? dirty
       ? "저장하면 자동 수집이 꺼져요."
-      : "꺼져 있어요. 켜면 다음 수집 시각부터 하치와레가 모아요."
+      : "꺼져 있어요. 켜면 다음 수집 시각부터 에이전트가 모아요."
     : dirty && validTime
       ? `저장하면 다음 수집: ${nextCollectLabel({ ...client, collectTime, weekdaysOnly: weekdays }, collectedToday)}`
       : `다음 수집: ${nextCollectLabel(client, collectedToday)}`;
@@ -109,7 +111,7 @@ export const AutoCollectEditor = ({
   return (
     <form
       aria-label="매일 자동 수집"
-      className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface px-4 py-3.5"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
       onSubmit={(e) => {
         e.preventDefault();
         if (canSave) {
@@ -122,16 +124,16 @@ export const AutoCollectEditor = ({
     >
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-medium text-ink">매일 자동 수집</h2>
-          <p className="mt-0.5 text-[13px] text-muted">{status}</p>
+          <h2 className="text-[15px] font-medium text-foreground">매일 자동 수집</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">{status}</p>
         </div>
         <RuleSwitch checked={auto} label="매일 자동 수집" onChange={setAuto} />
       </div>
       {auto && (
-        <div className="flex items-center justify-between gap-4 border-t border-hairline/60 pt-3">
-          <p className="min-w-0 text-[13px] text-muted">
+        <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3">
+          <p className="min-w-0 text-[13px] text-muted-foreground">
             평일만 수집
-            <span className="block text-xs text-muted-soft">
+            <span className="block text-xs text-muted-foreground">
               토·일은 쉬고, 월요일에 금요일부터 모아요.
             </span>
           </p>
@@ -139,13 +141,13 @@ export const AutoCollectEditor = ({
         </div>
       )}
       {(auto || dirty) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline/60 pt-3">
-          <div className="min-w-0 text-[13px] text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
+          <div className="min-w-0 text-[13px] text-muted-foreground">
             {auto && (
               <>
                 수집 시각
                 {earliest && (
-                  <span className="block text-xs text-muted-soft">
+                  <span className="block text-xs text-muted-foreground">
                     모니터링 기간이 끝나는 {earliest} 이후로 정할 수 있어요.
                   </span>
                 )}
@@ -183,7 +185,7 @@ export const AutoCollectEditor = ({
               </Button>
             </div>
             {auto && tooEarly && (
-              <span className="text-xs text-error">
+              <span className="text-xs text-destructive">
                 모니터링 기간이 끝나는 {earliest} 이후로 골라 주세요.
               </span>
             )}
@@ -239,7 +241,7 @@ export const IssueScheduleEditor = ({
   return (
     <form
       aria-label="자동 집계 일정"
-      className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface px-4 py-3.5"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
       onSubmit={(e) => {
         e.preventDefault();
         if (canSave) onSave(draft);
@@ -247,8 +249,8 @@ export const IssueScheduleEditor = ({
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-medium text-ink">자동 집계 일정</h2>
-          <p className="mt-0.5 text-[13px] text-muted">
+          <h2 className="text-[15px] font-medium text-foreground">자동 집계 일정</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             {!valid
               ? validGap
                 ? "시작 시각을 골라 주세요."
@@ -258,7 +260,7 @@ export const IssueScheduleEditor = ({
                 ).next.format("M월 D일 (dd) HH:mm")}`}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
           매일
           <Input
             type="time"
@@ -297,8 +299,8 @@ export const IssueScheduleEditor = ({
           </Select>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline/60 pt-3">
-        <p className="min-w-0 text-xs text-muted">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <p className="min-w-0 text-xs text-muted-foreground">
           {times.length > 0 && (
             <>
               하루 {times.length}번 ·{" "}
@@ -324,7 +326,7 @@ export const IssueScheduleEditor = ({
   );
 };
 
-/** 이슈 보고 초안의 받는 사람과 서식 — 하치와레가 보고 초안을 쓸 때 그대로 따른다. */
+/** 이슈 보고 초안의 받는 사람과 서식 — 에이전트가 보고 초안을 쓸 때 그대로 따른다. */
 export const IssueReportEditor = ({
   recipient,
   template,
@@ -343,7 +345,7 @@ export const IssueReportEditor = ({
   return (
     <form
       aria-label="보고 서식"
-      className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface px-4 py-3.5"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
       onSubmit={(e) => {
         e.preventDefault();
         if (dirty && !saving)
@@ -351,28 +353,28 @@ export const IssueReportEditor = ({
       }}
     >
       <div>
-        <h2 className="text-[15px] font-medium text-ink">보고 서식</h2>
-        <p className="mt-0.5 text-[13px] text-muted">
-          보고 초안을 만들 때 하치와레가 이 내용을 따라 써요.
+        <h2 className="text-[15px] font-medium text-foreground">보고 서식</h2>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          보고 초안을 만들 때 에이전트가 이 내용을 따라 써요.
         </p>
       </div>
-      <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+      <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
         받는 사람
         <Input
           value={name}
           maxLength={40}
           onChange={(e) => setName(e.target.value)}
-          placeholder="예: 김슬기 매니저님 (비우면 담당 매니저님)"
+          placeholder="예: 홍길동 매니저님 (비우면 담당자님)"
         />
       </label>
-      <label className="flex flex-col gap-1.5 text-[13px] text-muted">
+      <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
         서식 (선택)
         <Textarea
           rows={4}
           maxLength={4000}
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="예: 11/3(화) 15시 기준, 현재까지 파나소닉 언급 관련 추가 게재 기사는… 처럼 실제로 보내던 보고문을 붙여 넣어 주세요."
+          placeholder="예: {날짜} {시각} 기준, 브랜드 언급 관련 추가 게재 기사는 N건입니다… 처럼 실제로 보내던 보고문을 붙여 넣어 주세요."
         />
       </label>
       <div className="flex justify-end gap-2">

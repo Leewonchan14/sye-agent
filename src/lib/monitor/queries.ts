@@ -8,7 +8,6 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { useAuthStore } from "@/lib/auth-store";
 import type { SetupDraftState } from "@/lib/monitor/draft";
 import type { MonitorProgress } from "@/lib/monitor/progress-stages";
 import type {
@@ -54,32 +53,27 @@ const readError = async (res: Response) => {
   return data?.error ?? "요청을 처리하지 못했어요.";
 };
 
-const useApi = () => {
-  const token = useAuthStore((s) => s.token) ?? "";
-  return async <T>(
-    url: string,
-    init?: { method?: string; body?: unknown }
-  ): Promise<T> => {
-    const res = await fetch(url, {
-      method: init?.method ?? "GET",
-      headers: {
-        "x-auth-token": token,
-        ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-    });
-    if (!res.ok) throw new Error(await readError(res));
-    return (await res.json()) as T;
-  };
+/** 같은 출처 요청이라 로그인 쿠키가 함께 간다. */
+const api = async <T>(
+  url: string,
+  init?: { method?: string; body?: unknown }
+): Promise<T> => {
+  const res = await fetch(url, {
+    method: init?.method ?? "GET",
+    headers:
+      init?.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as T;
 };
 
 export const useMonitorOverview = () => {
-  const api = useApi();
   return useQuery({
     queryKey: monitorKeys.overview(),
     queryFn: () => api<MonitorOverview>("/api/monitor"),
     // 수집·집계가 돌고 있으면 첫 화면 요약도 따라 바뀌게 한다.
-    // 쉬는 동안에도 자동 수집(Oracle 시계)이 언제든 시작하므로 1분마다 확인한다.
+    // 쉬는 동안에도 자동 수집(예약 스크립트)이 언제든 시작하므로 1분마다 확인한다.
     refetchInterval: (query) =>
       query.state.data?.clients.some((c) => c.latestRun?.pending) ||
       query.state.data?.issues.some((i) => i.pending)
@@ -91,7 +85,6 @@ export const useMonitorOverview = () => {
 
 /** 대기 중인 Hermes 작업이 있으면 10초마다, 없어도 1분마다 다시 불러온다. */
 export const useMonitorClient = (clientId: number, runId?: number) => {
-  const api = useApi();
   return useQuery({
     queryKey: monitorKeys.client(clientId, runId),
     queryFn: () =>
@@ -111,7 +104,6 @@ export const useMonitorStats = (
   clientId: number,
   filter: { days: StatsDays; scope: StatsScope; category: string | null }
 ) => {
-  const api = useApi();
   const params = new URLSearchParams({
     days: String(filter.days),
     scope: filter.scope,
@@ -126,7 +118,6 @@ export const useMonitorStats = (
 };
 
 export const useMonitorIssue = (issueId: number) => {
-  const api = useApi();
   return useQuery({
     queryKey: monitorKeys.issue(issueId),
     queryFn: () => api<MonitorIssuePayload>(`/api/monitor/issues/${issueId}`),
@@ -142,7 +133,6 @@ export const useIssueArticles = (
   snapshotId: number,
   enabled: boolean
 ) => {
-  const api = useApi();
   return useQuery({
     queryKey: [...monitorKeys.issue(issueId), "articles", snapshotId],
     queryFn: () =>
@@ -156,7 +146,6 @@ export const useIssueArticles = (
 
 /** 돌고 있는 수집·집계의 진행 상황을 5초마다 읽는다. */
 export const useMonitorProgress = (kind: "run" | "issue", id: number) => {
-  const api = useApi();
   return useQuery({
     queryKey: [...monitorKeys.all, "progress", kind, id],
     queryFn: () =>
@@ -168,19 +157,17 @@ export const useMonitorProgress = (kind: "run" | "issue", id: number) => {
 };
 
 /** 설정 초안을 2초마다 확인한다. 끝나면 멈춘다. */
-export const useSetupDraft = (runId: string | null) => {
-  const api = useApi();
+export const useSetupDraft = (draftId: string | null) => {
   return useQuery({
-    queryKey: [...monitorKeys.all, "draft", runId],
-    queryFn: () => api<SetupDraftState>(`/api/monitor/drafts/${runId}`),
-    enabled: Boolean(runId),
+    queryKey: [...monitorKeys.all, "draft", draftId],
+    queryFn: () => api<SetupDraftState>(`/api/monitor/drafts/${draftId}`),
+    enabled: Boolean(draftId),
     refetchInterval: (query) =>
       !query.state.data || query.state.data.status === "running" ? 2_000 : false,
   });
 };
 
 export const useMonitorMutations = (clientId?: number) => {
-  const api = useApi();
   const qc = useQueryClient();
   const refreshClient = () => {
     if (clientId) {
@@ -266,7 +253,7 @@ export const useMonitorMutations = (clientId?: number) => {
   const collectNow = useMutation({
     mutationFn: (id: number) =>
       api(`/api/monitor/clients/${id}/collect`, { method: "POST" }),
-    onSuccess: () => toast.success("하치와레에게 맡겼어요. 몇 분 뒤 기사가 쌓여요."),
+    onSuccess: () => toast.success("에이전트에게 맡겼어요. 몇 분 뒤 기사가 쌓여요."),
     onError,
     onSettled: refreshClient,
   });
@@ -277,7 +264,7 @@ export const useMonitorMutations = (clientId?: number) => {
         method: "POST",
         body: { category: v.category, request: v.request },
       }),
-    onSuccess: () => toast.success("하치와레에게 맡겼어요. 찾는 대로 표에 추가돼요."),
+    onSuccess: () => toast.success("에이전트에게 맡겼어요. 찾는 대로 표에 추가돼요."),
     onError,
     onSettled: refreshClient,
   });
@@ -334,7 +321,6 @@ export const useMonitorMutations = (clientId?: number) => {
 };
 
 export const useIssueMutations = (issueId: number) => {
-  const api = useApi();
   const qc = useQueryClient();
   const refresh = () => {
     qc.invalidateQueries({ queryKey: monitorKeys.issue(issueId) });
@@ -372,17 +358,9 @@ export const useIssueMutations = (issueId: number) => {
 };
 
 export const useSetupMutations = () => {
-  const api = useApi();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: monitorKeys.overview() });
   const onError = (error: Error) => toast.error(error.message);
-
-  const createPresets = useMutation({
-    mutationFn: () => api("/api/monitor", { method: "POST" }),
-    onSuccess: () => toast.success("기본 고객사를 만들었어요."),
-    onError,
-    onSettled: refresh,
-  });
 
   const createClient = useMutation({
     mutationFn: (body: {
@@ -413,9 +391,9 @@ export const useSetupMutations = () => {
 
   const startDraft = useMutation({
     mutationFn: (body: { name: string; request: string }) =>
-      api<{ runId: string }>("/api/monitor/drafts", { method: "POST", body }),
+      api<{ draftId: string }>("/api/monitor/drafts", { method: "POST", body }),
     onError,
   });
 
-  return { createPresets, createClient, createIssue, startDraft };
+  return { createClient, createIssue, startDraft };
 };

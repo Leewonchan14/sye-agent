@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
-import { getMonitorClientPayload, getRunRow } from "@/lib/db/monitor";
+import { requireUser } from "@/lib/auth";
+import { assertRunOwner, getMonitorClientPayload } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId, readJson } from "@/lib/monitor/api";
 import { startMoreSearch } from "@/lib/monitor/hermes";
 import { publicOrigin } from "@/lib/monitor/origin";
@@ -16,8 +16,8 @@ const bodySchema = z.object({
 
 /** "더 찾기" — Hermes에게 추가 검색을 맡기고, 결과는 agent/runs로 돌아온다. */
 export const POST = async (req: Request, ctx: { params: Promise<{ runId: string }> }) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const runId = parseId((await ctx.params).runId);
   if (!runId)
@@ -25,12 +25,11 @@ export const POST = async (req: Request, ctx: { params: Promise<{ runId: string 
 
   try {
     const body = bodySchema.parse(await readJson(req));
-    const run = await getRunRow(runId);
-    if (!run) return Response.json({ error: "수집 결과가 없어요." }, { status: 404 });
+    const run = await assertRunOwner(user.id, runId);
     if (run.pendingHermesRunId) {
-      return Response.json({ error: "이미 하치와레가 찾고 있어요." }, { status: 409 });
+      return Response.json({ error: "이미 에이전트가 찾고 있어요." }, { status: 409 });
     }
-    const { client, items } = await getMonitorClientPayload(run.clientId, runId);
+    const { client, items } = await getMonitorClientPayload(user.id, run.clientId, runId);
     const category = client.categories.find((c) => c.key === body.category);
 
     await startMoreSearch({
@@ -45,6 +44,6 @@ export const POST = async (req: Request, ctx: { params: Promise<{ runId: string 
     });
     return Response.json({ ok: true }, { status: 202 });
   } catch (error) {
-    return monitorErrorResponse(error, "하치와레에게 요청하지 못했어요.");
+    return monitorErrorResponse(error, "에이전트에게 요청하지 못했어요.");
   }
 };

@@ -60,7 +60,7 @@ export const RunHistory = ({
           variant="ghost"
           size="icon-sm"
           aria-label="이전 수집"
-          className="hidden text-muted sm:inline-flex"
+          className="hidden text-muted-foreground sm:inline-flex"
           disabled={index <= 0}
           onClick={() => onSelect(timeline[index - 1].id)}
         >
@@ -85,14 +85,14 @@ export const RunHistory = ({
               title={period}
               onClick={() => onSelect(r.id)}
               className={cn(
-                "flex w-[124px] shrink-0 flex-col gap-0.5 rounded-xl border border-hairline bg-surface px-3 py-2 text-left transition-colors outline-none hover:bg-canvas-soft focus-visible:ring-3 focus-visible:ring-ring/50",
+                "flex w-[124px] shrink-0 flex-col gap-0.5 rounded-xl border border-border bg-card px-3 py-2 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
                 active && "border-primary bg-primary/10 hover:bg-primary/10"
               )}
             >
-              <span className="text-sm font-medium text-ink tabular-nums">
+              <span className="text-sm font-medium text-foreground tabular-nums">
                 {date.format("M월 D일 (dd)")}
               </span>
-              <span className="flex items-center gap-1 text-xs text-muted tabular-nums">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
                 {count}건 ·
                 {r.reportedAt && !r.pending && (
                   <CircleCheck className="size-3 text-success" />
@@ -100,7 +100,7 @@ export const RunHistory = ({
                 <span
                   className={cn(
                     r.reportedAt && !r.pending && "text-success",
-                    r.failed && !r.pending && "text-error"
+                    r.failed && !r.pending && "text-destructive"
                   )}
                 >
                   {statusLabel(r)}
@@ -115,7 +115,7 @@ export const RunHistory = ({
           variant="ghost"
           size="icon-sm"
           aria-label="다음 수집"
-          className="hidden text-muted sm:inline-flex"
+          className="hidden text-muted-foreground sm:inline-flex"
           disabled={index < 0 || index >= timeline.length - 1}
           onClick={() => onSelect(timeline[index + 1].id)}
         >

@@ -1,6 +1,7 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { isSessionOwner } from "@/lib/db/session";
 import { claimChatTurnWriter, clearChatTurn, getChatTurn } from "@/lib/db/turn";
 import { agentErrorMessage } from "@/lib/error-text";
 import { getHermesConfig, toHermesSessionId } from "@/lib/hermes/config";
@@ -24,10 +25,13 @@ export const GET = async (
   req: Request,
   ctx: { params: Promise<{ sessionId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const { sessionId } = await ctx.params;
+  if (!(await isSessionOwner(user.id, sessionId))) {
+    return Response.json({ error: "이 대화에 접근할 수 없습니다." }, { status: 403 });
+  }
   const turn = await getChatTurn(sessionId);
   if (!turn) return new Response(null, { status: 204 });
 
@@ -55,7 +59,7 @@ export const GET = async (
     return new Response(null, { status: 204 });
   }
 
-  const config = getHermesConfig();
+  const config = getHermesConfig(user.id);
   const hermesSessionId = toHermesSessionId(config, sessionId);
 
   /**

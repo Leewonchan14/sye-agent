@@ -1,14 +1,54 @@
 services:
-  db:
+  # 웹앱 — DB는 컨테이너 안의 PGlite(./data/pglite에 저장)
+  # 포트는 공인 인터페이스가 아니라 아래 주소에만 연다 (APP_BIND_*로 바꿀 수 있다).
+  #  - 127.0.0.1: 서버 안에서 확인
+  #  - 172.17.0.1: Hermes 샌드박스(docker)가 모니터링 결과를 보내는 주소
+  #  - APP_BIND_TAILNET: Tailscale 등 사설망 주소 (.env에 지정, 기본은 127.0.0.1만)
+  # 호스트의 Hermes는 172.17.0.1:8642로 부른다.
+  app:
     build: .
-    container_name: sye-db
+    image: ai-assistant:latest
+    container_name: ai-assistant-app
+    restart: unless-stopped
+    env_file: .env.docker
+    environment:
+      PORT: 3200
+      DATABASE_URL: pglite:/data/pglite
+    ports:
+      - "127.0.0.1:${APP_PORT:-3200}:3200"
+      - "172.17.0.1:${APP_PORT:-3200}:3200"
+      - "${APP_BIND_TAILNET:-127.0.0.1}:${APP_PORT:-3200}:3200"
+    volumes:
+      - ./data:/data
+
+  # 매일 자동 수집 시계 — 1분마다 "할 일 있어?"를 묻는다 (알림 없음)
+  monitor-tick:
+    image: python:3.12-alpine
+    container_name: ai-assistant-monitor-tick
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      MONITOR_TICK_URL: http://app:3200/api/monitor/agent/tick
+      MONITOR_KEY_FILE: /run/monitor/ingest.key
+      MONITOR_TICK_STATE: /data/monitor-tick.json
+    volumes:
+      - ./scripts/monitor-tick.py:/app/monitor-tick.py:ro
+      - ./data/monitor-ingest.key:/run/monitor/ingest.key:ro
+      - ./data:/data
+    command: ["sh", "-c", "while true; do python /app/monitor-tick.py; sleep 60; done"]
+
+  # 로컬 Postgres가 필요할 때만 (e2e 등): docker compose --profile postgres up -d db
+  db:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    container_name: ai-assistant-db
     restart: unless-stopped
     ports:
-      - "5460:5432"
+      - "127.0.0.1:5461:5432"
     environment:
-      POSTGRES_USER: sye
-      POSTGRES_PASSWORD: sye_dev_pass
-      POSTGRES_DB: sye
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_dev_pass
+      POSTGRES_DB: app
     volumes:
       - pgdata:/var/lib/postgresql/data
 

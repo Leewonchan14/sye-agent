@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requireAuth } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { getClientStats } from "@/lib/db/monitor";
 import { monitorErrorResponse, parseId } from "@/lib/monitor/api";
 import { STATS_DAYS, STATS_SCOPES } from "@/lib/monitor/types";
@@ -25,8 +25,8 @@ export const GET = async (
   req: Request,
   ctx: { params: Promise<{ clientId: string }> }
 ) => {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
 
   const clientId = parseId((await ctx.params).clientId);
   if (!clientId)
@@ -39,7 +39,7 @@ export const GET = async (
       scope: params.get("scope") ?? undefined,
       category: params.get("category") || null,
     });
-    const stats = await getClientStats(clientId, {
+    const stats = await getClientStats(user.id, clientId, {
       days: query.days as (typeof STATS_DAYS)[number],
       scope: query.scope,
       category: query.category ?? null,

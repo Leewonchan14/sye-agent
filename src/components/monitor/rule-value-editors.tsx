@@ -60,13 +60,13 @@ export const RuleSwitch = ({
     aria-label={label}
     onClick={() => onChange(!checked)}
     className={cn(
-      "relative h-[22px] w-[38px] shrink-0 rounded-full bg-canvas-strong transition-colors",
+      "relative h-[22px] w-[38px] shrink-0 rounded-full bg-muted transition-colors",
       checked && "bg-primary"
     )}
   >
     <span
       className={cn(
-        "absolute top-[3px] left-[3px] size-4 rounded-full bg-surface transition-[left]",
+        "absolute top-[3px] left-[3px] size-4 rounded-full bg-card transition-[left]",
         checked && "left-[19px]"
       )}
     />
@@ -103,14 +103,14 @@ export const TagsEditor = ({
       {value.map((tag) => (
         <span
           key={tag}
-          className="inline-flex h-7 items-center gap-1 rounded-full bg-canvas-card pr-1 pl-2.5 text-[13px]"
+          className="inline-flex h-7 items-center gap-1 rounded-full bg-muted pr-1 pl-2.5 text-[13px]"
         >
           {tag}
           <button
             type="button"
             aria-label={`${tag} 삭제`}
             onClick={() => onChange(value.filter((t) => t !== tag))}
-            className="grid size-5 place-items-center rounded-full text-muted hover:bg-canvas-strong hover:text-ink"
+            className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="size-3" />
           </button>
@@ -145,10 +145,10 @@ const TimeField = ({
   time: string;
   onTime: (v: string) => void;
 }) => (
-  <label className="flex items-center justify-between gap-2 text-[13px] text-muted">
+  <label className="flex items-center justify-between gap-2 text-[13px] text-muted-foreground">
     <span className="flex items-center gap-1.5">
       {label}
-      <span className="rounded-full bg-canvas-card px-2 py-0.5 text-xs text-body-strong">
+      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
         {dayLabel(day)}
       </span>
     </span>
@@ -211,7 +211,7 @@ export const PeriodPicker = ({
             variant="outline"
             aria-label={`${label}: ${value || "설정 안 됨"}`}
             className={cn(
-              "justify-start font-normal aria-expanded:bg-canvas-card aria-expanded:text-ink",
+              "justify-start font-normal aria-expanded:bg-muted aria-expanded:text-foreground",
               className
             )}
           />
@@ -224,8 +224,8 @@ export const PeriodPicker = ({
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[296px] gap-3 p-3">
         <div>
-          <p className="text-sm font-medium text-ink">{label}</p>
-          <p className="text-xs text-muted">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground">
             오늘을 기준으로 시작·끝 날짜를 고르세요. 매일 같은 간격으로 수집해요.
           </p>
         </div>
@@ -238,7 +238,7 @@ export const PeriodPicker = ({
           disabled={[{ after: localDateAt(0) }, { before: localDateAt(MIN_PERIOD_DAY) }]}
           className="mx-auto p-0"
         />
-        <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
           <TimeField
             label="시작"
             day={draft.startDay}
@@ -254,15 +254,15 @@ export const PeriodPicker = ({
         </div>
         <p
           className={cn(
-            "rounded-md bg-canvas-soft px-2.5 py-2 text-xs text-body",
-            !valid && "text-error"
+            "rounded-md bg-muted px-2.5 py-2 text-xs text-foreground",
+            !valid && "text-destructive"
           )}
           aria-live="polite"
         >
           {valid ? (
             <>
               오늘 돌리면{" "}
-              <span className="text-ink tabular-nums">
+              <span className="text-foreground tabular-nums">
                 {fmt(resolved.since)} ~ {fmt(resolved.until)}
               </span>{" "}
               · {describeDuration(periodMinutes(draft))}
@@ -313,7 +313,7 @@ export const DatePicker = ({
             variant="outline"
             aria-label={`${label}: ${value || "날짜 없음"}`}
             className={cn(
-              "justify-start font-normal aria-expanded:bg-canvas-card aria-expanded:text-ink",
+              "justify-start font-normal aria-expanded:bg-muted aria-expanded:text-foreground",
               className
             )}
           />

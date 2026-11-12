@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""매일 자동 수집 시계 — Oracle에서 Hermes no_agent 예약 작업으로 1분마다 돈다.
+"""매일 자동 수집 시계 — Hermes 호스트에서 no_agent 예약 작업으로 1분마다 돈다.
 
 사이트에 "할 일 있어?"를 묻고, 서버가 알려 준 다음 확인 시각까지는 호출하지 않는다.
-stdout은 그대로 Discord로 가므로 완료·실패 알림, 시작 실패와 복구만 출력한다.
+수집 결과와 오류는 대시보드에서만 보여 주고 알림은 보내지 않는다 — 이 스크립트는 아무것도 출력하지 않는다.
+시계는 모든 사용자의 고객사·이슈를 한 번에 돌리므로, 출력이 어딘가로 배달되면 여러 사용자의
+고객사 이름이 섞인다. 마지막 오류는 상태 파일(MONITOR_TICK_STATE)의 last_error에만 남긴다.
+
+필요한 환경 변수:
+  MONITOR_TICK_URL  — 예: https://example.com/api/monitor/agent/tick (필수)
+  MONITOR_KEY_FILE  — 앱의 MONITOR_INGEST_KEY와 같은 값을 담은 파일 (기본 ~/.config/monitor/ingest.key)
 """
 import json
 import os
@@ -13,11 +19,9 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-URL = os.environ.get(
-    "MONITOR_TICK_URL", "https://www.xn--oj4bo2g00a.shop/api/monitor/agent/tick"
-)
+URL = os.environ.get("MONITOR_TICK_URL", "")
 KEY_FILE = Path(
-    os.environ.get("MONITOR_KEY_FILE", "~/.config/sye-monitor/ingest.key")
+    os.environ.get("MONITOR_KEY_FILE", "~/.config/monitor/ingest.key")
 ).expanduser()
 STATE_FILE = Path(
     os.environ.get("MONITOR_TICK_STATE", "~/.hermes/state/monitor_tick.json")
@@ -43,7 +47,7 @@ def call_tick():
         method="POST",
         headers={
             "x-monitor-key": KEY_FILE.read_text().strip(),
-            "User-Agent": "sye-monitor-tick/1.0",
+            "User-Agent": "monitor-tick/1.0",
         },
     )
     try:
@@ -57,24 +61,19 @@ def call_tick():
 
 
 def main():
+    if not URL:
+        return 1
     state = load_state()
     if time.time() < state.get("next_check", 0):
         return
 
     result, error = call_tick()
     if result is not None:
-        for message in result.get("notifications") or []:
-            print(message)
         failed = result.get("failed") or []
         error = "; ".join(f"{f['client']}: {f['error']}" for f in failed) or None
 
-    if error:
-        if not state.get("failing"):
-            print(f"⚠️ 모니터링 자동 수집을 시작하지 못했어요. 5분마다 다시 시도할게요.\n{error}")
-        state["failing"] = True
-    elif state.get("failing"):
-        print("✅ 모니터링 자동 수집이 다시 정상으로 돌아왔어요.")
-        state["failing"] = False
+    # 알림 없이 마지막 오류만 남긴다 (실패하면 5분 뒤 다시 시도).
+    state["last_error"] = error
 
     if result is not None and result.get("nextCheckAt"):
         when = result["nextCheckAt"].replace("Z", "+00:00")

@@ -12,10 +12,10 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs, kst } from "@/lib/kst";
-import { MONITOR_CLIENT_PRESETS } from "@/lib/monitor/presets";
 import { normalizeRule } from "@/lib/monitor/rules";
 import {
   DAILY_COLLECT_REQUEST,
@@ -83,13 +83,105 @@ const parseDate = (value: string | null | undefined, field: string): Date | null
   return d;
 };
 
+/* ───────────────────────── 소유권 ───────────────────────── */
+
+/*
+ * 사용자 요청은 모두 아래 확인을 거친다. 다른 사용자의 데이터는 "없음"(404)으로 돌려줘서
+ * id가 있는지조차 드러내지 않는다. 런·기사·스냅샷은 고객사·이슈를 통해 소유자가 정해진다.
+ * 스케줄러(tick)와 Hermes 콜백(`/api/monitor/agent/*`)은 사용자 요청이 아니라 이 확인을 거치지 않는다.
+ */
+
+const CLIENT_NOT_FOUND = "고객사를 찾을 수 없어요.";
+const RUN_NOT_FOUND = "수집 결과를 찾을 수 없어요.";
+const ITEM_NOT_FOUND = "기사를 찾을 수 없어요.";
+const ISSUE_NOT_FOUND = "이슈를 찾을 수 없어요.";
+const SNAPSHOT_NOT_FOUND = "집계를 찾을 수 없어요.";
+
+/** 이 사용자의 고객사 행. 없거나 남의 것이면 404 */
+export const assertClientOwner = async (userId: string, clientId: number) => {
+  const [row] = await getDb()
+    .select()
+    .from(clientsT)
+    .where(and(eq(clientsT.id, clientId), eq(clientsT.userId, userId)))
+    .limit(1);
+  if (!row) throw new MonitorError(CLIENT_NOT_FOUND, 404);
+  return row;
+};
+
+/** 이 사용자 고객사의 런 행 */
+export const assertRunOwner = async (userId: string, runId: number) => {
+  const [row] = await getDb()
+    .select({ run: runsT })
+    .from(runsT)
+    .innerJoin(clientsT, eq(runsT.clientId, clientsT.id))
+    .where(and(eq(runsT.id, runId), eq(clientsT.userId, userId)))
+    .limit(1);
+  if (!row) throw new MonitorError(RUN_NOT_FOUND, 404);
+  return row.run;
+};
+
+/** 이 사용자 고객사 런의 기사 판정 행 */
+export const assertItemOwner = async (userId: string, itemId: number) => {
+  const [row] = await getDb()
+    .select({ id: itemsT.id })
+    .from(itemsT)
+    .innerJoin(runsT, eq(itemsT.runId, runsT.id))
+    .innerJoin(clientsT, eq(runsT.clientId, clientsT.id))
+    .where(and(eq(itemsT.id, itemId), eq(clientsT.userId, userId)))
+    .limit(1);
+  if (!row) throw new MonitorError(ITEM_NOT_FOUND, 404);
+};
+
+/** 이 사용자의 이슈 행 */
+export const assertIssueOwner = async (userId: string, issueId: number) => {
+  const [row] = await getDb()
+    .select()
+    .from(issuesT)
+    .where(and(eq(issuesT.id, issueId), eq(issuesT.userId, userId)))
+    .limit(1);
+  if (!row) throw new MonitorError(ISSUE_NOT_FOUND, 404);
+  return row;
+};
+
+/** 이 사용자 이슈의 스냅샷 — issueId가 맞는지도 함께 본다. */
+export const assertSnapshotOwner = async (
+  userId: string,
+  issueId: number,
+  snapshotId: number
+) => {
+  const [row] = await getDb()
+    .select({ id: snapsT.id })
+    .from(snapsT)
+    .innerJoin(issuesT, eq(snapsT.issueId, issuesT.id))
+    .where(
+      and(
+        eq(snapsT.id, snapshotId),
+        eq(snapsT.issueId, issueId),
+        eq(issuesT.userId, userId)
+      )
+    )
+    .limit(1);
+  if (!row) throw new MonitorError(SNAPSHOT_NOT_FOUND, 404);
+};
+
+/** 고객사·이슈의 소유자 — 시스템 작업이 Hermes 기억을 그 사용자 범위로 나눌 때 쓴다. */
+export const getClientOwnerId = async (clientId: number) => {
+  const [row] = await getDb()
+    .select({ userId: clientsT.userId })
+    .from(clientsT)
+    .where(eq(clientsT.id, clientId))
+    .limit(1);
+  return row?.userId ?? null;
+};
+
 /* ───────────────────────── 개요 ───────────────────────── */
 
-export const getMonitorOverview = async (): Promise<MonitorOverview> => {
+export const getMonitorOverview = async (userId: string): Promise<MonitorOverview> => {
   const db = getDb();
   const clients = await db
     .select()
     .from(clientsT)
+    .where(eq(clientsT.userId, userId))
     .orderBy(asc(clientsT.sortOrder), asc(clientsT.id));
 
   const latestRuns = clients.length
@@ -145,6 +237,7 @@ export const getMonitorOverview = async (): Promise<MonitorOverview> => {
     })
     .from(issuesT)
     .leftJoin(clientsT, eq(issuesT.clientId, clientsT.id))
+    .where(eq(issuesT.userId, userId))
     .orderBy(desc(issuesT.isActive), desc(issuesT.createdAt));
 
   return {
@@ -203,19 +296,15 @@ const toClientView = (row: typeof clientsT.$inferSelect): MonitorClientView => (
   weekdaysOnly: row.weekdaysOnly,
 });
 
-/** 기본 고객사(홍콩관광청·파나소닉코리아)를 만든다. 이미 있는 slug는 건너뛴다. */
-export const createPresetClients = async () => {
-  const db = getDb();
-  await db
-    .insert(clientsT)
-    .values(MONITOR_CLIENT_PRESETS.map((p, i) => ({ ...p, sortOrder: i })))
-    .onConflictDoNothing({ target: clientsT.slug });
-};
-
-/** 화면 등록은 사람이 고를 필요 없는 식별자를 자동으로 만든다. */
-const newClientSlug = () => `client-${Date.now().toString(36)}`;
+/**
+ * 화면 등록은 사람이 고를 필요 없는 식별자를 자동으로 만든다.
+ * slug는 Hermes가 고객사를 찾는 전역 키라 사용자끼리도 겹치면 안 된다.
+ */
+const newClientSlug = () =>
+  `client-${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`;
 
 export const createMonitorClient = async (input: {
+  userId: string;
   name: string;
   slug?: string;
   categories?: MonitorCategory[];
@@ -226,6 +315,7 @@ export const createMonitorClient = async (input: {
   const [row] = await db
     .insert(clientsT)
     .values({
+      userId: input.userId,
       name: input.name,
       slug: input.slug ?? newClientSlug(),
       categories: input.categories ?? [
@@ -240,14 +330,12 @@ export const createMonitorClient = async (input: {
   return toClientView(row);
 };
 
-export const getClientView = async (id: number) => {
-  const db = getDb();
-  const [row] = await db.select().from(clientsT).where(eq(clientsT.id, id)).limit(1);
-  if (!row) throw new MonitorError("고객사를 찾을 수 없어요.", 404);
-  return toClientView(row);
-};
+/** 이 사용자의 고객사 설정 */
+export const getClientView = async (userId: string, id: number) =>
+  toClientView(await assertClientOwner(userId, id));
 
 export const updateMonitorClient = async (
+  userId: string,
   id: number,
   patch: Partial<
     Pick<
@@ -268,9 +356,9 @@ export const updateMonitorClient = async (
   const [row] = await db
     .update(clientsT)
     .set(patch)
-    .where(eq(clientsT.id, id))
+    .where(and(eq(clientsT.id, id), eq(clientsT.userId, userId)))
     .returning();
-  if (!row) throw new MonitorError("고객사를 찾을 수 없어요.", 404);
+  if (!row) throw new MonitorError(CLIENT_NOT_FOUND, 404);
   return toClientView(row);
 };
 
@@ -331,18 +419,14 @@ const loadRunItems = async (runId: number): Promise<MonitorItemView[]> => {
   }));
 };
 
-/** 고객사 화면 데이터. runId가 없으면 가장 최근 런을 보여준다. */
+/** 이 사용자 고객사의 화면 데이터. runId가 없으면 가장 최근 런을 보여준다. */
 export const getMonitorClientPayload = async (
+  userId: string,
   clientId: number,
   runId?: number
 ): Promise<MonitorClientPayload> => {
   const db = getDb();
-  const [client] = await db
-    .select()
-    .from(clientsT)
-    .where(eq(clientsT.id, clientId))
-    .limit(1);
-  if (!client) throw new MonitorError("고객사를 찾을 수 없어요.", 404);
+  const client = await assertClientOwner(userId, clientId);
 
   const runs = await db
     .select({
@@ -395,8 +479,7 @@ export const getMonitorClientPayload = async (
 
   const targetId = runId ?? runs[0]?.id;
   const run = targetId ? await getRunRow(targetId) : null;
-  if (run && run.clientId !== clientId)
-    throw new MonitorError("다른 고객사의 수집 결과예요.");
+  if (run && run.clientId !== clientId) throw new MonitorError(RUN_NOT_FOUND, 404);
 
   const items = run ? await loadRunItems(run.id) : [];
 
@@ -470,7 +553,7 @@ export const createCollectNowRun = async (input: {
     .from(runsT)
     .where(and(eq(runsT.clientId, input.clientId), isNotNull(runsT.pendingHermesRunId)))
     .limit(1);
-  if (busy) throw new MonitorError("이미 하치와레가 모으고 있어요.", 409);
+  if (busy) throw new MonitorError("이미 에이전트가 모으고 있어요.", 409);
 
   const claimed = await claimDailyRun(input);
   if (claimed) return claimed;
@@ -498,7 +581,7 @@ export const listActiveAutoRuns = async () => {
   return rows.map((r) => ({ run: r.run, client: toClientView(r.client) }));
 };
 
-/** 자동 수집 상태를 넘긴다. 다른 쪽이 먼저 넘겼으면 false — 재시도·알림이 한 번만 일어난다. */
+/** 자동 수집 상태를 넘긴다. 다른 쪽이 먼저 넘겼으면 false — 재시도가 한 번만 일어난다. */
 export const advanceRunAutoState = async (runId: number, from: string, to: string) => {
   const db = getDb();
   const rows = await db
@@ -561,7 +644,7 @@ export const getLatestSnapshot = async (issueId: number) => {
   return row ?? null;
 };
 
-/** 하치와레에게 넘기지 못한 빈 수집을 지워서 다음 확인 때 다시 시도하게 한다. */
+/** 에이전트에게 넘기지 못한 빈 수집을 지워서 다음 확인 때 다시 시도하게 한다. */
 export const releaseDailyRun = async (runId: number) => {
   const db = getDb();
   await db.delete(runsT).where(eq(runsT.id, runId));
@@ -570,6 +653,7 @@ export const releaseDailyRun = async (runId: number) => {
 /* ───────────────────────── 기사 선별 ───────────────────────── */
 
 export const updateMonitorItem = async (
+  userId: string,
   id: number,
   patch: {
     included?: boolean;
@@ -579,6 +663,7 @@ export const updateMonitorItem = async (
     importance?: MonitorImportance | null;
   }
 ) => {
+  await assertItemOwner(userId, id);
   const db = getDb();
   const set: Partial<typeof itemsT.$inferInsert> = { ...patch };
   // 제외 후보를 카테고리로 되살리면 제외 사유를 지운다.
@@ -587,15 +672,14 @@ export const updateMonitorItem = async (
     set.excludedRule = null;
   }
   const [row] = await db.update(itemsT).set(set).where(eq(itemsT.id, id)).returning();
-  if (!row) throw new MonitorError("기사를 찾을 수 없어요.", 404);
+  if (!row) throw new MonitorError(ITEM_NOT_FOUND, 404);
   return row;
 };
 
 /** 같은 매체의 기사를 이 런에서 모두 빼고, 고객사 "제외 매체" 규칙에 추가한다. */
-export const banMediaForRun = async (runId: number, media: string) => {
+export const banMediaForRun = async (userId: string, runId: number, media: string) => {
   const db = getDb();
-  const run = await getRunRow(runId);
-  if (!run) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
+  const run = await assertRunOwner(userId, runId);
 
   const [client] = await db.select().from(clientsT).where(eq(clientsT.id, run.clientId));
   const rules = [...((client.rules as MonitorRule[]) ?? [])];
@@ -624,7 +708,12 @@ export const banMediaForRun = async (runId: number, media: string) => {
     .where(and(eq(itemsT.runId, runId), inArray(itemsT.articleId, articleIds)));
 };
 
-export const markRunReported = async (runId: number, reportText: string) => {
+export const markRunReported = async (
+  userId: string,
+  runId: number,
+  reportText: string
+) => {
+  await assertRunOwner(userId, runId);
   const db = getDb();
   await db
     .update(runsT)
@@ -639,9 +728,11 @@ export const markRunReported = async (runId: number, reportText: string) => {
  * 같은 기사가 여러 수집에 나오면 가장 최근 판정 하나만 센다.
  */
 export const getClientStats = async (
+  userId: string,
   clientId: number,
   options: { days: StatsDays; scope: StatsScope; category: string | null }
 ): Promise<MonitorStatsPayload> => {
+  await assertClientOwner(userId, clientId);
   const db = getDb();
   const to = kst();
   const from = to.subtract(options.days - 1, "day").startOf("day");
@@ -692,10 +783,9 @@ export const getClientStats = async (
  * 보고 완료를 되돌린다. 이 수집의 기사는 다음 수집에서 다시 집계되고,
  * 이미 들어온 다른 수집에서 "이전에 보고함"으로 빠져 있던 같은 기사도 되살린다.
  */
-export const unmarkRunReported = async (runId: number) => {
+export const unmarkRunReported = async (userId: string, runId: number) => {
   const db = getDb();
-  const run = await getRunRow(runId);
-  if (!run) throw new MonitorError("수집 결과를 찾을 수 없어요.", 404);
+  const run = await assertRunOwner(userId, runId);
 
   await db
     .update(runsT)
@@ -993,11 +1083,11 @@ export const ingestAgentRun = async (
   if (!flagNew) await applyCategoryLimits(run.id, client.categories as MonitorCategory[]);
 
   if (appending) {
-    // 나눠 보내는 중간 묶음은 대기를 유지한다 — 여기서 풀면 화면 폴링과 완료 알림이
+    // 나눠 보내는 중간 묶음은 대기를 유지한다 — 여기서 풀면 화면 폴링이
     // 첫 묶음만 보고 끝나 버린다. 마지막 묶음(final 생략 포함)에서만 푼다.
     const final = input.final !== false;
     if (final) await setRunPending(run.id, null, null);
-    // 소요 시간은 하치와레가 적어 보낸 값 대신 앱이 잰다. "더 찾기"는 본 수집 시간을 덮지 않는다.
+    // 소요 시간은 에이전트가 적어 보낸 값 대신 앱이 잰다. "더 찾기"는 본 수집 시간을 덮지 않는다.
     const measured =
       final && !flagNew && run.pendingSince
         ? { measuredSec: Math.round((Date.now() - run.pendingSince.valueOf()) / 1000) }
@@ -1024,17 +1114,22 @@ export const ingestAgentRun = async (
 /* ───────────────────────── 이슈 트래커 ───────────────────────── */
 
 export const createMonitorIssue = async (input: {
+  userId: string;
   title: string;
   clientId: number | null;
   keywords: string[];
   brandTerms: string[];
 }) => {
+  // 연결할 고객사도 같은 사용자의 것이어야 한다.
+  if (input.clientId !== null) await assertClientOwner(input.userId, input.clientId);
   const db = getDb();
   const [row] = await db.insert(issuesT).values(input).returning();
   return row;
 };
 
+/** 이 사용자의 이슈를 고친다. 고객사를 바꾸면 그 고객사도 같은 사용자의 것이어야 한다. */
 export const updateMonitorIssue = async (
+  userId: string,
   id: number,
   patch: Partial<{
     title: string;
@@ -1047,11 +1142,17 @@ export const updateMonitorIssue = async (
     lastAutoSlot: string;
     reportRecipient: string;
     reportTemplate: string;
+    clientId: number | null;
   }>
 ) => {
+  if (patch.clientId != null) await assertClientOwner(userId, patch.clientId);
   const db = getDb();
-  const [row] = await db.update(issuesT).set(patch).where(eq(issuesT.id, id)).returning();
-  if (!row) throw new MonitorError("이슈를 찾을 수 없어요.", 404);
+  const [row] = await db
+    .update(issuesT)
+    .set(patch)
+    .where(and(eq(issuesT.id, id), eq(issuesT.userId, userId)))
+    .returning();
+  if (!row) throw new MonitorError(ISSUE_NOT_FOUND, 404);
   return row;
 };
 
@@ -1107,7 +1208,7 @@ export const claimIssueSlot = async (issueId: number, slot: string) => {
   return rows.length > 0;
 };
 
-/** 하치와레에게 넘기지 못했으면 선점을 되돌려 다음 확인 때 다시 시도하게 한다. */
+/** 에이전트에게 넘기지 못했으면 선점을 되돌려 다음 확인 때 다시 시도하게 한다. */
 export const releaseIssueSlot = async (issueId: number, previous: string | null) => {
   const db = getDb();
   await db
@@ -1116,7 +1217,9 @@ export const releaseIssueSlot = async (issueId: number, previous: string | null)
     .where(eq(issuesT.id, issueId));
 };
 
+/** 이 사용자 이슈의 화면 데이터 */
 export const getMonitorIssuePayload = async (
+  userId: string,
   id: number
 ): Promise<MonitorIssuePayload> => {
   const db = getDb();
@@ -1124,9 +1227,9 @@ export const getMonitorIssuePayload = async (
     .select({ issue: issuesT, clientName: clientsT.name })
     .from(issuesT)
     .leftJoin(clientsT, eq(issuesT.clientId, clientsT.id))
-    .where(eq(issuesT.id, id))
+    .where(and(eq(issuesT.id, id), eq(issuesT.userId, userId)))
     .limit(1);
-  if (!row) throw new MonitorError("이슈를 찾을 수 없어요.", 404);
+  if (!row) throw new MonitorError(ISSUE_NOT_FOUND, 404);
   const { issue } = row;
 
   const snapshots = await db
@@ -1177,11 +1280,13 @@ export const getMonitorIssuePayload = async (
   };
 };
 
-/** 집계 한 번의 기사 목록 — 최신 기사부터 */
+/** 이 사용자 이슈의 집계 한 번의 기사 목록 — 최신 기사부터 */
 export const getIssueArticles = async (
+  userId: string,
   issueId: number,
   snapshotId: number
 ): Promise<MonitorIssueArticleView[]> => {
+  await assertSnapshotOwner(userId, issueId, snapshotId);
   const rows = await getDb()
     .select({ article: issueArticlesT })
     .from(issueArticlesT)
@@ -1240,7 +1345,7 @@ export const addIssueSnapshot = async (
     })
     .returning();
 
-  // 건수는 이미 저장됐다. 목록 때문에 실패로 돌려주면 하치와레가 다시 보내 건수가 두 배가 된다.
+  // 건수는 이미 저장됐다. 목록 때문에 실패로 돌려주면 에이전트가 다시 보내 건수가 두 배가 된다.
   const seenUrls = new Set<string>();
   const articles = input.articles.filter(
     (a) => !seenUrls.has(a.url) && seenUrls.add(a.url)

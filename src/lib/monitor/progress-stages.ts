@@ -15,7 +15,7 @@ export interface MonitorProgress {
   lastActivityAt: string | null;
 }
 
-/** 하치와레 작업량 표시 — 캐시를 뺀 토큰과 도구 횟수 */
+/** 에이전트 작업량 표시 — 캐시를 뺀 토큰과 도구 횟수 */
 export const formatUsage = ({ tokens, tools }: { tokens: number; tools: number }) => {
   const amount =
     tokens >= 10_000
