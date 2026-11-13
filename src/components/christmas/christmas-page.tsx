@@ -1,6 +1,6 @@
 "use client";
 
-import { Pause, Play, Snowflake, TreePine } from "lucide-react";
+import { Pause, Play, TreePine } from "lucide-react";
 
 import { useState, useSyncExternalStore } from "react";
 
@@ -40,7 +40,6 @@ export const ChristmasPage = () => {
   const reducedMotion = useReducedMotion();
   const [userPlaying, setUserPlaying] = useState<boolean | null>(null);
   const playing = userPlaying ?? !reducedMotion;
-  const [snowing, setSnowing] = useState(true);
   const days = daysUntilChristmas();
 
   return (
@@ -55,14 +54,6 @@ export const ChristmasPage = () => {
             <p className="text-[13px] text-muted">{ddayText(days)}</p>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              aria-pressed={snowing}
-              onClick={() => setSnowing((v) => !v)}
-            >
-              <Snowflake />
-              {snowing ? "눈 그치기" : "눈 내리기"}
-            </Button>
             <Button variant="outline" onClick={() => setUserPlaying(!playing)}>
               {playing ? <Pause /> : <Play />}
               {playing ? "멈추기" : "돌리기"}
@@ -70,10 +61,10 @@ export const ChristmasPage = () => {
           </div>
         </header>
 
+        {/* 원본 구도(가로 5 : 세로 6)를 지키면서 화면 높이 안에 들어오게 한다 */}
         <AsciiChristmasTree
           playing={playing}
-          snowing={snowing}
-          className="h-[min(72dvh,680px)] min-h-[420px] w-full overflow-hidden rounded-2xl bg-[#1c1517]"
+          className="mx-auto aspect-[5/6] w-[min(100%,calc((100dvh-11rem)*5/6))] min-w-[280px] overflow-hidden rounded-2xl bg-[#010611]"
         />
       </main>
     </SidebarLayout>
