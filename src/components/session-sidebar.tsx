@@ -12,6 +12,7 @@ import {
   PanelLeft,
   Plus,
   Search,
+  TreePine,
   Upload,
   Wallet,
 } from "lucide-react";
@@ -32,7 +33,7 @@ interface Session {
 
 interface Props {
   activeSessionId: string;
-  activeNav?: "ledger" | "monitor" | "dates";
+  activeNav?: "ledger" | "monitor" | "dates" | "christmas";
   onSelect: (id: string) => void;
   onNew: () => void;
   isOpen: boolean;
@@ -150,6 +151,14 @@ export const SessionSidebar = ({
             >
               <CalendarHeart className="h-4 w-4" />
               데이트 장소
+            </Button>
+            <Button
+              variant="ghost"
+              className={`w-full justify-start ${activeNav === "christmas" && "bg-canvas-card text-ink"}`}
+              onClick={() => router.push("/christmas")}
+            >
+              <TreePine className="h-4 w-4" />
+              크리스마스 트리
             </Button>
             <Button
               variant="ghost"
@@ -291,6 +300,17 @@ export const SessionSidebar = ({
             className={activeNav === "dates" ? "bg-canvas-card text-ink" : ""}
           >
             <CalendarHeart className="h-5 w-5" />
+          </Button>
+
+          {/* Christmas tree */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            onClick={() => router.push("/christmas")}
+            aria-label="크리스마스 트리"
+            className={activeNav === "christmas" ? "bg-canvas-card text-ink" : ""}
+          >
+            <TreePine className="h-5 w-5" />
           </Button>
 
           {/* Spacer */}
