@@ -13,7 +13,7 @@ export const maxDuration = 120;
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-/** 데이트 장소 조사는 모니터링과 따로 실패해도 서로 막지 않는다. */
+/** 데이트 추천 조사는 모니터링과 따로 실패해도 서로 막지 않는다. */
 const dateSpotTick = async (origin: string, siteOrigin: string) => {
   try {
     return await runDateSpotTick(origin, undefined, siteOrigin);
@@ -21,7 +21,7 @@ const dateSpotTick = async (origin: string, siteOrigin: string) => {
     console.error("[date-spots]", error);
     return {
       started: [] as string[],
-      failed: [{ client: "데이트 장소", error: errorText(error) }],
+      failed: [{ client: "데이트 추천", error: errorText(error) }],
       notifications: [] as string[],
       checks: [] as number[],
     };
@@ -30,7 +30,7 @@ const dateSpotTick = async (origin: string, siteOrigin: string) => {
 
 /**
  * Oracle의 예약 스크립트 전용 — 오늘 수집할 고객사가 있으면 하치와레에게 맡긴다.
- * 데이트 장소 매일 조사도 같은 시계로 돈다.
+ * 데이트 추천 매일 조사도 같은 시계로 돈다.
  * 고정 키는 스크립트만 쓰고, 하치와레에게는 런마다 일회성 콜백 토큰만 넘어간다.
  */
 export const POST = async (req: Request) => {

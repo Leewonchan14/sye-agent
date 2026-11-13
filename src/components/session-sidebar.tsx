@@ -149,7 +149,7 @@ export const SessionSidebar = ({
               onClick={() => router.push("/dates")}
             >
               <CalendarHeart className="h-4 w-4" />
-              데이트 장소
+              데이트 추천
             </Button>
             <Button
               variant="ghost"
@@ -287,7 +287,7 @@ export const SessionSidebar = ({
             variant="ghost"
             size="icon-lg"
             onClick={() => router.push("/dates")}
-            aria-label="데이트 장소"
+            aria-label="데이트 추천"
             className={activeNav === "dates" ? "bg-canvas-card text-ink" : ""}
           >
             <CalendarHeart className="h-5 w-5" />

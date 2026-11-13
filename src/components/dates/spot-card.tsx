@@ -2,7 +2,9 @@
 
 import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
 import {
+  CalendarDays,
   Camera,
+  ExternalLink,
   Footprints,
   Heart,
   MapPin,
@@ -455,8 +457,15 @@ export const SpotCard = ({
         </p>
       )}
 
-      {(spot.address || spot.priceHint) && (
+      {(spot.period || spot.address || spot.priceHint) && (
         <dl className="flex flex-col gap-1 text-[13px] text-muted">
+          {spot.period && (
+            <div className="flex gap-1.5">
+              <dt className="sr-only">기간</dt>
+              <CalendarDays className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <dd>{spot.period}</dd>
+            </div>
+          )}
           {spot.address && (
             <div className="flex gap-1.5">
               <dt className="sr-only">주소</dt>
@@ -486,29 +495,45 @@ export const SpotCard = ({
 
       <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3">
         <div className="flex gap-1">
-          <a
-            href={spot.instagramUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <Camera />
-            인스타
-            {spot.instagramAuthor && (
-              <span className="max-w-[96px] truncate text-muted">
-                @{spot.instagramAuthor}
-              </span>
-            )}
-          </a>
-          <a
-            href={mapUrl(spot)}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <MapPin />
-            지도
-          </a>
+          {spot.instagramUrl && (
+            <a
+              href={spot.instagramUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Camera />
+              인스타
+              {spot.instagramAuthor && (
+                <span className="max-w-[96px] truncate text-muted">
+                  @{spot.instagramAuthor}
+                </span>
+              )}
+            </a>
+          )}
+          {spot.sourceUrl && (
+            <a
+              href={spot.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <ExternalLink />
+              자세히
+            </a>
+          )}
+          {/* 집·온라인에서 즐기는 거리는 지도로 찾을 곳이 없다. */}
+          {(spot.kind === "place" || spot.address) && (
+            <a
+              href={mapUrl(spot)}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <MapPin />
+              지도
+            </a>
+          )}
         </div>
         <div className="flex gap-0.5" role="group" aria-label="우리 반응">
           {REACTIONS.map(({ value, label, icon: Icon, active }) => {

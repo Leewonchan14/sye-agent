@@ -232,6 +232,13 @@
       "when": 1794307961039,
       "tag": "0033_monitor_insights",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794528552775,
+      "tag": "0034_old_doctor_spectrum",
+      "breakpoints": true
     }
   ]
 }

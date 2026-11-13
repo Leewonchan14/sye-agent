@@ -1,6 +1,13 @@
 "use client";
 
-import { CalendarHeart, Heart, SlidersHorizontal, Sparkles } from "lucide-react";
+import {
+  CalendarHeart,
+  Gamepad2,
+  Heart,
+  MapPin,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { useState } from "react";
 
 import { DateSettingsDialog } from "@/components/dates/settings-dialog";
@@ -53,7 +60,11 @@ const scheduleText = (data: DateOverview) => {
   const when = next.isSame(kst(), "day")
     ? `오늘 ${next.format("HH:mm")}`
     : `내일 ${next.format("HH:mm")}`;
-  return `매일 ${settings.collectTime}에 ${settings.areas.join("·")}에서 ${settings.count}곳씩 골라 와요 · 다음 ${when}`;
+  const amount =
+    settings.contentCount > 0
+      ? `${settings.count}곳과 즐길거리 ${settings.contentCount}개씩`
+      : `${settings.count}곳씩`;
+  return `매일 ${settings.collectTime}에 ${settings.areas.join("·")}에서 ${amount} 골라 와요 · 다음 ${when}`;
 };
 
 const SpotGrid = ({
@@ -76,6 +87,40 @@ const SpotGrid = ({
     ))}
   </div>
 );
+
+/** 하루 추천을 장소와 즐길거리로 나눠 보여 준다. 즐길거리가 없으면 예전처럼 한 묶음이다. */
+const DigestSpots = ({
+  spots,
+  onReact,
+}: {
+  spots: DateSpotView[];
+  onReact: (spotId: number, reaction: DateReaction | null) => void;
+}) => {
+  const places = spots.filter((s) => s.kind === "place");
+  const contents = spots.filter((s) => s.kind === "content");
+  if (!contents.length) return <SpotGrid spots={spots} onReact={onReact} />;
+  return (
+    <div className="flex flex-col gap-5">
+      {places.length > 0 && (
+        <section aria-label="가 볼 곳" className="flex flex-col gap-2.5">
+          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-ink">
+            <MapPin className="size-4 text-primary" />가 볼 곳
+            <span className="text-[13px] font-normal text-muted">{places.length}</span>
+          </h2>
+          <SpotGrid spots={places} onReact={onReact} />
+        </section>
+      )}
+      <section aria-label="같이 즐길 거리" className="flex flex-col gap-2.5">
+        <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-ink">
+          <Gamepad2 className="size-4 text-primary" />
+          같이 즐길 거리
+          <span className="text-[13px] font-normal text-muted">{contents.length}</span>
+        </h2>
+        <SpotGrid spots={contents} onReact={onReact} />
+      </section>
+    </div>
+  );
+};
 
 const Empty = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-hairline px-6 py-14 text-center">
@@ -111,7 +156,7 @@ export const DateSpotsPage = () => {
           <div className="flex flex-col gap-1">
             <h1 className="flex items-center gap-2 text-xl font-semibold text-ink">
               <CalendarHeart className="size-5 text-primary" />
-              데이트 장소
+              데이트 추천
             </h1>
             {data && <p className="text-[13px] text-muted">{scheduleText(data)}</p>}
           </div>
@@ -187,7 +232,7 @@ export const DateSpotsPage = () => {
                 className="flex items-center gap-2.5 rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-body"
               >
                 <Spinner />
-                하치와레가 인스타그램을 둘러보는 중이에요. 몇 분 걸릴 수 있어요.
+                하치와레가 인스타그램과 소식을 둘러보는 중이에요. 몇 분 걸릴 수 있어요.
               </div>
             )}
             {!pending && digest?.lastError && (
@@ -208,7 +253,7 @@ export const DateSpotsPage = () => {
             )}
 
             {digest && digest.spots.length > 0 ? (
-              <SpotGrid spots={digest.spots} onReact={onReact} />
+              <DigestSpots spots={digest.spots} onReact={onReact} />
             ) : (
               !pending && (
                 <Empty

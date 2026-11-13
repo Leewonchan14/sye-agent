@@ -513,7 +513,7 @@ export const monitorIssueArticles = pgTable(
   })
 );
 
-/* ───────────────────────── 데이트 장소 (하치와레 매일 조사) ───────────────────────── */
+/* ───────────────────────── 데이트 추천 (하치와레 매일 조사) ───────────────────────── */
 
 /** 조사 조건 — 한 행(id = 1)만 쓴다. */
 export const dateSpotSettings = pgTable("date_spot_settings", {
@@ -523,6 +523,8 @@ export const dateSpotSettings = pgTable("date_spot_settings", {
   collectTime: text("collect_time").notNull().default("09:00"),
   /** 하루에 받을 장소 수 */
   count: integer("count").notNull().default(5),
+  /** 하루에 받을 즐길거리(팝업·게임·공연 같은 컨텐츠) 수. 0이면 장소만 받는다. */
+  contentCount: integer("content_count").notNull().default(3),
   areas: text("areas")
     .array()
     .notNull()
@@ -565,8 +567,17 @@ export const dateSpots = pgTable(
     category: text("category").notNull().default(""),
     summary: text("summary").notNull().default(""),
     reason: text("reason").notNull().default(""),
-    /** 근거가 된 인스타그램 게시물. 같은 게시물은 두 번 추천하지 않는다. */
-    instagramUrl: text("instagram_url").notNull().unique(),
+    /** place(가 볼 장소) | content(팝업·게임·공연처럼 둘이 즐길 거리) */
+    kind: text("kind").notNull().default("place"),
+    /**
+     * 근거가 된 인스타그램 게시물. 같은 게시물은 두 번 추천하지 않는다.
+     * 장소는 꼭 있고, 즐길거리는 인스타 대신 sourceUrl만 있을 수 있다.
+     */
+    instagramUrl: text("instagram_url").unique(),
+    /** 즐길거리의 공식·소개 페이지(스팀, 공식 공지, 예매처 등). 같은 주소는 두 번 추천하지 않는다. */
+    sourceUrl: text("source_url").unique(),
+    /** 즐길 수 있는 기간·시점 (예: "11.14~12.7", "상시") */
+    period: text("period"),
     instagramAuthor: text("instagram_author"),
     postedAt: timestamp("posted_at", { withTimezone: true }),
     address: text("address"),

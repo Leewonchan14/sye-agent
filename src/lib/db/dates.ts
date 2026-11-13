@@ -16,10 +16,12 @@ import { fetchInstagramPhotos } from "@/lib/dates/photo";
 import {
   type AgentDigestInput,
   DATE_REACTIONS,
+  DATE_SPOT_KINDS,
   type DateDaySummary,
   type DateDigestView,
   type DateReaction,
   type DateSettings,
+  type DateSpotKind,
   type DateSpotView,
   DEFAULT_DATE_SETTINGS,
 } from "@/lib/dates/types";
@@ -59,6 +61,7 @@ export const getDateSettings = async (): Promise<DateSettings> => {
     enabled: row.enabled,
     collectTime: row.collectTime,
     count: row.count,
+    contentCount: row.contentCount,
     areas: row.areas,
     themes: row.themes,
     memo: row.memo,
@@ -192,6 +195,7 @@ export const ingestDigest = async (input: AgentDigestInput) => {
 
   const rows = input.spots.map((spot) => ({
     digestId: digest.id,
+    kind: spot.kind,
     name: spot.name,
     area: spot.area,
     category: spot.category,
@@ -199,6 +203,8 @@ export const ingestDigest = async (input: AgentDigestInput) => {
     reason: spot.reason,
     instagramUrl: spot.instagramUrl,
     instagramAuthor: spot.instagramAuthor,
+    sourceUrl: spot.sourceUrl,
+    period: spot.period,
     postedAt: parsePostedAt(spot.postedAt),
     address: spot.address,
     priceHint: spot.priceHint,
@@ -208,7 +214,8 @@ export const ingestDigest = async (input: AgentDigestInput) => {
     ? await db
         .insert(spotsT)
         .values(rows)
-        .onConflictDoNothing({ target: spotsT.instagramUrl })
+        // 같은 인스타그램 게시물이나 같은 소개 페이지면 건너뛴다.
+        .onConflictDoNothing()
         .returning()
     : [];
 
@@ -242,6 +249,9 @@ export const getDigestToken = async (digestId: number) => {
 const toSpotView = (row: SpotRow, dayKey: string): DateSpotView => ({
   id: row.id,
   dayKey,
+  kind: (DATE_SPOT_KINDS as readonly string[]).includes(row.kind)
+    ? (row.kind as DateSpotKind)
+    : "place",
   name: row.name,
   area: row.area,
   category: row.category,
@@ -249,6 +259,8 @@ const toSpotView = (row: SpotRow, dayKey: string): DateSpotView => ({
   reason: row.reason,
   instagramUrl: row.instagramUrl,
   instagramAuthor: row.instagramAuthor,
+  sourceUrl: row.sourceUrl,
+  period: row.period,
   postedAt: row.postedAt?.toISOString() ?? null,
   address: row.address,
   priceHint: row.priceHint,
@@ -317,14 +329,15 @@ export const getRecommendationHistory = async (days = 120) => {
     .select({
       name: spotsT.name,
       area: spotsT.area,
+      kind: spotsT.kind,
       reaction: spotsT.reaction,
     })
     .from(spotsT)
     .where(gte(spotsT.createdAt, since))
     .orderBy(desc(spotsT.id))
     .limit(300);
-  const label = (r: { name: string; area: string }) =>
-    r.area ? `${r.name}(${r.area})` : r.name;
+  const label = (r: { name: string; area: string; kind: string }) =>
+    `${r.kind === "content" ? "[즐길거리] " : ""}${r.area ? `${r.name}(${r.area})` : r.name}`;
   return {
     recommended: rows.map(label),
     liked: rows
@@ -377,6 +390,8 @@ export const refreshSpotPhotos = async (target: {
     .where(
       and(
         scope,
+        // 인스타그램 근거가 없는 즐길거리는 읽을 사진이 없다.
+        isNotNull(spotsT.instagramUrl),
         or(
           // 한 번도 안 찾아봤거나, 못 찾은 지 오래됐거나
           and(
@@ -400,6 +415,7 @@ export const refreshSpotPhotos = async (target: {
 
   await Promise.all(
     stale.map(async (spot) => {
+      if (!spot.instagramUrl) return;
       const photos = await fetchInstagramPhotos(spot.instagramUrl);
       await db
         .update(spotsT)

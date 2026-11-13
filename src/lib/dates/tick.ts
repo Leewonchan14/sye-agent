@@ -44,7 +44,7 @@ export const nextDateCollectAt = (
 };
 
 /**
- * Oracle 시계(`/api/monitor/agent/tick`)가 1분마다 부르는 데이트 장소 처리.
+ * Oracle 시계(`/api/monitor/agent/tick`)가 1분마다 부르는 데이트 추천 처리.
  * 정한 시각이 되면 하치와레에게 오늘 조사를 맡기고, 끝나면 Discord 알림 문구를 돌려준다.
  * 결과 없이 끝나면 한 번 다시 시도한다.
  */
@@ -92,14 +92,14 @@ export const runDateSpotTick = async (
         } catch (error) {
           await advanceDigestAutoState(current.id, "retried", "done");
           notifications.push(
-            `⚠️ 데이트 장소 조사를 다시 시도하지 못했어요. ${errorText(error)}\n${pageUrl}`
+            `⚠️ 데이트 추천 조사를 다시 시도하지 못했어요. ${errorText(error)}\n${pageUrl}`
           );
           continue;
         }
       }
       if (await advanceDigestAutoState(current.id, "retried", "done")) {
         notifications.push(
-          `⚠️ 데이트 장소 조사가 두 번 모두 실패했어요. ${current.lastError}\n${pageUrl}`
+          `⚠️ 데이트 추천 조사가 두 번 모두 실패했어요. ${current.lastError}\n${pageUrl}`
         );
       }
       continue;
@@ -109,8 +109,8 @@ export const runDateSpotTick = async (
     if (state && (await advanceDigestAutoState(current.id, state, "done"))) {
       notifications.push(
         spots > 0
-          ? `💕 하치와레가 오늘의 데이트 장소 ${spots}곳을 골라 왔어요.\n${pageUrl}`
-          : `🙈 오늘은 조건에 맞는 데이트 장소를 못 찾았어요. 지역이나 테마를 넓혀 볼까요?\n${pageUrl}`
+          ? `💕 하치와레가 오늘의 데이트 추천 ${spots}개를 골라 왔어요.\n${pageUrl}`
+          : `🙈 오늘은 조건에 맞는 데이트 추천을 못 찾았어요. 지역이나 테마를 넓혀 볼까요?\n${pageUrl}`
       );
     }
   }
@@ -142,7 +142,7 @@ export const runDateSpotTick = async (
         } else {
           // 다음 확인 때 다시 시도하도록 차지를 되돌린다.
           await advanceDigestAutoState(digest.id, "running", null);
-          failed.push({ client: "데이트 장소", error: errorText(error) });
+          failed.push({ client: "데이트 추천", error: errorText(error) });
           checks.push(now.valueOf() + RETRY_MS);
         }
       }

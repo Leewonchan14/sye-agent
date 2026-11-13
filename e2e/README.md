@@ -14,7 +14,7 @@ DATABASE_URL=$E2E_DATABASE_URL npx next start -p 3100 &
 E2E_BASE_URL=http://localhost:3100 npm run test:e2e
 ```
 
-데이트 장소 테스트(`date-spots.spec.ts`)는 테스트 안에서 가짜 Hermes(기본 포트 8972)를 띄운다.
+데이트 추천 테스트(`date-spots.spec.ts`)는 테스트 안에서 가짜 Hermes(기본 포트 8972)를 띄운다.
 같은 서버가 인스타그램 임베드·사진 서버 역할도 하므로 `INSTAGRAM_EMBED_ORIGIN`도 그 주소로 둔다.
 앱을 띄울 때 아래 값을 함께 넣는다.
 
