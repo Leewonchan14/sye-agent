@@ -98,6 +98,21 @@ const spot = (code: string, name: string, extra: Record<string, unknown> = {}) =
   ...extra,
 });
 
+/** 즐길거리 — 인스타 대신 공식·소개 페이지를 근거로 받는다. */
+const content = (name: string, extra: Record<string, unknown> = {}) => ({
+  kind: "content",
+  name,
+  area: "집",
+  category: "게임",
+  summary: `${name} 소개 문장입니다.`,
+  reason: "둘이 같이 하면 더 무서워요.",
+  sourceUrl: `https://store.example.com/app/${encodeURIComponent(name)}#reviews`,
+  period: "상시",
+  priceHint: "2인 3만원대",
+  tags: ["협동", "공포", "2인"],
+  ...extra,
+});
+
 /** 프롬프트의 curl 예시에서 하치와레가 쓰는 것과 같은 값을 꺼낸다. */
 const callBack = async (input: string, spots: unknown[]) => {
   const url = input.match(/curl -sS -X POST '([^']+)'/)?.[1];
@@ -259,7 +274,7 @@ test("조건을 저장하면 프롬프트와 안내 문구에 반영된다", asy
   await dialog.getByLabel("하치와레에게 부탁").fill("웨이팅 긴 곳은 빼 줘");
   await dialog.getByRole("button", { name: "저장" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText(/서울·연남에서 5곳씩/)).toBeVisible();
+  await expect(page.getByText(/서울·연남에서 5곳과 즐길거리 3개씩/)).toBeVisible();
 
   nextSpots = () => [];
   await page.getByRole("button", { name: "지금 찾아 줘" }).click();
@@ -336,6 +351,172 @@ test("하치와레 결과는 인스타그램 게시물만, 발급한 토큰으�
   const ok = await post({ "x-monitor-key": ingestKey }, [spot("EEE555", "진짜")]);
   expect(ok.status()).toBe(201);
   expect(await ok.json()).toMatchObject({ inserted: 1, skipped: 0 });
+});
+
+test("장소와 함께 같이 즐길 거리(팝업·게임)를 받아 따로 보여 준다", async ({
+  page,
+  request,
+}) => {
+  nextSpots = () => [
+    spot("PLC111", "성수 온실카페"),
+    content("둘이서 탈출하는 공포 게임"),
+    content("캐릭터 팝업스토어", {
+      area: "용산",
+      category: "팝업·전시",
+      sourceUrl: "https://popup.example.com/notice/1",
+      instagramUrl: "https://www.instagram.com/p/POP222/",
+      instagramAuthor: "popup_official",
+      address: "서울 용산구 한강대로 23",
+      period: "11.14~12.7",
+      priceHint: null,
+      tags: ["한정판", "포토존"],
+    }),
+  ];
+  const token = await login(request);
+  await openDates(page, token);
+  await page.getByRole("button", { name: "지금 찾아 줘" }).click();
+
+  const places = page.getByRole("region", { name: "가 볼 곳" });
+  const contents = page.getByRole("region", { name: "같이 즐길 거리" });
+  await expect(contents.getByRole("article", { name: "캐릭터 팝업스토어" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(places.getByRole("article", { name: "성수 온실카페" })).toBeVisible();
+  await expect(places.getByRole("article")).toHaveCount(1);
+  await expect(contents.getByRole("article")).toHaveCount(2);
+
+  // 집에서 하는 게임은 인스타·지도 대신 소개 페이지만 연결한다(# 조각은 뗀다).
+  const game = contents.getByRole("article", { name: "둘이서 탈출하는 공포 게임" });
+  await expect(game.getByRole("link", { name: "자세히" })).toHaveAttribute(
+    "href",
+    `https://store.example.com/app/${encodeURIComponent("둘이서 탈출하는 공포 게임")}`
+  );
+  await expect(game.getByRole("link", { name: /^인스타/ })).toHaveCount(0);
+  await expect(game.getByRole("link", { name: "지도" })).toHaveCount(0);
+  await expect(game.getByText("상시")).toBeVisible();
+
+  // 팝업은 기간·주소와 함께 인스타·소개 페이지·지도를 모두 연결하고 게시물 사진도 보여 준다.
+  const popup = contents.getByRole("article", { name: "캐릭터 팝업스토어" });
+  await expect(popup.getByText("11.14~12.7")).toBeVisible();
+  await expect(popup.getByRole("link", { name: /^인스타/ })).toBeVisible();
+  await expect(popup.getByRole("link", { name: "자세히" })).toHaveAttribute(
+    "href",
+    "https://popup.example.com/notice/1"
+  );
+  await expect(popup.getByRole("link", { name: "지도" })).toBeVisible();
+  await expect(popup.getByRole("img", { name: "캐릭터 팝업스토어 사진" })).toBeVisible();
+
+  // 즐길거리도 찜할 수 있다.
+  await game.getByRole("button", { name: "가 보고 싶어" }).click();
+  await page.getByRole("button", { name: /가 보고 싶은 곳/ }).click();
+  await expect(
+    page.getByRole("article", { name: "둘이서 탈출하는 공포 게임" })
+  ).toBeVisible();
+
+  const input = runs.get("run_1")?.input ?? "";
+  expect(input).toContain("같이 즐길 거리(컨텐츠)도 3개");
+  expect(input).toContain('"kind": "content"');
+  expect(input).toContain("즐길거리 찾는 방법");
+
+  const { rows } = await pool.query(
+    "select name, kind, instagram_url, source_url, period from date_spots order by id"
+  );
+  expect(rows).toEqual([
+    {
+      name: "성수 온실카페",
+      kind: "place",
+      instagram_url: "https://www.instagram.com/p/PLC111/",
+      source_url: null,
+      period: null,
+    },
+    {
+      name: "둘이서 탈출하는 공포 게임",
+      kind: "content",
+      instagram_url: null,
+      source_url: `https://store.example.com/app/${encodeURIComponent("둘이서 탈출하는 공포 게임")}`,
+      period: "상시",
+    },
+    {
+      name: "캐릭터 팝업스토어",
+      kind: "content",
+      instagram_url: "https://www.instagram.com/p/POP222/",
+      source_url: "https://popup.example.com/notice/1",
+      period: "11.14~12.7",
+    },
+  ]);
+
+  // 다음 조사에는 즐길거리도 이미 추천한 것·좋아한 것으로 알려 준다.
+  nextSpots = () => [];
+  await page.getByRole("button", { name: /매일 추천/ }).click();
+  await page.getByRole("button", { name: "더 찾아 줘" }).click();
+  await expect.poll(() => runs.get("run_2")?.input ?? "").toContain("[즐길거리] 둘이서");
+  expect(runs.get("run_2")?.input).toContain(
+    "좋아했던 곳(비슷한 결로 참고): [즐길거리] 둘이서 탈출하는 공포 게임(집)"
+  );
+});
+
+test("즐길거리를 안 받기로 하면 프롬프트에서 빠진다", async ({ page, request }) => {
+  const token = await login(request);
+  await openDates(page, token);
+
+  await page.getByRole("button", { name: "조건" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "하루 즐길거리 수" }).click();
+  await page.getByRole("option", { name: "안 받기" }).click();
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText(/서울에서 5곳씩 골라 와요/)).toBeVisible();
+
+  nextSpots = () => [];
+  await page.getByRole("button", { name: "지금 찾아 줘" }).click();
+  await expect(page.getByText("오늘 추천은 아직이에요")).toBeVisible({ timeout: 20_000 });
+  const input = runs.get("run_1")?.input ?? "";
+  expect(input).toContain("인스타그램에서 5곳 찾아 줘");
+  expect(input).not.toContain("즐길거리 찾는 방법");
+  expect(input).not.toContain('"kind": "content"');
+});
+
+test("즐길거리는 근거 주소가 있어야 하고, 같은 소개 페이지는 한 번만 받는다", async ({
+  request,
+}) => {
+  const {
+    rows: [digest],
+  } = await pool.query(
+    "insert into date_spot_digests (day_key) values ('2026-01-02') returning id"
+  );
+  const post = (spots: unknown[]) =>
+    request.post("/api/dates/agent/digests", {
+      headers: { "x-monitor-key": ingestKey },
+      data: { digestId: digest.id, spots },
+    });
+
+  const noSource = await post([content("근거 없는 게임", { sourceUrl: "" })]);
+  expect(noSource.status()).toBe(400);
+  expect((await noSource.json()).error).toContain("sourceUrl");
+
+  const badSource = await post([
+    content("이상한 주소", { sourceUrl: "javascript:alert(1)" }),
+  ]);
+  expect(badSource.status()).toBe(400);
+
+  // 장소는 여전히 인스타그램 게시물이 있어야 한다.
+  const placeNoInsta = await post([
+    spot("x", "인스타 없는 장소", {
+      instagramUrl: null,
+      sourceUrl: "https://a.example.com/",
+    }),
+  ]);
+  expect(placeNoInsta.status()).toBe(400);
+  expect((await placeNoInsta.json()).error).toContain("인스타그램 게시물 주소");
+
+  const first = await post([content("협동 퍼즐 게임"), spot("SRC111", "장소 하나")]);
+  expect(first.status()).toBe(201);
+  expect(await first.json()).toMatchObject({ inserted: 2, skipped: 0 });
+
+  const again = await post([
+    content("협동 퍼즐 게임", { name: "협동 퍼즐 게임 (다시)" }),
+  ]);
+  expect(await again.json()).toMatchObject({ inserted: 0, skipped: 1 });
 });
 
 test("임베드에서 여러 장 사진을 순서대로 읽고, 데이터가 없으면 대표 사진 한 장을 쓴다", () => {
