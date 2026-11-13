@@ -5,8 +5,6 @@ export type DateReaction = (typeof DATE_REACTIONS)[number];
 
 export const MIN_SPOT_COUNT = 3;
 export const MAX_SPOT_COUNT = 10;
-/** 즐길거리는 0개(안 받기)부터 고른다. */
-export const MAX_CONTENT_COUNT = 5;
 
 /** place: 가 볼 장소 · content: 팝업·게임·공연처럼 둘이 같이 즐길 거리 */
 export const DATE_SPOT_KINDS = ["place", "content"] as const;
@@ -24,7 +22,6 @@ export const dateSettingsSchema = z.object({
   enabled: z.boolean(),
   collectTime: z.string().regex(TIME_RE, "HH:mm 형식이어야 해요."),
   count: z.number().int().min(MIN_SPOT_COUNT).max(MAX_SPOT_COUNT),
-  contentCount: z.number().int().min(0).max(MAX_CONTENT_COUNT),
   areas: shortList(10).refine((v) => v.length > 0, "지역을 하나 이상 넣어 주세요."),
   themes: shortList(10),
   memo: z.string().trim().max(300),
@@ -35,7 +32,6 @@ export const DEFAULT_DATE_SETTINGS: DateSettings = {
   enabled: true,
   collectTime: "09:00",
   count: 5,
-  contentCount: 3,
   areas: ["서울"],
   themes: [],
   memo: "",

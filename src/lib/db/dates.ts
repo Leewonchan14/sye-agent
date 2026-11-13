@@ -61,7 +61,6 @@ export const getDateSettings = async (): Promise<DateSettings> => {
     enabled: row.enabled,
     collectTime: row.collectTime,
     count: row.count,
-    contentCount: row.contentCount,
     areas: row.areas,
     themes: row.themes,
     memo: row.memo,

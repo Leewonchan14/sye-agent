@@ -22,22 +22,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useDateMutations } from "@/lib/dates/queries";
-import {
-  type DateSettings,
-  MAX_CONTENT_COUNT,
-  MAX_SPOT_COUNT,
-  MIN_SPOT_COUNT,
-} from "@/lib/dates/types";
+import { type DateSettings, MAX_SPOT_COUNT, MIN_SPOT_COUNT } from "@/lib/dates/types";
 
 const COUNT_OPTIONS = Array.from(
   { length: MAX_SPOT_COUNT - MIN_SPOT_COUNT + 1 },
   (_, i) => MIN_SPOT_COUNT + i
-).map((n) => ({ value: String(n), label: `${n}곳` }));
-
-const CONTENT_COUNT_OPTIONS = Array.from({ length: MAX_CONTENT_COUNT + 1 }, (_, n) => ({
-  value: String(n),
-  label: n === 0 ? "안 받기" : `${n}개`,
-}));
+).map((n) => ({ value: String(n), label: `${n}개` }));
 
 const Field = ({
   label,
@@ -76,8 +66,8 @@ export const DateSettingsDialog = ({
         <DialogHeader>
           <DialogTitle>조사 조건</DialogTitle>
           <DialogDescription>
-            하치와레가 매일 이 조건으로 데이트 장소와 같이 즐길 거리(팝업·게임·공연 등)를
-            골라 와요.
+            하치와레가 매일 이 조건으로 가 볼 곳과 같이 즐길 거리(팝업·게임·공연 등)를 한
+            목록으로 섞어서 골라 와요.
           </DialogDescription>
         </DialogHeader>
 
@@ -90,17 +80,17 @@ export const DateSettingsDialog = ({
               label="매일 자동 조사"
             />
           </div>
-          <Field label="조사 시각">
-            <Input
-              type="time"
-              value={draft.collectTime}
-              onChange={(e) => set("collectTime", e.target.value)}
-              aria-label="조사 시각"
-              disabled={!draft.enabled}
-            />
-          </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="장소">
+            <Field label="조사 시각">
+              <Input
+                type="time"
+                value={draft.collectTime}
+                onChange={(e) => set("collectTime", e.target.value)}
+                aria-label="조사 시각"
+                disabled={!draft.enabled}
+              />
+            </Field>
+            <Field label="하루에">
               <Select
                 items={COUNT_OPTIONS}
                 value={String(draft.count)}
@@ -111,24 +101,6 @@ export const DateSettingsDialog = ({
                 </SelectTrigger>
                 <SelectContent>
                   {COUNT_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="즐길거리">
-              <Select
-                items={CONTENT_COUNT_OPTIONS}
-                value={String(draft.contentCount)}
-                onValueChange={(v) => set("contentCount", Number(v))}
-              >
-                <SelectTrigger aria-label="하루 즐길거리 수" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONTENT_COUNT_OPTIONS.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>

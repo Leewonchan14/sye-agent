@@ -1,0 +1,1 @@
+ALTER TABLE "date_spot_settings" DROP COLUMN "content_count";
