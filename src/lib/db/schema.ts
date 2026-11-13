@@ -513,7 +513,7 @@ export const monitorIssueArticles = pgTable(
   })
 );
 
-/* ───────────────────────── 데이트 장소 (하치와레 매일 조사) ───────────────────────── */
+/* ───────────────────────── 데이트 추천 (하치와레 매일 조사) ───────────────────────── */
 
 /** 조사 조건 — 한 행(id = 1)만 쓴다. */
 export const dateSpotSettings = pgTable("date_spot_settings", {

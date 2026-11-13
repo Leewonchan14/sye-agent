@@ -200,10 +200,10 @@ hermes cron create "every 1m" --name "모니터링 자동 수집 시계" \
   --script monitor_tick.py --no-agent --deliver discord
 ```
 
-## 5. 데이트 장소 매일 조사
+## 5. 데이트 추천 매일 조사
 
 `/dates` 화면. 같은 시계(`/api/monitor/agent/tick`)가 정한 시각(기본 09:00, KST)에 하루 한 번
-하치와레에게 인스타그램 데이트 장소 조사를 맡긴다. Oracle 쪽 추가 설정은 없다.
+하치와레에게 데이트 추천 조사(인스타그램 장소 + 팝업·게임·공연 같은 즐길 거리)를 맡긴다. Oracle 쪽 추가 설정은 없다.
 
 ```
 tick ─▶ date_spot_digests(오늘) 선점(auto_state) ─▶ Hermes 런 (일회성 토큰)

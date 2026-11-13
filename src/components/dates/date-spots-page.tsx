@@ -156,7 +156,7 @@ export const DateSpotsPage = () => {
           <div className="flex flex-col gap-1">
             <h1 className="flex items-center gap-2 text-xl font-semibold text-ink">
               <CalendarHeart className="size-5 text-primary" />
-              데이트 장소
+              데이트 추천
             </h1>
             {data && <p className="text-[13px] text-muted">{scheduleText(data)}</p>}
           </div>

@@ -8,7 +8,7 @@ import { parseEmbedPhotos, photoExpiresAt } from "../src/lib/dates/photo";
 import { login, pool } from "./helpers";
 
 /**
- * 데이트 장소 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
+ * 데이트 추천 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
  * 아래 가짜 Hermes가 프롬프트에서 콜백 주소·토큰을 읽어 하치와레처럼 결과를 보낸다.
  * `INSTAGRAM_EMBED_ORIGIN`도 같은 주소로 두면 인스타그램 임베드·사진 서버 역할까지 한다.
  */
@@ -192,7 +192,7 @@ const openDates = async (page: Page, token: string) => {
     );
   }, token);
   await page.goto("/dates");
-  await page.getByRole("heading", { name: "데이트 장소" }).waitFor();
+  await page.getByRole("heading", { name: "데이트 추천" }).waitFor();
 };
 
 test.describe.configure({ mode: "serial" });
@@ -318,10 +318,10 @@ test("시계가 정한 시각에 하루 한 번 조사를 맡기고 완료 알�
 
   const second = await tick();
   expect(second.started).not.toContain("dates");
-  expect(second.notifications.join("\n")).toContain("오늘의 데이트 장소 1곳");
+  expect(second.notifications.join("\n")).toContain("오늘의 데이트 추천 1개");
 
   const third = await tick();
-  expect(third.notifications.join("\n")).not.toContain("데이트 장소");
+  expect(third.notifications.join("\n")).not.toContain("데이트 추천");
   expect(calls).toBe(1);
 });
 

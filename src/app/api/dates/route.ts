@@ -9,7 +9,7 @@ import { publicOrigin } from "@/lib/monitor/origin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** 오늘(또는 ?day=YYYY-MM-DD)의 데이트 장소와 설정·찜 목록 */
+/** 오늘(또는 ?day=YYYY-MM-DD)의 데이트 추천과 설정·찜 목록 */
 export const GET = async (req: Request) => {
   const authError = await requireAuth(req);
   if (authError) return authError;
@@ -17,7 +17,7 @@ export const GET = async (req: Request) => {
     const day = new URL(req.url).searchParams.get("day");
     return Response.json(await getDateOverview(day));
   } catch (error) {
-    return dateErrorResponse(error, "데이트 장소를 불러오지 못했어요.");
+    return dateErrorResponse(error, "데이트 추천을 불러오지 못했어요.");
   }
 };
 

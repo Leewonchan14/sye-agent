@@ -21,7 +21,7 @@ import { kst } from "@/lib/kst";
 import { hashCallbackToken } from "@/lib/monitor/hermes";
 
 /**
- * 하치와레(Hermes hachi 프로필)에게 인스타그램 데이트 장소 조사를 맡긴다.
+ * 하치와레(Hermes hachi 프로필)에게 데이트 추천(인스타그램 장소 + 같이 즐길 거리) 조사를 맡긴다.
  * 결과는 채팅 답 대신 `/api/dates/agent/digests`로 POST하고, 인증은 조사마다 발급한
  * 일회성 콜백 토큰(`x-monitor-token`)으로 한다. 모니터링 대시보드와 같은 방식이다.
  */
