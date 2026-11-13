@@ -254,7 +254,7 @@ test("지금 찾아 줘 → 하치와레가 보낸 장소가 카드로 보이고
   });
   const second = runs.get("run_2")?.input ?? "";
   expect(second).toContain("더 찾아 달라는 요청");
-  expect(second).toContain("좋아했던 곳(비슷한 결로 참고): 성수 온실카페(성수)");
+  expect(second).toContain("좋아했던 것(비슷한 결로 참고): 성수 온실카페(성수)");
   expect(second).toContain("연무장 팝업(성수)");
   // 같은 게시물은 두 번 저장하지 않는다.
   const { rows: count } = await pool.query("select count(*)::int as n from date_spots");
@@ -274,7 +274,7 @@ test("조건을 저장하면 프롬프트와 안내 문구에 반영된다", asy
   await dialog.getByLabel("하치와레에게 부탁").fill("웨이팅 긴 곳은 빼 줘");
   await dialog.getByRole("button", { name: "저장" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText(/서울·연남에서 5곳과 즐길거리 3개씩/)).toBeVisible();
+  await expect(page.getByText(/서울·연남에서 5개씩/)).toBeVisible();
 
   nextSpots = () => [];
   await page.getByRole("button", { name: "지금 찾아 줘" }).click();
@@ -353,7 +353,7 @@ test("하치와레 결과는 인스타그램 게시물만, 발급한 토큰으�
   expect(await ok.json()).toMatchObject({ inserted: 1, skipped: 0 });
 });
 
-test("장소와 함께 같이 즐길 거리(팝업·게임)를 받아 따로 보여 준다", async ({
+test("장소와 같이 즐길 거리(팝업·게임)를 한 목록으로 받아 함께 보여 준다", async ({
   page,
   request,
 }) => {
@@ -376,17 +376,20 @@ test("장소와 함께 같이 즐길 거리(팝업·게임)를 받아 따로 보
   await openDates(page, token);
   await page.getByRole("button", { name: "지금 찾아 줘" }).click();
 
-  const places = page.getByRole("region", { name: "가 볼 곳" });
-  const contents = page.getByRole("region", { name: "같이 즐길 거리" });
-  await expect(contents.getByRole("article", { name: "캐릭터 팝업스토어" })).toBeVisible({
+  const daily = page.getByRole("region", { name: "매일 추천" });
+  await expect(daily.getByRole("article", { name: "캐릭터 팝업스토어" })).toBeVisible({
     timeout: 20_000,
   });
-  await expect(places.getByRole("article", { name: "성수 온실카페" })).toBeVisible();
-  await expect(places.getByRole("article")).toHaveCount(1);
-  await expect(contents.getByRole("article")).toHaveCount(2);
+  // 가 볼 곳과 즐길 거리를 나누지 않고 받은 순서대로 한 목록에 보여 준다.
+  await expect(page.getByRole("region", { name: "같이 즐길 거리" })).toHaveCount(0);
+  await expect(daily.getByRole("article")).toHaveText([
+    /성수 온실카페/,
+    /둘이서 탈출하는 공포 게임/,
+    /캐릭터 팝업스토어/,
+  ]);
 
   // 집에서 하는 게임은 인스타·지도 대신 소개 페이지만 연결한다(# 조각은 뗀다).
-  const game = contents.getByRole("article", { name: "둘이서 탈출하는 공포 게임" });
+  const game = daily.getByRole("article", { name: "둘이서 탈출하는 공포 게임" });
   await expect(game.getByRole("link", { name: "자세히" })).toHaveAttribute(
     "href",
     `https://store.example.com/app/${encodeURIComponent("둘이서 탈출하는 공포 게임")}`
@@ -396,7 +399,7 @@ test("장소와 함께 같이 즐길 거리(팝업·게임)를 받아 따로 보
   await expect(game.getByText("상시")).toBeVisible();
 
   // 팝업은 기간·주소와 함께 인스타·소개 페이지·지도를 모두 연결하고 게시물 사진도 보여 준다.
-  const popup = contents.getByRole("article", { name: "캐릭터 팝업스토어" });
+  const popup = daily.getByRole("article", { name: "캐릭터 팝업스토어" });
   await expect(popup.getByText("11.14~12.7")).toBeVisible();
   await expect(popup.getByRole("link", { name: /^인스타/ })).toBeVisible();
   await expect(popup.getByRole("link", { name: "자세히" })).toHaveAttribute(
@@ -414,9 +417,11 @@ test("장소와 함께 같이 즐길 거리(팝업·게임)를 받아 따로 보
   ).toBeVisible();
 
   const input = runs.get("run_1")?.input ?? "";
-  expect(input).toContain("같이 즐길 거리(컨텐츠)도 3개");
+  // 장소와 즐길 거리를 따로 세지 않고 합쳐서 하루 추천 수만큼 찾게 한다.
+  expect(input).toContain("데이트 추천을 5개 찾아 줘");
+  expect(input).toContain("한 목록으로 섞어서");
+  expect(input).toContain('"kind": "place"');
   expect(input).toContain('"kind": "content"');
-  expect(input).toContain("즐길거리 찾는 방법");
 
   const { rows } = await pool.query(
     "select name, kind, instagram_url, source_url, period from date_spots order by id"
@@ -451,29 +456,31 @@ test("장소와 함께 같이 즐길 거리(팝업·게임)를 받아 따로 보
   await page.getByRole("button", { name: "더 찾아 줘" }).click();
   await expect.poll(() => runs.get("run_2")?.input ?? "").toContain("[즐길거리] 둘이서");
   expect(runs.get("run_2")?.input).toContain(
-    "좋아했던 곳(비슷한 결로 참고): [즐길거리] 둘이서 탈출하는 공포 게임(집)"
+    "좋아했던 것(비슷한 결로 참고): [즐길거리] 둘이서 탈출하는 공포 게임(집)"
   );
 });
 
-test("즐길거리를 안 받기로 하면 프롬프트에서 빠진다", async ({ page, request }) => {
+test("하루 추천 수는 장소와 즐길 거리를 합친 개수다", async ({ page, request }) => {
   const token = await login(request);
   await openDates(page, token);
 
   await page.getByRole("button", { name: "조건" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "하루 즐길거리 수" }).click();
-  await page.getByRole("option", { name: "안 받기" }).click();
+  // 즐길 거리 개수를 따로 고르는 칸은 없다.
+  await expect(dialog.getByRole("combobox", { name: "하루 즐길거리 수" })).toHaveCount(0);
+  await dialog.getByRole("combobox", { name: "하루 추천 수" }).click();
+  await page.getByRole("option", { name: "7개" }).click();
   await dialog.getByRole("button", { name: "저장" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText(/서울에서 5곳씩 골라 와요/)).toBeVisible();
+  await expect(page.getByText(/서울에서 7개씩 골라 와요/)).toBeVisible();
 
   nextSpots = () => [];
   await page.getByRole("button", { name: "지금 찾아 줘" }).click();
   await expect(page.getByText("오늘 추천은 아직이에요")).toBeVisible({ timeout: 20_000 });
   const input = runs.get("run_1")?.input ?? "";
-  expect(input).toContain("인스타그램에서 5곳 찾아 줘");
-  expect(input).not.toContain("즐길거리 찾는 방법");
-  expect(input).not.toContain('"kind": "content"');
+  expect(input).toContain("데이트 추천을 7개 찾아 줘");
+  expect(input).toContain('"kind": "content"');
+  expect(input).not.toContain("곳 찾아 줘");
 });
 
 test("즐길거리는 근거 주소가 있어야 하고, 같은 소개 페이지는 한 번만 받는다", async ({

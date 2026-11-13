@@ -521,10 +521,8 @@ export const dateSpotSettings = pgTable("date_spot_settings", {
   enabled: boolean("enabled").notNull().default(true),
   /** 매일 조사를 시작하는 시각 (HH:mm, KST) */
   collectTime: text("collect_time").notNull().default("09:00"),
-  /** 하루에 받을 장소 수 */
+  /** 하루에 받을 추천 수 (장소와 즐길 거리를 섞어서) */
   count: integer("count").notNull().default(5),
-  /** 하루에 받을 즐길거리(팝업·게임·공연 같은 컨텐츠) 수. 0이면 장소만 받는다. */
-  contentCount: integer("content_count").notNull().default(3),
   areas: text("areas")
     .array()
     .notNull()

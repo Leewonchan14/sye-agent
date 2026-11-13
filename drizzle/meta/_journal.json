@@ -239,6 +239,13 @@
       "when": 1794528552775,
       "tag": "0034_old_doctor_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794533677781,
+      "tag": "0035_pale_clint_barton",
+      "breakpoints": true
     }
   ]
 }
