@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
+  Plane,
   Plus,
   Search,
   Settings2,
@@ -16,7 +17,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { CalendarView } from "@/components/ledger/calendar-view";
 import {
   ExpenseCategoryChips,
-  TripScopeChips,
+  TripScopePicker,
   type CategoryFilter,
 } from "@/components/ledger/category-chips";
 import { CategoryIcon } from "@/components/ledger/category-icon";
@@ -53,7 +54,7 @@ import {
   todayKst,
 } from "@/lib/ledger/format";
 import { getBudgetPace, type LedgerBudgetPace } from "@/lib/ledger/pace";
-import { isTripScope, scopeLedgerToTrips, type TripScope } from "@/lib/ledger/trip-scope";
+import { scopeLedgerToTrips, type TripScope } from "@/lib/ledger/trip-scope";
 import {
   formatWeekKo,
   isInWeek,
@@ -199,6 +200,35 @@ const paceNote = (pace: LedgerBudgetPace | null): string | undefined => {
     ? `${daily} · 이 속도면 ${formatCompactWon(pace.projectedOver)}원 초과`
     : `${daily} · 지금 속도면 예산 안이에요`;
 };
+
+/** 여행 하나를 골라 볼 때 리캡 자리에 두는 여행 요약. 금액은 기간과 상관없는 여행 전체 합계다. */
+const TripFocusCard = ({
+  trip,
+  onClose,
+}: {
+  trip: LedgerMonthPayload["trips"][number];
+  onClose: () => void;
+}) => (
+  <Card className="mb-3 rounded-2xl border border-hairline bg-surface py-4 ring-0">
+    <CardContent className="flex items-start justify-between gap-3 px-4">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted">
+          <Plane className="size-3.5" /> 여행만 보는 중
+        </p>
+        <p className="mt-1 truncate text-lg font-semibold text-ink">{trip.name}</p>
+        <p className="mt-0.5 text-[12px] text-muted tabular-nums">
+          {kst(trip.startDate).format("M월 D일")} ~ {kst(trip.endDate).format("M월 D일")}
+        </p>
+        <p className="text-[12px] text-muted tabular-nums">
+          여행 전체 지출 {formatWon(trip.expense)} · {trip.entryCount}건
+        </p>
+      </div>
+      <Button variant="outline" size="sm" onClick={onClose}>
+        전체 보기
+      </Button>
+    </CardContent>
+  </Card>
+);
 
 const CategoryBudgetCard = ({ ledger }: { ledger: LedgerMonthPayload }) => {
   const spentById = new Map(ledger.byCategory.map((row) => [row.categoryId, row.amount]));
@@ -352,14 +382,12 @@ export const LedgerPage = () => {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
-  // 여행 제외 / 여행만. 내역·달력 탭(통계 탭은 여행 제외만)이 함께 쓰고,
-  // 다음에 열어도 이어서 보이도록 기기에 저장한다.
-  const [storedTripScope, setTripScope] = useLocalStorageState<TripScope>(
-    "ledger.tripScope",
-    {
-      defaultValue: "all",
-    }
-  );
+  // 여행 제외는 내역·달력·통계 탭이 함께 쓰고, 다음에 열어도 이어서 보이도록 기기에 저장한다.
+  const [excludeTrips, setExcludeTrips] = useLocalStorageState("ledger.excludeTrips", {
+    defaultValue: false,
+  });
+  // 여행 하나만 골라 보기. 여행 제외와 함께 켜지지 않는다.
+  const [focusedTripId, setFocusedTripId] = useState<number | null>(null);
 
   const {
     data: fullLedger,
@@ -395,11 +423,20 @@ export const LedgerPage = () => {
     ...LEDGER_LIVE_QUERY,
   });
   const hasTrips = (fullLedger?.trips.length ?? 0) > 0;
-  const tripScope: TripScope =
-    hasTrips && isTripScope(storedTripScope) ? storedTripScope : "all";
+  // 고른 여행이 지워졌으면 전체로 돌아간다.
+  const focusedTrip =
+    focusedTripId == null
+      ? null
+      : (fullLedger?.trips.find((trip) => trip.id === focusedTripId) ?? null);
+  const tripScope: TripScope = !hasTrips
+    ? "all"
+    : focusedTrip
+      ? focusedTrip.id
+      : excludeTrips
+        ? "exclude"
+        : "all";
   const tripsExcluded = tripScope === "exclude";
-  const tripsOnly = tripScope === "only";
-  // 화면에 보여 줄 내역·합계. 여행 제외는 여행에 묶인 내역을 빼고, 여행만은 그것만 남긴다.
+  // 화면에 보여 줄 내역·합계. 여행 제외는 여행에 묶인 내역을 빼고, 여행을 고르면 그 여행 내역만 남긴다.
   // 입력·설정 창과 여행 탭은 늘 전체 데이터(fullLedger)를 쓴다.
   const ledger = useMemo(
     () => (fullLedger ? scopeLedgerToTrips(fullLedger, tripScope) : fullLedger),
@@ -558,6 +595,23 @@ export const LedgerPage = () => {
     if (next === "week") goWeek(weekStartOf(activeDay));
     setPeriod(next);
   };
+  // 여행을 고르면, 지금 보는 기간이 여행 기간과 겹치지 않을 때 여행이 시작한 달(주)로 옮긴다.
+  const changeTripScope = (next: TripScope) => {
+    setExcludeTrips(next === "exclude");
+    setFocusedTripId(typeof next === "number" ? next : null);
+    const trip =
+      typeof next === "number"
+        ? fullLedger?.trips.find((item) => item.id === next)
+        : null;
+    if (!trip) return;
+    const from = isWeek ? weekStart : `${month}-01`;
+    const to = isWeek
+      ? kst(weekStart).add(6, "day").format("YYYY-MM-DD")
+      : kst(`${month}-01`).endOf("month").format("YYYY-MM-DD");
+    if (trip.startDate <= to && trip.endDate >= from) return;
+    if (isWeek) goWeek(weekStartOf(trip.startDate));
+    else setMonth(trip.startDate.slice(0, 7));
+  };
 
   const totalBudget = ledger?.budget.totalBudget ?? null;
   const pace = ledger
@@ -666,18 +720,31 @@ export const LedgerPage = () => {
                 value={period}
                 onChange={changePeriod}
               />
-              {hasTrips && <TripScopeChips value={tripScope} onChange={setTripScope} />}
+              {fullLedger && hasTrips && (
+                <TripScopePicker
+                  trips={fullLedger.trips}
+                  value={tripScope}
+                  onChange={changeTripScope}
+                />
+              )}
             </div>
           )}
         </div>
 
         <div className={cn("mt-4", hidesMonthSummary && "hidden")}>
-          <RecapCard
-            period={period}
-            weekStart={weekStart}
-            month={month}
-            tripScope={tripScope}
-          />
+          {focusedTrip ? (
+            // 숨긴 탭에서도 DOM에 남지 않게 통계·반복·여행 탭에서는 그리지 않는다.
+            !hidesMonthSummary && (
+              <TripFocusCard trip={focusedTrip} onClose={() => changeTripScope("all")} />
+            )
+          ) : (
+            <RecapCard
+              period={period}
+              weekStart={weekStart}
+              month={month}
+              excludeTrips={tripsExcluded}
+            />
+          )}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
               Array.from({ length: 4 }, (_, index) => (
@@ -903,8 +970,8 @@ export const LedgerPage = () => {
                       <p className="mt-3 text-sm font-medium text-ink">
                         {tripsExcluded
                           ? `${periodLabel}에는 여행 말고 기록이 없어요`
-                          : tripsOnly
-                            ? `${periodLabel}에는 여행 기록이 없어요`
+                          : focusedTrip
+                            ? `${periodLabel}에는 ${focusedTrip.name} 기록이 없어요`
                             : isWeek
                               ? "이 주에는 기록이 없어요"
                               : "아직 기록이 없어요"}
@@ -912,8 +979,8 @@ export const LedgerPage = () => {
                       <p className="mt-1 text-[13px] text-muted">
                         {tripsExcluded
                           ? "여행 제외를 끄면 여행 내역도 보여요"
-                          : tripsOnly
-                            ? "여행만 보기를 끄면 다른 내역도 보여요"
+                          : focusedTrip
+                            ? "여행 기간이 든 달로 옮기거나 여행 보기를 꺼 보세요"
                             : "첫 지출을 남겨보세요"}
                       </p>
                       <Button className="mt-4" size="sm" onClick={openAdd}>
@@ -954,8 +1021,10 @@ export const LedgerPage = () => {
                   onEdit={openEdit}
                   excludeTrips={tripsExcluded}
                   onExcludeTripsChange={(value) =>
-                    setTripScope(value ? "exclude" : "all")
+                    changeTripScope(value ? "exclude" : "all")
                   }
+                  tripId={focusedTrip?.id ?? null}
+                  onTripChange={(id) => changeTripScope(id ?? "all")}
                 />
               )}
             </>

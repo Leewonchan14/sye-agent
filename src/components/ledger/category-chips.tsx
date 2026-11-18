@@ -1,6 +1,15 @@
 "use client";
 
+import { Plane, X } from "lucide-react";
+
 import { CategoryIcon } from "@/components/ledger/category-icon";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
 import type { TripScope } from "@/lib/ledger/trip-scope";
 import { cn } from "@/lib/utils";
@@ -32,35 +41,77 @@ export const ExcludeTripsChip = ({
   </button>
 );
 
-const TRIP_SCOPE_CHIPS: { scope: Exclude<TripScope, "all">; label: string }[] = [
-  { scope: "exclude", label: "여행 제외" },
-  { scope: "only", label: "여행만" },
-];
+/** YYYY-MM-DD → M.D */
+const shortDate = (date: string) =>
+  `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
 
 /**
- * 내역·달력 탭의 여행 범위 칩. 둘 중 하나만 켜지고, 켜진 칩을 다시 누르면 전체로 돌아간다.
+ * 내역·달력 탭의 여행 보기. `여행 제외`를 켜거나 여행 하나를 골라 그 여행 내역만 본다.
+ * 둘은 함께 켜지지 않고, 켜진 것을 다시 누르거나 X를 누르면 전체로 돌아간다.
  */
-export const TripScopeChips = ({
+export const TripScopePicker = ({
+  trips,
   value,
   onChange,
 }: {
+  trips: LedgerMonthPayload["trips"];
   value: TripScope;
   onChange: (value: TripScope) => void;
-}) => (
-  <div role="group" aria-label="여행 내역 보기" className="flex items-center gap-1">
-    {TRIP_SCOPE_CHIPS.map(({ scope, label }) => (
+}) => {
+  const selectedTrip = typeof value === "number" ? value : null;
+  const items = trips.map((trip) => ({
+    value: String(trip.id),
+    label: trip.name,
+    dates: `${shortDate(trip.startDate)}~${shortDate(trip.endDate)}`,
+  }));
+  return (
+    <div role="group" aria-label="여행 내역 보기" className="flex items-center gap-1">
       <button
-        key={scope}
         type="button"
-        aria-pressed={value === scope}
-        onClick={() => onChange(value === scope ? "all" : scope)}
-        className={categoryChipClass(value === scope)}
+        aria-pressed={value === "exclude"}
+        onClick={() => onChange(value === "exclude" ? "all" : "exclude")}
+        className={categoryChipClass(value === "exclude")}
       >
-        {label}
+        여행 제외
       </button>
-    ))}
-  </div>
-);
+      <Select
+        items={items}
+        value={selectedTrip == null ? null : String(selectedTrip)}
+        onValueChange={(next) => onChange(next == null ? "all" : Number(next))}
+      >
+        <SelectTrigger
+          size="sm"
+          aria-label="여행별 보기"
+          className={cn(
+            categoryChipClass(selectedTrip != null),
+            "h-auto! max-w-44 gap-1 py-1 pr-1.5 pl-2 text-[11px]"
+          )}
+        >
+          <Plane className="size-3" />
+          <SelectValue placeholder="여행별 보기" />
+        </SelectTrigger>
+        <SelectContent align="start">
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+              <span className="text-[11px] text-muted tabular-nums">{item.dates}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selectedTrip != null && (
+        <button
+          type="button"
+          aria-label="여행 보기 끄기"
+          onClick={() => onChange("all")}
+          className="grid size-6 place-items-center rounded-full text-muted hover:text-ink"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const ExpenseCategoryChips = ({
   label,

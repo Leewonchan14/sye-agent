@@ -1,27 +1,15 @@
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
 
 /**
- * 여행에 묶인 내역을 어떻게 볼지. 내역·달력 탭과 리캡이 함께 쓴다.
+ * 여행에 묶인 내역을 어떻게 볼지. 내역·달력 탭이 함께 쓴다.
  * - all: 전체
  * - exclude: 여행에 묶인 내역을 빼고
- * - only: 여행에 묶인 내역만
+ * - 숫자: 그 여행(id)에 묶인 내역만
  */
-export type TripScope = "all" | "exclude" | "only";
-
-export const TRIP_SCOPES: readonly TripScope[] = ["all", "exclude", "only"];
-
-export const isTripScope = (value: unknown): value is TripScope =>
-  typeof value === "string" && (TRIP_SCOPES as readonly string[]).includes(value);
+export type TripScope = "all" | "exclude" | number;
 
 export const matchesTripScope = (tripId: number | null, scope: TripScope) =>
-  scope === "all" || (scope === "only" ? tripId != null : tripId == null);
-
-/** 쿼리스트링의 ?tripScope=exclude|only. 예전 ?excludeTrips=1도 받는다. */
-export const tripScopeFromParams = (params: URLSearchParams): TripScope => {
-  const scope = params.get("tripScope");
-  if (isTripScope(scope)) return scope;
-  return params.get("excludeTrips") === "1" ? "exclude" : "all";
-};
+  scope === "all" || (scope === "exclude" ? tripId == null : tripId === scope);
 
 /**
  * 여행 범위에 맞는 내역만 남긴 달 데이터. 합계·분류별 지출·날짜별 합계·예산 사용량을 남은
