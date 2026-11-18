@@ -1027,6 +1027,60 @@ test("여행 제외는 리포트 합계만 줄이고 잔액은 그대로 둔다"
   await expect(page.getByRole("button", { name: /여행 지출/ })).toHaveCount(0);
 });
 
+test("여행만 보기는 내역·달력·리캡에 여행 내역만 남긴다", async ({ page, request }) => {
+  const tripId = await createTrip(request, "제주 여행", today(), today());
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 70_000,
+    memo: "여행 지출",
+    tripId,
+  });
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 5_000,
+    memo: "일상 지출",
+    tripId: null,
+  });
+
+  const recap = async (scope: string) => {
+    const res = await request.get(
+      `/api/ledger/recap?month=${thisMonth()}&tripScope=${scope}`,
+      { headers: authHeaders(token) }
+    );
+    return (await res.json()).recap;
+  };
+  expect((await recap("all")).expense).toBe(75_000);
+  expect((await recap("exclude")).expense).toBe(5_000);
+  const only = await recap("only");
+  expect(only.expense).toBe(70_000);
+  expect(only.comment).toBeNull();
+
+  await openLedger(page, token);
+  const onlyChip = page.getByRole("button", { name: "여행만" });
+  const excludeChip = page.getByRole("button", { name: "여행 제외" });
+  await onlyChip.click();
+  await expect(onlyChip).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /여행 지출/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /일상 지출/ })).toHaveCount(0);
+
+  // 둘 중 하나만 켜진다.
+  await excludeChip.click();
+  await expect(onlyChip).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: /일상 지출/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /여행 지출/ })).toHaveCount(0);
+
+  await onlyChip.click();
+  await page.getByRole("tab", { name: "달력" }).click();
+  await expect(onlyChip).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /여행 지출/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /일상 지출/ })).toHaveCount(0);
+
+  // 켜진 칩을 다시 누르면 전체로 돌아간다.
+  await onlyChip.click();
+  await expect(page.getByRole("button", { name: /일상 지출/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /여행 지출/ })).toBeVisible();
+});
+
 test("여행을 지워도 내역과 분류는 남는다", async ({ page, request }) => {
   const categoryId = await getCategories(request, token);
   const tripId = await createTrip(request, "지울 여행", today(), today());

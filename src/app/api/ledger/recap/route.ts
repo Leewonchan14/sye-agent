@@ -4,6 +4,7 @@ import { getLedgerRecap } from "@/lib/db/ledger-recap";
 import { kst } from "@/lib/kst";
 import { ledgerErrorResponse } from "@/lib/ledger/api";
 import { lastCompletedRecapKey } from "@/lib/ledger/recap";
+import { tripScopeFromParams } from "@/lib/ledger/trip-scope";
 import { weekStartOf } from "@/lib/ledger/week";
 
 export const runtime = "nodejs";
@@ -20,7 +21,7 @@ export const GET = async (req: Request) => {
   const params = new URL(req.url).searchParams;
   const week = params.get("week");
   const month = params.get("month");
-  const options = { excludeTrips: params.get("excludeTrips") === "1" };
+  const options = { tripScope: tripScopeFromParams(params) };
 
   try {
     const recap = month

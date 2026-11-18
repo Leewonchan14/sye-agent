@@ -2,6 +2,7 @@
 
 import { CategoryIcon } from "@/components/ledger/category-icon";
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
+import type { TripScope } from "@/lib/ledger/trip-scope";
 import { cn } from "@/lib/utils";
 
 export type CategoryFilter = number | "all";
@@ -13,7 +14,7 @@ export const categoryChipClass = (active: boolean) =>
     !active && "border-hairline bg-surface text-muted hover:text-ink"
   );
 
-/** 여행에 묶인 내역을 빼고 보는 토글. 내역·달력·통계 탭이 같은 값을 함께 쓴다. */
+/** 여행에 묶인 내역을 빼고 보는 토글. 통계 탭은 여행 리포트가 따로 있어 이것만 쓴다. */
 export const ExcludeTripsChip = ({
   value,
   onChange,
@@ -29,6 +30,36 @@ export const ExcludeTripsChip = ({
   >
     여행 제외
   </button>
+);
+
+const TRIP_SCOPE_CHIPS: { scope: Exclude<TripScope, "all">; label: string }[] = [
+  { scope: "exclude", label: "여행 제외" },
+  { scope: "only", label: "여행만" },
+];
+
+/**
+ * 내역·달력 탭의 여행 범위 칩. 둘 중 하나만 켜지고, 켜진 칩을 다시 누르면 전체로 돌아간다.
+ */
+export const TripScopeChips = ({
+  value,
+  onChange,
+}: {
+  value: TripScope;
+  onChange: (value: TripScope) => void;
+}) => (
+  <div role="group" aria-label="여행 내역 보기" className="flex items-center gap-1">
+    {TRIP_SCOPE_CHIPS.map(({ scope, label }) => (
+      <button
+        key={scope}
+        type="button"
+        aria-pressed={value === scope}
+        onClick={() => onChange(value === scope ? "all" : scope)}
+        className={categoryChipClass(value === scope)}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
 );
 
 export const ExpenseCategoryChips = ({

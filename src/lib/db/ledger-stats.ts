@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
 import type { LedgerCategoryColorKey, LedgerCategoryIconKey } from "@/lib/ledger/icons";
+import { matchesTripScope, type TripScope } from "@/lib/ledger/trip-scope";
 
 export type LedgerStats = {
   from: string;
@@ -74,7 +75,7 @@ const normalizeDate = (value: string, label: string): string => {
 export const getLedgerStats = async (
   fromInput?: string | null,
   toInput?: string | null,
-  options: { tripId?: number | null; excludeTrips?: boolean } = {}
+  options: { tripId?: number | null; tripScope?: TripScope } = {}
 ): Promise<LedgerStats> => {
   const db = getDb();
   const today = kst().format("YYYY-MM-DD");
@@ -174,13 +175,13 @@ export const getLedgerStats = async (
       }
       if (entry.entryDate > to) continue;
 
-      // 잔액 추이는 실제 통장 기준이라 여행 제외와 상관없이 모두 더한다.
+      // 잔액 추이는 실제 통장 기준이라 여행 범위와 상관없이 모두 더한다.
       const dayTotals = dailyTotals.get(entry.entryDate);
       if (dayTotals) {
         if (isIncome) dayTotals.income += entry.amount;
         else dayTotals.expense += entry.amount;
       }
-      if (options.excludeTrips && entry.tripId != null) continue;
+      if (!matchesTripScope(entry.tripId, options.tripScope ?? "all")) continue;
       if (dayTotals && !isIncome) dayTotals.spent += entry.amount;
     }
 

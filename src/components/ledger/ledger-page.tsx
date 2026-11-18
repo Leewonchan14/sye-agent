@@ -15,8 +15,8 @@ import useLocalStorageState from "use-local-storage-state";
 
 import { CalendarView } from "@/components/ledger/calendar-view";
 import {
-  ExcludeTripsChip,
   ExpenseCategoryChips,
+  TripScopeChips,
   type CategoryFilter,
 } from "@/components/ledger/category-chips";
 import { CategoryIcon } from "@/components/ledger/category-icon";
@@ -43,7 +43,6 @@ import { useAuthStore } from "@/lib/auth-store";
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
-import { withoutTrips } from "@/lib/ledger/exclude-trips";
 import {
   currentMonthKst,
   formatCompactWon,
@@ -54,6 +53,7 @@ import {
   todayKst,
 } from "@/lib/ledger/format";
 import { getBudgetPace, type LedgerBudgetPace } from "@/lib/ledger/pace";
+import { isTripScope, scopeLedgerToTrips, type TripScope } from "@/lib/ledger/trip-scope";
 import {
   formatWeekKo,
   isInWeek,
@@ -352,10 +352,14 @@ export const LedgerPage = () => {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
-  // 내역·달력·통계 탭이 함께 쓰고, 다음에 열어도 이어서 보이도록 기기에 저장한다.
-  const [excludeTrips, setExcludeTrips] = useLocalStorageState("ledger.excludeTrips", {
-    defaultValue: false,
-  });
+  // 여행 제외 / 여행만. 내역·달력 탭(통계 탭은 여행 제외만)이 함께 쓰고,
+  // 다음에 열어도 이어서 보이도록 기기에 저장한다.
+  const [storedTripScope, setTripScope] = useLocalStorageState<TripScope>(
+    "ledger.tripScope",
+    {
+      defaultValue: "all",
+    }
+  );
 
   const {
     data: fullLedger,
@@ -391,17 +395,20 @@ export const LedgerPage = () => {
     ...LEDGER_LIVE_QUERY,
   });
   const hasTrips = (fullLedger?.trips.length ?? 0) > 0;
-  const tripsExcluded = excludeTrips && hasTrips;
-  // 화면에 보여 줄 내역·합계. 여행 제외를 켜면 여행에 묶인 내역을 뺀다.
+  const tripScope: TripScope =
+    hasTrips && isTripScope(storedTripScope) ? storedTripScope : "all";
+  const tripsExcluded = tripScope === "exclude";
+  const tripsOnly = tripScope === "only";
+  // 화면에 보여 줄 내역·합계. 여행 제외는 여행에 묶인 내역을 빼고, 여행만은 그것만 남긴다.
   // 입력·설정 창과 여행 탭은 늘 전체 데이터(fullLedger)를 쓴다.
   const ledger = useMemo(
-    () => (fullLedger && tripsExcluded ? withoutTrips(fullLedger) : fullLedger),
-    [fullLedger, tripsExcluded]
+    () => (fullLedger ? scopeLedgerToTrips(fullLedger, tripScope) : fullLedger),
+    [fullLedger, tripScope]
   );
   const otherLedger = useMemo(() => {
     const data = otherMonth ? otherQuery.data : undefined;
-    return data && tripsExcluded ? withoutTrips(data) : data;
-  }, [otherMonth, otherQuery.data, tripsExcluded]);
+    return data ? scopeLedgerToTrips(data, tripScope) : data;
+  }, [otherMonth, otherQuery.data, tripScope]);
   const periodPending = Boolean(otherMonth) && !otherLedger;
   const loadError = isError ? error : otherQuery.error;
 
@@ -659,9 +666,7 @@ export const LedgerPage = () => {
                 value={period}
                 onChange={changePeriod}
               />
-              {hasTrips && (
-                <ExcludeTripsChip value={tripsExcluded} onChange={setExcludeTrips} />
-              )}
+              {hasTrips && <TripScopeChips value={tripScope} onChange={setTripScope} />}
             </div>
           )}
         </div>
@@ -671,7 +676,7 @@ export const LedgerPage = () => {
             period={period}
             weekStart={weekStart}
             month={month}
-            excludeTrips={tripsExcluded}
+            tripScope={tripScope}
           />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
@@ -898,14 +903,18 @@ export const LedgerPage = () => {
                       <p className="mt-3 text-sm font-medium text-ink">
                         {tripsExcluded
                           ? `${periodLabel}에는 여행 말고 기록이 없어요`
-                          : isWeek
-                            ? "이 주에는 기록이 없어요"
-                            : "아직 기록이 없어요"}
+                          : tripsOnly
+                            ? `${periodLabel}에는 여행 기록이 없어요`
+                            : isWeek
+                              ? "이 주에는 기록이 없어요"
+                              : "아직 기록이 없어요"}
                       </p>
                       <p className="mt-1 text-[13px] text-muted">
                         {tripsExcluded
                           ? "여행 제외를 끄면 여행 내역도 보여요"
-                          : "첫 지출을 남겨보세요"}
+                          : tripsOnly
+                            ? "여행만 보기를 끄면 다른 내역도 보여요"
+                            : "첫 지출을 남겨보세요"}
                       </p>
                       <Button className="mt-4" size="sm" onClick={openAdd}>
                         <Plus /> 내역 추가
@@ -944,7 +953,9 @@ export const LedgerPage = () => {
                   totalBudget={ledger.budget.totalBudget}
                   onEdit={openEdit}
                   excludeTrips={tripsExcluded}
-                  onExcludeTripsChange={setExcludeTrips}
+                  onExcludeTripsChange={(value) =>
+                    setTripScope(value ? "exclude" : "all")
+                  }
                 />
               )}
             </>

@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/auth";
 import { getLedgerStats } from "@/lib/db/ledger-stats";
 import { ledgerErrorResponse } from "@/lib/ledger/api";
+import { tripScopeFromParams } from "@/lib/ledger/trip-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export const GET = async (req: Request) => {
     const trip = params.get("trip");
     const stats = await getLedgerStats(params.get("from"), params.get("to"), {
       tripId: trip === null ? null : Number(trip),
-      excludeTrips: params.get("excludeTrips") === "1",
+      tripScope: tripScopeFromParams(params),
     });
     return Response.json({ stats });
   } catch (error) {

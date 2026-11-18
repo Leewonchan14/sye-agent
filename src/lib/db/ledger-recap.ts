@@ -6,6 +6,7 @@ import { getLedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { getBudgetPace } from "@/lib/ledger/pace";
 import { type LedgerRecap, type LedgerRecapPeriod, recapRange } from "@/lib/ledger/recap";
+import { matchesTripScope, type TripScope } from "@/lib/ledger/trip-scope";
 import { weekMonth } from "@/lib/ledger/week";
 
 const TOP_EXPENSES = 3;
@@ -20,28 +21,32 @@ const comments = schema.ledgerWeeklyComments;
 export const getLedgerRecap = async (
   period: LedgerRecapPeriod,
   key: string,
-  options: { excludeTrips?: boolean } = {}
+  options: { tripScope?: TripScope } = {}
 ): Promise<LedgerRecap> => {
-  const { excludeTrips = false } = options;
+  const { tripScope = "all" } = options;
   const today = kst().format("YYYY-MM-DD");
   const month = period === "month" ? key : weekMonth(key);
   const range = recapRange(period, key, today);
 
   const [current, previous, ledger, [stored]] = await Promise.all([
-    getLedgerStats(range.from, range.to, { excludeTrips }),
-    getLedgerStats(range.previousFrom, range.previousTo, { excludeTrips }),
+    getLedgerStats(range.from, range.to, { tripScope }),
+    getLedgerStats(range.previousFrom, range.previousTo, { tripScope }),
     getLedgerMonth(month),
     getDb().select().from(comments).where(eq(comments.weekStart, key)).limit(1),
   ]);
 
   const expense = current.summary.expense;
   const total = ledger.budget.totalBudget;
-  // 여행을 빼고 볼 때는 예산 사용량도 여행 지출을 뺀 금액으로 본다.
-  const spent = excludeTrips
-    ? ledger.entries
-        .filter((entry) => entry.kind === "expense" && entry.tripId == null)
-        .reduce((sum, entry) => sum + entry.amount, 0)
-    : ledger.summary.expense;
+  // 여행을 빼거나 여행만 볼 때는 예산 사용량도 그 범위의 지출로 본다.
+  const spent =
+    tripScope !== "all"
+      ? ledger.entries
+          .filter(
+            (entry) =>
+              entry.kind === "expense" && matchesTripScope(entry.tripId, tripScope)
+          )
+          .reduce((sum, entry) => sum + entry.amount, 0)
+      : ledger.summary.expense;
   const pace = getBudgetPace({ month, today, budget: total, spent });
 
   return {
@@ -78,9 +83,9 @@ export const getLedgerRecap = async (
       .slice(0, TOP_CATEGORIES)
       .map(({ name, amount }) => ({ name, amount })),
     budget: total != null && pace ? { month, total, spent, pace } : null,
-    // 하치와레 코멘트는 여행을 포함한 전체 합계를 보고 쓴 것이라 여행 제외일 때는 숨긴다.
+    // 하치와레 코멘트는 여행을 포함한 전체 합계를 보고 쓴 것이라 여행 범위를 좁히면 숨긴다.
     comment:
-      !excludeTrips && !range.inProgress && stored?.expense === expense
+      tripScope === "all" && !range.inProgress && stored?.expense === expense
         ? stored.comment
         : null,
   };

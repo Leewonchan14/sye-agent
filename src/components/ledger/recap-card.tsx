@@ -16,6 +16,7 @@ import {
   type LedgerRecap,
   type LedgerRecapPeriod,
 } from "@/lib/ledger/recap";
+import type { TripScope } from "@/lib/ledger/trip-scope";
 import { cn } from "@/lib/utils";
 
 /** 끝난 기간의 수치는 내역을 고칠 때만 바뀌므로 주기적으로 다시 읽지 않는다. */
@@ -82,20 +83,20 @@ interface Props {
   weekStart: string;
   /** 월간이면 그 달(YYYY-MM) */
   month: string;
-  /** 여행에 묶인 지출을 빼고 본다. */
-  excludeTrips?: boolean;
+  /** 여행에 묶인 지출을 빼거나 그것만 본다. */
+  tripScope?: TripScope;
 }
 
 /** 내역에서 고른 주·달을 그대로 따라가는 리캡. */
-export const RecapCard = ({ period, weekStart, month, excludeTrips = false }: Props) => {
+export const RecapCard = ({ period, weekStart, month, tripScope = "all" }: Props) => {
   const token = useAuthStore((s) => s.token);
   const key = period === "week" ? weekStart : month;
   const { data: recap, isPlaceholderData } = useQuery({
-    queryKey: ledgerKeys.recap(period, key, excludeTrips ? "without-trips" : undefined),
+    queryKey: ledgerKeys.recap(period, key, tripScope),
     queryFn: async () => {
       const { recap } = await ledgerRequest<{ recap: LedgerRecap }>(
         token,
-        `/api/ledger/recap?${period}=${key}${excludeTrips ? "&excludeTrips=1" : ""}`
+        `/api/ledger/recap?${period}=${key}&tripScope=${tripScope}`
       );
       return recap;
     },
