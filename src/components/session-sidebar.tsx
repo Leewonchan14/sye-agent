@@ -4,11 +4,13 @@ import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  Activity,
   CalendarHeart,
   FileText,
   LogOut,
   MessageCircle,
   Newspaper,
+  Palmtree,
   PanelLeft,
   Plus,
   Search,
@@ -22,6 +24,9 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
 import { dayjs } from "@/lib/kst";
+
+const JEJU_URL = "https://jeju.성예은.shop";
+const MONITOR_URL = "https://monitor.성예은.shop";
 
 interface Session {
   id: string;
@@ -183,6 +188,24 @@ export const SessionSidebar = ({
               <MessageCircle className="h-4 w-4" />
               추천 질문
             </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              render={<a href={JEJU_URL} />}
+              nativeButton={false}
+            >
+              <Palmtree className="h-4 w-4" />
+              제주 여행
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              render={<a href={MONITOR_URL} />}
+              nativeButton={false}
+            >
+              <Activity className="h-4 w-4" />
+              모니터
+            </Button>
           </div>
 
           {/* Session list */}
@@ -291,6 +314,28 @@ export const SessionSidebar = ({
             className={activeNav === "dates" ? "bg-canvas-card text-ink" : ""}
           >
             <CalendarHeart className="h-5 w-5" />
+          </Button>
+
+          {/* Jeju trip site */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            render={<a href={JEJU_URL} />}
+            nativeButton={false}
+            aria-label="제주 여행"
+          >
+            <Palmtree className="h-5 w-5" />
+          </Button>
+
+          {/* Monitor site */}
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            render={<a href={MONITOR_URL} />}
+            nativeButton={false}
+            aria-label="모니터"
+          >
+            <Activity className="h-5 w-5" />
           </Button>
 
           {/* Spacer */}
