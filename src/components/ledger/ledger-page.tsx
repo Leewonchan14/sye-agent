@@ -54,7 +54,12 @@ import {
   todayKst,
 } from "@/lib/ledger/format";
 import { getBudgetPace, type LedgerBudgetPace } from "@/lib/ledger/pace";
-import { scopeLedgerToTrips, type TripScope } from "@/lib/ledger/trip-scope";
+import {
+  calendarOf,
+  scopeLedgerToCategory,
+  scopeLedgerToTrips,
+  type TripScope,
+} from "@/lib/ledger/trip-scope";
 import {
   formatWeekKo,
   isInWeek,
@@ -512,6 +517,16 @@ export const LedgerPage = () => {
     [periodEntries, filterCategoryId]
   );
 
+  // 달력은 고른 분류의 내역과 날짜별 합계만 보여 준다.
+  const calendarLedger = useMemo(
+    () => (ledger ? scopeLedgerToCategory(ledger, filterCategoryId) : ledger),
+    [ledger, filterCategoryId]
+  );
+  const calendarDays = useMemo(
+    () => (filterCategoryId == null ? periodCalendar : calendarOf(listEntries)),
+    [filterCategoryId, periodCalendar, listEntries]
+  );
+
   const companionName = filterCategory && COMPANION_CATEGORY[filterCategory.name];
   const companionCategory =
     ledger?.categories.find(
@@ -570,6 +585,8 @@ export const LedgerPage = () => {
   const defaultEntryDate = tab === "calendar" ? activeDay : fallbackDay;
   // 통계·반복·여행 탭은 월과 상관없는 화면이라 월 이동과 요약을 숨긴다.
   const hidesMonthSummary = tab === "stats" || tab === "recurring" || tab === "trips";
+  const showsCategoryFilter =
+    tab === "stats" || tab === "calendar" || (tab === "list" && !deferredSearch);
   const monthLabel = formatMonthKo(month);
   const periodLabel = isWeek ? formatWeekKo(weekStart, today) : monthLabel;
 
@@ -660,6 +677,16 @@ export const LedgerPage = () => {
         {/* 탭은 항상 같은 자리에 두고, 월 이동은 그 아래 왼쪽에 둔다. */}
         <div className="mt-5 flex flex-col items-start gap-2">
           <LedgerTabs tab={tab} onChange={setTab} />
+
+          {/* 분류 필터는 내역·달력·통계 탭이 함께 쓴다. 검색 결과는 전체 기간·분류를 보여 준다. */}
+          {ledger && showsCategoryFilter && (
+            <ExpenseCategoryChips
+              label="분류 필터"
+              categories={ledger.categories}
+              selected={filterCategory?.id ?? "all"}
+              onSelect={setCategoryFilter}
+            />
+          )}
 
           {!hidesMonthSummary && (
             <div className="-ml-2 flex flex-wrap items-center gap-1">
@@ -867,15 +894,6 @@ export const LedgerPage = () => {
                     />
                   </div>
 
-                  {!deferredSearch && (
-                    <ExpenseCategoryChips
-                      label="내역 분류"
-                      categories={ledger.categories}
-                      selected={filterCategory?.id ?? "all"}
-                      onSelect={setCategoryFilter}
-                    />
-                  )}
-
                   {!deferredSearch &&
                     filterCategory &&
                     (dayGroups.length > 0 || companionCategory) && (
@@ -991,12 +1009,12 @@ export const LedgerPage = () => {
                 </div>
               )}
 
-              {tab === "calendar" && (
+              {tab === "calendar" && calendarLedger && (
                 <CalendarView
-                  ledger={ledger}
+                  ledger={calendarLedger}
                   weekStart={isWeek ? weekStart : null}
-                  entries={periodEntries}
-                  calendar={periodCalendar}
+                  entries={listEntries}
+                  calendar={calendarDays}
                   activeDay={activeDay}
                   onSelectDay={setSelectedDay}
                   onEdit={openEdit}
@@ -1025,6 +1043,7 @@ export const LedgerPage = () => {
                   }
                   tripId={focusedTrip?.id ?? null}
                   onTripChange={(id) => changeTripScope(id ?? "all")}
+                  category={filterCategory}
                 />
               )}
             </>
