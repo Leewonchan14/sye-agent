@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { DateSpotsPage } from "@/components/dates/date-spots-page";
 
@@ -10,5 +11,10 @@ import { DateSpotsPage } from "@/components/dates/date-spots-page";
 export const metadata: Metadata = { referrer: "no-referrer" };
 
 export default function Page() {
-  return <DateSpotsPage />;
+  // 날짜를 주소 쿼리(?day=)에서 읽으므로 정적 렌더링 때 Suspense 경계가 필요하다.
+  return (
+    <Suspense>
+      <DateSpotsPage />
+    </Suspense>
+  );
 }

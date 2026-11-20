@@ -5,7 +5,8 @@ import { expect, type Page, test } from "@playwright/test";
 
 import { parseSpotMedia, spotMediaUrls } from "../src/lib/dates/media";
 import { parseEmbedPhotos, photoExpiresAt } from "../src/lib/dates/photo";
-import { login, pool } from "./helpers";
+import { kst } from "../src/lib/kst";
+import { daysAgo, login, pool, today } from "./helpers";
 
 /**
  * 데이트 추천 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
@@ -259,6 +260,74 @@ test("지금 찾아 줘 → 하치와레가 보낸 장소가 카드로 보이고
   // 같은 게시물은 두 번 저장하지 않는다.
   const { rows: count } = await pool.query("select count(*)::int as n from date_spots");
   expect(count[0].n).toBe(3);
+});
+
+/** 지난 날짜의 조사 결과를 장소 하나와 함께 바로 넣는다. */
+const seedDigest = async (dayKey: string, spotName: string) => {
+  const { rows } = await pool.query(
+    "insert into date_spot_digests (day_key, note) values ($1, $2) returning id",
+    [dayKey, `${spotName} 고른 날`]
+  );
+  await pool.query(
+    `insert into date_spots (digest_id, name, area, instagram_url, photo_checked_at)
+     values ($1, $2, '성수', $3, now())`,
+    [rows[0].id, spotName, `https://www.instagram.com/p/${dayKey}/`]
+  );
+};
+
+test("고른 날짜가 주소(?day=)에 남고, 뒤로 가기·앞으로 가기로 날짜가 바뀐다", async ({
+  page,
+  request,
+}) => {
+  const yesterday = daysAgo(1);
+  const twoDaysAgo = daysAgo(2);
+  await seedDigest(yesterday, "어제 간 카페");
+  await seedDigest(twoDaysAgo, "그저께 간 전시");
+  const token = await login(request);
+  await openDates(page, token);
+
+  const dates = page.getByRole("region", { name: "매일 추천" }).getByLabel("날짜");
+  const chip = (label: string) =>
+    dates.getByRole("button", {
+      name: new RegExp(`^${label.replace(/[().]/g, "\\$&")}`),
+    });
+  const yesterdayChip = chip("어제");
+  const twoDaysAgoChip = chip(kst(twoDaysAgo).format("M.D (dd)"));
+  const todayChip = chip("오늘");
+
+  // 오늘 조사가 없으면 가장 최근 날을 보여 주고, 주소에는 날짜를 붙이지 않는다.
+  await expect(page.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
+  await expect(yesterdayChip).toHaveAttribute("aria-pressed", "true");
+  expect(new URL(page.url()).searchParams.get("day")).toBeNull();
+
+  await twoDaysAgoChip.click();
+  await expect(page).toHaveURL(new RegExp(`[?&]day=${twoDaysAgo}`));
+  await expect(page.getByRole("article", { name: "그저께 간 전시" })).toBeVisible();
+  await expect(twoDaysAgoChip).toHaveAttribute("aria-pressed", "true");
+
+  await todayChip.click();
+  await expect(page).toHaveURL(new RegExp(`[?&]day=${today()}`));
+  await expect(page.getByText("오늘 추천은 아직이에요")).toBeVisible();
+
+  // 뒤로 가기를 누를 때마다 직전에 보던 날짜로 돌아간다.
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`[?&]day=${twoDaysAgo}`));
+  await expect(page.getByRole("article", { name: "그저께 간 전시" })).toBeVisible();
+  await expect(twoDaysAgoChip).toHaveAttribute("aria-pressed", "true");
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dates$/);
+  await expect(page.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
+  await expect(yesterdayChip).toHaveAttribute("aria-pressed", "true");
+
+  await page.goForward();
+  await expect(page.getByRole("article", { name: "그저께 간 전시" })).toBeVisible();
+
+  // 주소로 바로 들어와도 그 날짜를 보여 주고, 형식이 틀린 날짜는 무시한다.
+  await page.goto(`/dates?day=${twoDaysAgo}`);
+  await expect(page.getByRole("article", { name: "그저께 간 전시" })).toBeVisible();
+  await page.goto("/dates?day=not-a-day");
+  await expect(page.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
 });
 
 test("조건을 저장하면 프롬프트와 안내 문구에 반영된다", async ({ page, request }) => {
