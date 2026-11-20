@@ -287,7 +287,8 @@ export const getDigestView = async (digest: DigestRow): Promise<DateDigestView> 
   };
 };
 
-export const listDigestDays = async (limit = 60): Promise<DateDaySummary[]> => {
+/** 조사한 날짜 목록(최신순). 하루에 한 행이라 날짜 고르기 달력에 전부 표시한다. */
+export const listDigestDays = async (limit = 1000): Promise<DateDaySummary[]> => {
   const rows = await getDb()
     .select({ dayKey: digestsT.dayKey, count: count(spotsT.id) })
     .from(digestsT)

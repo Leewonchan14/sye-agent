@@ -330,6 +330,57 @@ test("고른 날짜가 주소(?day=)에 남고, 뒤로 가기·앞으로 가기�
   await expect(page.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
 });
 
+test("최근 날짜는 칩으로, 그 전 날짜는 달력으로 고른다", async ({ page, request }) => {
+  // 1~8일 전과 10일 전에 조사가 있다(9일 전은 없음).
+  for (const ago of [1, 2, 3, 4, 5, 6, 7, 8, 10]) {
+    await seedDigest(daysAgo(ago), `${ago}일 전 장소`);
+  }
+  const token = await login(request);
+  await openDates(page, token);
+
+  const dates = page.getByRole("region", { name: "매일 추천" }).getByLabel("날짜");
+  const picker = dates.getByRole("button", { name: /^날짜 고르기/ });
+  // 칩은 오늘 포함 최근 7개(오늘, 1~6일 전)만 보여 준다.
+  await expect(dates.getByRole("button", { name: /^(오늘|어제|\d+\.\d+ )/ })).toHaveCount(
+    7
+  );
+  await expect(dates.getByRole("button", { name: /^어제/ })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  await expect(picker).toHaveAttribute("aria-pressed", "false");
+
+  const target = daysAgo(10);
+  await picker.click();
+  const calendar = page.locator("[data-slot=popover-content]");
+  const cell = (dayKey: string) =>
+    calendar.locator(`[data-day="${dayKey}"]:not([data-outside])`);
+  // 달력은 보고 있는 날짜(어제)의 달부터 보여 준다. 10일 전이 지난달이면 한 달 앞으로 간다.
+  if (target.slice(0, 7) !== daysAgo(1).slice(0, 7)) {
+    await calendar.locator(".rdp-button_previous").click();
+  }
+  await expect(cell(target)).toBeVisible();
+  // 조사하지 않은 날과 미래는 고를 수 없다.
+  if (daysAgo(9).slice(0, 7) === target.slice(0, 7)) {
+    await expect(cell(daysAgo(9))).toHaveAttribute("data-disabled", "true");
+  }
+  await cell(target).getByRole("button").click();
+
+  await expect(page).toHaveURL(new RegExp(`[?&]day=${target}`));
+  await expect(page.getByRole("article", { name: "10일 전 장소" })).toBeVisible();
+  await expect(picker).toHaveAttribute("aria-pressed", "true");
+  await expect(picker).toContainText(kst(target).format("M.D"));
+  await expect(dates.getByRole("button", { name: /^어제/ })).toHaveAttribute(
+    "aria-pressed",
+    "false"
+  );
+
+  // 뒤로 가기로 칩에서 보던 날짜로 돌아간다.
+  await page.goBack();
+  await expect(page.getByRole("article", { name: "1일 전 장소" })).toBeVisible();
+  await expect(picker).toHaveAttribute("aria-pressed", "false");
+});
+
 test("조건을 저장하면 프롬프트와 안내 문구에 반영된다", async ({ page, request }) => {
   const token = await login(request);
   await openDates(page, token);

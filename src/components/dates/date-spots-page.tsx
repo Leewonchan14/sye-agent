@@ -4,6 +4,7 @@ import { CalendarHeart, Heart, SlidersHorizontal, Sparkles } from "lucide-react"
 import { createParser, useQueryState } from "nuqs";
 import { useState } from "react";
 
+import { DateDayPicker } from "@/components/dates/day-picker";
 import { DateSettingsDialog } from "@/components/dates/settings-dialog";
 import { SpotCard } from "@/components/dates/spot-card";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -16,6 +17,9 @@ import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
 
 type Tab = "daily" | "liked";
+
+/** 날짜 칩은 오늘을 포함해 최근 이만큼만 보여 주고, 그 전 날짜는 달력으로 고른다. */
+const RECENT_DAY_CHIPS = 7;
 
 /**
  * 고른 날짜는 `?day=YYYY-MM-DD`로 주소에 남긴다. 날짜를 바꿀 때마다 히스토리를 쌓아
@@ -54,6 +58,12 @@ const dayLabel = (dayKey: string) => {
   if (day.isSame(today, "day")) return "오늘";
   if (day.isSame(today.subtract(1, "day"), "day")) return "어제";
   return day.format("M.D (dd)");
+};
+
+/** 달력으로 고른 지난 날짜 — 올해가 아니면 연도도 붙인다. */
+const olderDayLabel = (dayKey: string) => {
+  const day = kst(dayKey);
+  return day.format(day.isSame(kst(), "year") ? "M.D (dd)" : "YY.M.D (dd)");
 };
 
 const scheduleText = (data: DateOverview) => {
@@ -111,6 +121,9 @@ export const DateSpotsPage = () => {
     data && !data.days.some((d) => d.dayKey === todayKey)
       ? [{ dayKey: todayKey, count: 0 }, ...data.days]
       : (data?.days ?? []);
+  const recentDays = days.slice(0, RECENT_DAY_CHIPS);
+  const pickedOlderDay =
+    data && !recentDays.some((d) => d.dayKey === data.dayKey) ? data.dayKey : null;
   const onReact = (spotId: number, reaction: DateReaction | null) =>
     react.mutate({ spotId, reaction });
 
@@ -174,20 +187,27 @@ export const DateSpotsPage = () => {
         {data && tab === "daily" && (
           <section aria-label="매일 추천" className="flex flex-col gap-4">
             {days.length > 0 && (
-              <div
-                aria-label="날짜"
-                className="-m-1 flex [scrollbar-width:none] gap-1.5 overflow-x-auto p-1"
-              >
-                {days.map((d) => (
-                  <Chip
-                    key={d.dayKey}
-                    active={data.dayKey === d.dayKey}
-                    onClick={() => void setDay(d.dayKey)}
-                  >
-                    {dayLabel(d.dayKey)}
-                    {d.count > 0 && <span className="text-muted">{d.count}</span>}
-                  </Chip>
-                ))}
+              <div aria-label="날짜" className="flex items-center gap-1.5">
+                <div className="-m-1 flex min-w-0 flex-1 [scrollbar-width:none] gap-1.5 overflow-x-auto p-1">
+                  {recentDays.map((d) => (
+                    <Chip
+                      key={d.dayKey}
+                      active={data.dayKey === d.dayKey}
+                      onClick={() => void setDay(d.dayKey)}
+                    >
+                      {dayLabel(d.dayKey)}
+                      {d.count > 0 && <span className="text-muted">{d.count}</span>}
+                    </Chip>
+                  ))}
+                </div>
+                <DateDayPicker
+                  days={days}
+                  selected={data.dayKey}
+                  todayKey={todayKey}
+                  label={pickedOlderDay && olderDayLabel(pickedOlderDay)}
+                  active={pickedOlderDay !== null}
+                  onSelect={(dayKey) => void setDay(dayKey)}
+                />
               </div>
             )}
 
