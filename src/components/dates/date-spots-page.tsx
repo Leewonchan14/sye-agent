@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarHeart, Heart, SlidersHorizontal, Sparkles } from "lucide-react";
+import { createParser, useQueryState } from "nuqs";
 import { useState } from "react";
 
 import { DateSettingsDialog } from "@/components/dates/settings-dialog";
@@ -15,6 +16,15 @@ import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
 
 type Tab = "daily" | "liked";
+
+/**
+ * 고른 날짜는 `?day=YYYY-MM-DD`로 주소에 남긴다. 날짜를 바꿀 때마다 히스토리를 쌓아
+ * 뒤로 가기를 누르면 이전에 보던 날짜로 돌아간다. 형식이 맞지 않으면 없는 것으로 본다.
+ */
+const parseAsDayKey = createParser({
+  parse: (value) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null),
+  serialize: (value: string) => value,
+}).withOptions({ history: "push" });
 
 const Chip = ({
   active,
@@ -86,7 +96,7 @@ const Empty = ({ title, children }: { title: string; children: React.ReactNode }
 );
 
 export const DateSpotsPage = () => {
-  const [day, setDay] = useState<string | null>(null);
+  const [day, setDay] = useQueryState("day", parseAsDayKey);
   const [tab, setTab] = useState<Tab>("daily");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsKey, setSettingsKey] = useState(0);
@@ -130,7 +140,7 @@ export const DateSpotsPage = () => {
             <Button
               disabled={!data || pending}
               onClick={() => {
-                setDay(null);
+                void setDay(null);
                 setTab("daily");
                 collectNow.mutate();
               }}
@@ -172,7 +182,7 @@ export const DateSpotsPage = () => {
                   <Chip
                     key={d.dayKey}
                     active={data.dayKey === d.dayKey}
-                    onClick={() => setDay(d.dayKey)}
+                    onClick={() => void setDay(d.dayKey)}
                   >
                     {dayLabel(d.dayKey)}
                     {d.count > 0 && <span className="text-muted">{d.count}</span>}
