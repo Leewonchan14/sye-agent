@@ -57,24 +57,31 @@ const compareText = (recap: LedgerRecap): string => {
 
 const budgetText = (
   budget: NonNullable<LedgerRecap["budget"]>,
-  today: string
+  today: string,
+  /** 분류를 골랐으면 그 분류 이름. "식비 예산"처럼 쓴다. */
+  categoryName: string | null
 ): string | null => {
   const { pace, total, spent, month } = budget;
+  const budgetName = categoryName ? `${categoryName} 예산` : "예산";
   if (pace.state === "current") {
     if (pace.status === "over") {
-      return `이번 달 예산을 ${formatWon(spent - total)} 넘었어요`;
+      return `이번 달 ${budgetName}을 ${formatWon(spent - total)} 넘었어요`;
     }
     if (pace.status === "risk") {
-      return `이 속도면 이번 달 예산을 ${formatWon(pace.projectedOver)} 넘어요`;
+      return `이 속도면 이번 달 ${budgetName}을 ${formatWon(pace.projectedOver)} 넘어요`;
     }
-    return `이번 달은 예산 안이에요 · 월말 예상 ${formatWon(pace.projected)}`;
+    return `이번 달은 ${budgetName} 안이에요 · 월말 예상 ${formatWon(pace.projected)}`;
   }
   // 아직 오지 않은 달은 말할 게 없다.
   if (month > today.slice(0, 7)) return null;
   const name = monthName(month, today);
-  if (spent > total) return `${name} 예산을 ${formatWon(spent - total)} 넘었어요`;
-  return `${name}은 예산 안에서 썼어요 · ${formatWon(total - spent)} 남김`;
+  if (spent > total)
+    return `${name} ${budgetName}을 ${formatWon(spent - total)} 넘었어요`;
+  return `${name}은 ${budgetName} 안에서 썼어요 · ${formatWon(total - spent)} 남김`;
 };
+
+/** 리캡을 좁힐 분류. 탭 아래 분류 필터를 그대로 따른다. */
+export type RecapCategory = { id: number; name: string };
 
 interface Props {
   period: LedgerRecapPeriod;
@@ -84,18 +91,36 @@ interface Props {
   month: string;
   /** 여행에 묶인 지출을 빼고 본다. */
   excludeTrips?: boolean;
+  /** 고른 분류만 돌아본다. */
+  category?: RecapCategory | null;
 }
 
 /** 내역에서 고른 주·달을 그대로 따라가는 리캡. */
-export const RecapCard = ({ period, weekStart, month, excludeTrips = false }: Props) => {
+export const RecapCard = ({
+  period,
+  weekStart,
+  month,
+  excludeTrips = false,
+  category = null,
+}: Props) => {
   const token = useAuthStore((s) => s.token);
   const key = period === "week" ? weekStart : month;
   const { data: recap, isPlaceholderData } = useQuery({
-    queryKey: ledgerKeys.recap(period, key, excludeTrips ? "without-trips" : undefined),
+    queryKey: ledgerKeys.recap(
+      period,
+      key,
+      [
+        excludeTrips ? "without-trips" : "all-entries",
+        category ? `category-${category.id}` : "all-categories",
+      ].join("/")
+    ),
     queryFn: async () => {
+      const params = new URLSearchParams({ [period]: key });
+      if (excludeTrips) params.set("excludeTrips", "1");
+      if (category) params.set("categoryId", String(category.id));
       const { recap } = await ledgerRequest<{ recap: LedgerRecap }>(
         token,
-        `/api/ledger/recap?${period}=${key}${excludeTrips ? "&excludeTrips=1" : ""}`
+        `/api/ledger/recap?${params}`
       );
       return recap;
     },
@@ -110,22 +135,26 @@ export const RecapCard = ({ period, weekStart, month, excludeTrips = false }: Pr
 
   const today = todayKst();
   const periodName = periodNameOf(recap, today);
-  const budgetLine = recap.budget && budgetText(recap.budget, today);
+  const budgetLine =
+    recap.budget && budgetText(recap.budget, today, category?.name ?? null);
+  const title = category
+    ? `${TITLE[recap.period]} · ${category.name}`
+    : TITLE[recap.period];
   const isOverPace =
     recap.budget?.pace.state === "current" && recap.budget.pace.status !== "ok";
 
   return (
     <section
-      aria-label={[TITLE[recap.period], periodName].filter(Boolean).join(" ")}
+      aria-label={[title, periodName].filter(Boolean).join(" ")}
       aria-busy={isPlaceholderData}
-      className={cn("mb-3 transition-opacity", isPlaceholderData && "opacity-60")}
+      className={cn("mt-3 transition-opacity", isPlaceholderData && "opacity-60")}
     >
       <Card className="rounded-2xl border border-hairline bg-surface py-4 ring-0">
         <CardContent className="grid gap-3 px-4 md:grid-cols-2 md:gap-6">
           <div className="min-w-0">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-[12px] font-medium text-muted">
-                {TITLE[recap.period]}
+                {title}
                 {periodName && (
                   <span className="text-muted-soft">
                     {" · "}

@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 /**
  * 주간 리캡은 ?week=YYYY-MM-DD(그 주의 아무 날), 월간 리캡은 ?month=YYYY-MM.
  * 둘 다 없으면 가장 최근에 끝난 주의 리캡을 돌려준다.
+ * &categoryId=<id>를 주면 그 분류의 지출만 본다.
  */
 export const GET = async (req: Request) => {
   const authError = await requireAuth(req);
@@ -20,7 +21,11 @@ export const GET = async (req: Request) => {
   const params = new URL(req.url).searchParams;
   const week = params.get("week");
   const month = params.get("month");
-  const options = { excludeTrips: params.get("excludeTrips") === "1" };
+  const categoryId = Number(params.get("categoryId"));
+  const options = {
+    excludeTrips: params.get("excludeTrips") === "1",
+    categoryId: Number.isInteger(categoryId) && categoryId > 0 ? categoryId : null,
+  };
 
   try {
     const recap = month

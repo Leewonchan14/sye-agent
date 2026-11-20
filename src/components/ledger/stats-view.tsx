@@ -31,7 +31,11 @@ import {
 } from "@/components/ledger/category-icon";
 import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
-import { groupTopExpenses, TopExpensesList } from "@/components/ledger/top-expenses";
+import {
+  EntryDateList,
+  groupTopExpenses,
+  TopExpensesList,
+} from "@/components/ledger/top-expenses";
 import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -444,24 +448,21 @@ const CategoryBreakdown = ({
   entries,
   total,
   groupBy,
+  onEdit,
 }: {
   entries: LedgerEntryView[];
   total: number;
   groupBy: CategoryGroupBy;
+  onEdit?: (entry: LedgerEntryView) => void;
 }) => {
+  // 사용처 하나는 날짜별 내역이 곧 전부다.
   if (groupBy === "place") {
-    const recent = [...entries]
-      .sort((a, b) => b.entryDate.localeCompare(a.entryDate) || b.id - a.id)
-      .slice(0, 5)
-      .map((entry) => ({
-        name: shortDate(entry.entryDate),
-        amount: entry.amount,
-        count: 1,
-      }));
     return (
-      <div className="mt-2 rounded-lg bg-canvas-soft p-2.5">
-        <BreakdownList title="최근 내역" rows={recent} total={total} />
-      </div>
+      <EntryDateList
+        entries={entries}
+        onEdit={onEdit}
+        className="mt-2 rounded-lg bg-canvas-soft p-2.5"
+      />
     );
   }
 
@@ -471,8 +472,10 @@ const CategoryBreakdown = ({
   ).slice(0, 5);
 
   return (
-    <div className="mt-2 rounded-lg bg-canvas-soft p-2.5">
+    <div className="mt-2 space-y-2.5 rounded-lg bg-canvas-soft p-2.5">
       <BreakdownList title="많이 쓴 곳 TOP 5" rows={places} total={total} />
+      {/* 언제 썼는지 바로 찾을 수 있게 날짜별 내역도 함께 펼친다. */}
+      <EntryDateList entries={entries} onEdit={onEdit} />
     </div>
   );
 };
@@ -527,6 +530,7 @@ export const CategoryCard = ({
   groupBy = "category",
   title = "분류별 지출",
   className,
+  onEdit,
 }: {
   total?: number;
   byCategory?: LedgerStats["byCategory"];
@@ -534,6 +538,8 @@ export const CategoryCard = ({
   groupBy?: CategoryGroupBy;
   title?: string;
   className?: string;
+  /** 펼친 내역을 눌렀을 때 고치기 창을 연다. */
+  onEdit?: (entry: LedgerEntryView) => void;
 }) => {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const expenses = entries.filter((entry) => entry.kind === "expense");
@@ -741,6 +747,7 @@ export const CategoryCard = ({
                     entries={entriesOf(slice.match)}
                     groupBy={slice.key === "etc" ? "category" : groupBy}
                     total={slice.amount}
+                    onEdit={onEdit}
                   />
                 )}
               </li>
@@ -1067,9 +1074,11 @@ const MonthlyCard = ({ monthly: rawMonthly }: { monthly: LedgerStats["monthly"] 
 const TopExpensesCard = ({
   entries,
   categoryName,
+  onEdit,
 }: {
   entries: LedgerEntryView[];
   categoryName?: string;
+  onEdit?: (entry: LedgerEntryView) => void;
 }) => {
   const merchants = groupTopExpenses(entries, "all");
 
@@ -1080,7 +1089,7 @@ const TopExpensesCard = ({
         {categoryName && <span className="text-[11px] text-muted">{categoryName}</span>}
       </div>
       {merchants.length ? (
-        <TopExpensesList items={merchants} className="mt-2" />
+        <TopExpensesList items={merchants} onEdit={onEdit} className="mt-2" />
       ) : (
         <p className="mt-2 text-[12px] text-muted">기간 내 지출이 없어요</p>
       )}
@@ -1649,19 +1658,25 @@ export const StatsView = ({
           {/* 큰 지출은 요약 바로 아래에서 먼저 보이게 하고, 분류 카드와 한 줄을 이룬다. */}
           {hasActivity && (
             <>
-              <TopExpensesCard entries={stats.entries} categoryName={category?.name} />
+              <TopExpensesCard
+                entries={stats.entries}
+                categoryName={category?.name}
+                onEdit={onEdit}
+              />
               {category ? (
                 <CategoryCard
                   key={category.id}
                   entries={stats.entries}
                   groupBy="place"
                   title={`${category.name} 사용처별 지출`}
+                  onEdit={onEdit}
                 />
               ) : (
                 <CategoryCard
                   total={stats.summary.expense}
                   byCategory={stats.byCategory}
                   entries={stats.entries}
+                  onEdit={onEdit}
                 />
               )}
             </>

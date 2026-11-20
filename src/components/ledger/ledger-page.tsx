@@ -26,7 +26,7 @@ import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { LedgerEntryList } from "@/components/ledger/entry-list";
 import { PasteDialog } from "@/components/ledger/paste-dialog";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
-import { RecapCard } from "@/components/ledger/recap-card";
+import { RecapCard, type RecapCategory } from "@/components/ledger/recap-card";
 import { RecurringTab } from "@/components/ledger/recurring-tab";
 import {
   SettingsDialog,
@@ -109,7 +109,9 @@ const SummaryCard = ({
   tone,
   bar,
   onClick,
+  testId,
 }: {
+  testId?: string;
   label: string;
   value: string;
   hint: string;
@@ -119,7 +121,10 @@ const SummaryCard = ({
   onClick?: () => void;
 }) => {
   const body = (
-    <Card className="h-full rounded-2xl border border-hairline bg-surface py-4 ring-0">
+    <Card
+      data-testid={testId}
+      className="h-full rounded-2xl border border-hairline bg-surface py-4 ring-0"
+    >
       <CardContent className="px-4">
         <p className="text-[11px] font-medium tracking-wide text-muted">{label}</p>
         <p
@@ -526,6 +531,25 @@ export const LedgerPage = () => {
     () => (filterCategoryId == null ? periodCalendar : calendarOf(listEntries)),
     [filterCategoryId, periodCalendar, listEntries]
   );
+  // 분류를 고르면 위쪽 지출 카드도 그 분류의 지출만 센다.
+  const categoryTotals = useMemo(() => {
+    let expense = 0;
+    let count = 0;
+    for (const entry of listEntries) {
+      if (entry.kind !== "expense") continue;
+      expense += entry.amount;
+      count += 1;
+    }
+    return { expense, count };
+  }, [listEntries]);
+  const filterCategoryName = filterCategory?.name ?? null;
+  const recapCategory = useMemo<RecapCategory | null>(
+    () =>
+      filterCategoryId != null && filterCategoryName
+        ? { id: filterCategoryId, name: filterCategoryName }
+        : null,
+    [filterCategoryId, filterCategoryName]
+  );
 
   const companionName = filterCategory && COMPANION_CATEGORY[filterCategory.name];
   const companionCategory =
@@ -630,16 +654,25 @@ export const LedgerPage = () => {
     else setMonth(trip.startDate.slice(0, 7));
   };
 
-  const totalBudget = ledger?.budget.totalBudget ?? null;
+  // 예산 카드. 분류를 고르면 그 분류의 예산(설정에서 정한 분류별 예산)을 보여 준다.
+  const budgetLabel = filterCategory ? `${filterCategory.name} 예산` : "예산";
+  const totalBudget = filterCategory
+    ? (ledger?.budget.byCategory.find((row) => row.categoryId === filterCategory.id)
+        ?.amount ?? null)
+    : (ledger?.budget.totalBudget ?? null);
+  const budgetSpent = filterCategory
+    ? (ledger?.byCategory.find((row) => row.categoryId === filterCategory.id)?.amount ??
+      0)
+    : (ledger?.summary.expense ?? 0);
+  const budgetRemaining = totalBudget == null ? 0 : totalBudget - budgetSpent;
+  const budgetUsedPct =
+    totalBudget == null || totalBudget === 0
+      ? 0
+      : Math.round((budgetSpent / totalBudget) * 100);
   const pace = ledger
-    ? getBudgetPace({
-        month,
-        today,
-        budget: totalBudget,
-        spent: ledger.summary.expense,
-      })
+    ? getBudgetPace({ month, today, budget: totalBudget, spent: budgetSpent })
     : null;
-  const isOverBudget = (ledger?.summary.budgetRemaining ?? 0) < 0;
+  const isOverBudget = budgetRemaining < 0;
 
   return (
     <SidebarLayout activeNav="ledger">
@@ -759,19 +792,11 @@ export const LedgerPage = () => {
         </div>
 
         <div className={cn("mt-4", hidesMonthSummary && "hidden")}>
-          {focusedTrip ? (
+          {focusedTrip &&
             // 숨긴 탭에서도 DOM에 남지 않게 통계·반복·여행 탭에서는 그리지 않는다.
             !hidesMonthSummary && (
               <TripFocusCard trip={focusedTrip} onClose={() => changeTripScope("all")} />
-            )
-          ) : (
-            <RecapCard
-              period={period}
-              weekStart={weekStart}
-              month={month}
-              excludeTrips={tripsExcluded}
-            />
-          )}
+            )}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {!ledger ? (
               Array.from({ length: 4 }, (_, index) => (
@@ -799,20 +824,34 @@ export const LedgerPage = () => {
                   hint={`${periodLabel} 입금`}
                   tone="success"
                 />
-                <SummaryCard
-                  label="지출"
-                  value={formatWon(
-                    isWeek ? periodSummary.expense : ledger.summary.expense
-                  )}
-                  hint={`${periodLabel} 지출`}
-                  tone="primary"
-                />
+                {filterCategory ? (
+                  <SummaryCard
+                    testId="summary-expense"
+                    label={`${filterCategory.name} 지출`}
+                    value={formatWon(categoryTotals.expense)}
+                    hint={`${periodLabel} ${filterCategory.name} ${categoryTotals.count}건`}
+                    tone="primary"
+                  />
+                ) : (
+                  <SummaryCard
+                    testId="summary-expense"
+                    label="지출"
+                    value={formatWon(
+                      isWeek ? periodSummary.expense : ledger.summary.expense
+                    )}
+                    hint={`${periodLabel} 지출`}
+                    tone="primary"
+                  />
+                )}
                 {totalBudget == null ? (
-                  <Card className="rounded-2xl border border-hairline bg-surface py-4 ring-0">
+                  <Card
+                    data-testid="summary-budget"
+                    className="rounded-2xl border border-hairline bg-surface py-4 ring-0"
+                  >
                     <CardContent className="flex h-full flex-col justify-between px-4">
                       <div>
                         <p className="text-[11px] font-medium tracking-wide text-muted">
-                          예산
+                          {budgetLabel}
                         </p>
                         <p className="mt-1 text-lg font-semibold text-muted-soft md:text-xl">
                           아직 없음
@@ -830,17 +869,18 @@ export const LedgerPage = () => {
                   </Card>
                 ) : (
                   <SummaryCard
-                    label="예산"
+                    testId="summary-budget"
+                    label={budgetLabel}
                     value={
                       isOverBudget
-                        ? `${formatWon(-(ledger.summary.budgetRemaining ?? 0))} 초과`
-                        : `${formatWon(ledger.summary.budgetRemaining ?? 0)} 남음`
+                        ? `${formatWon(-budgetRemaining)} 초과`
+                        : `${formatWon(budgetRemaining)} 남음`
                     }
-                    hint={`${formatWon(totalBudget)} 중 ${ledger.summary.budgetUsedPct ?? 0}%`}
+                    hint={`${formatWon(totalBudget)} 중 ${budgetUsedPct}%`}
                     note={paceNote(pace)}
                     tone={isOverBudget ? "error" : undefined}
                     bar={{
-                      pct: ledger.summary.budgetUsedPct ?? 0,
+                      pct: budgetUsedPct,
                       marker: pace?.state === "current" ? pace.elapsedPct : undefined,
                     }}
                   />
@@ -848,7 +888,18 @@ export const LedgerPage = () => {
               </>
             )}
           </div>
-          {ledger && <CategoryBudgetCard ledger={ledger} />}
+          {/* 잔액·입금·지출·예산을 먼저 보고, 그 기간을 돌아보는 리캡은 그 아래에 둔다. */}
+          {!focusedTrip && (
+            <RecapCard
+              period={period}
+              weekStart={weekStart}
+              month={month}
+              excludeTrips={tripsExcluded}
+              category={recapCategory}
+            />
+          )}
+          {/* 분류를 골랐으면 그 분류의 예산은 위 예산 카드에 보인다. */}
+          {ledger && !filterCategory && <CategoryBudgetCard ledger={ledger} />}
         </div>
 
         <div className="mt-6">
@@ -924,6 +975,7 @@ export const LedgerPage = () => {
                           entries={listEntries}
                           groupBy="place"
                           title={`${filterCategory.name} 사용처별 지출`}
+                          onEdit={openEdit}
                         />
                       ) : (
                         <CategoryCard
@@ -932,6 +984,7 @@ export const LedgerPage = () => {
                             isWeek ? periodSummary.byCategory : ledger.byCategory
                           }
                           entries={periodEntries}
+                          onEdit={openEdit}
                         />
                       )}
                       {topExpenses.length > 0 && (
@@ -948,7 +1001,11 @@ export const LedgerPage = () => {
                               {filterCategory && ` · ${filterCategory.name}`}
                             </span>
                           </div>
-                          <TopExpensesList items={topExpenses} className="mt-2" />
+                          <TopExpensesList
+                            items={topExpenses}
+                            onEdit={openEdit}
+                            className="mt-2"
+                          />
                         </section>
                       )}
                     </div>
