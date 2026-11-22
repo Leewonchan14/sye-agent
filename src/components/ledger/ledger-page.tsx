@@ -60,6 +60,7 @@ import {
   scopeLedgerToTrips,
   type TripScope,
 } from "@/lib/ledger/trip-scope";
+import { useLedgerViewStore } from "@/lib/ledger/view-store";
 import {
   formatWeekKo,
   isInWeek,
@@ -83,6 +84,11 @@ type LedgerTab = (typeof TABS)[number]["id"];
 const PERIODS = [
   { id: "month", label: "월" },
   { id: "week", label: "주" },
+] as const;
+
+const PLACE_PHOTO_SIZES = [
+  { id: "small", label: "사진 작게" },
+  { id: "large", label: "사진 크게" },
 ] as const;
 
 export type LedgerPeriod = (typeof PERIODS)[number]["id"];
@@ -609,6 +615,11 @@ export const LedgerPage = () => {
   const defaultEntryDate = tab === "calendar" ? activeDay : fallbackDay;
   // 통계·반복·여행 탭은 월과 상관없는 화면이라 월 이동과 요약을 숨긴다.
   const hidesMonthSummary = tab === "stats" || tab === "recurring" || tab === "trips";
+  const largePlacePhotos = useLedgerViewStore((state) => state.largePlacePhotos);
+  const setLargePlacePhotos = useLedgerViewStore((state) => state.setLargePlacePhotos);
+  const hasPlacePhotos = Boolean(
+    ledger?.entries.some((entry) => entry.mapImageUrls.length > 0)
+  );
   const showsCategoryFilter =
     tab === "stats" || tab === "calendar" || (tab === "list" && !deferredSearch);
   const monthLabel = formatMonthKo(month);
@@ -785,6 +796,15 @@ export const LedgerPage = () => {
                   trips={fullLedger.trips}
                   value={tripScope}
                   onChange={changeTripScope}
+                />
+              )}
+              {/* 장소 사진이 있는 내역이 있을 때만 사진 크기를 고른다. */}
+              {(tab === "list" || tab === "calendar") && hasPlacePhotos && (
+                <ViewToggle
+                  label="장소 사진 크기"
+                  options={PLACE_PHOTO_SIZES}
+                  value={largePlacePhotos ? "large" : "small"}
+                  onChange={(value) => setLargePlacePhotos(value === "large")}
                 />
               )}
             </div>

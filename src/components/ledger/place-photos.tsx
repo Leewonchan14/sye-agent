@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/carousel";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toLargePlacePhotoUrl } from "@/lib/ledger/map-url";
+import { useLedgerViewStore } from "@/lib/ledger/view-store";
 import { cn } from "@/lib/utils";
 
 /*
@@ -203,13 +204,122 @@ interface StripProps {
 
 /** 넓은 화면의 md에서 크게 보여 주는 사진 수. 나머지는 "+N" 칸으로 묶는다. */
 const WIDE_PHOTO_COUNT = 3;
+/** 작은 사진 한 줄에 보여 주는 사진 수. 나머지는 "+N"으로 묶는다. */
+const MINI_PHOTO_COUNT = { md: 4, sm: 3 } as const;
 
 /**
- * 내역 줄 아래에 붙는 장소 줄: 📍 장소 이름(누르면 지도) 아래에 사진(누르면 크게 보기).
- * - 좁은 화면, sm(좁은 목록): 작은 사진 띠. 넘치는 사진은 가로로 밀어 본다.
- * - 넓은 화면의 md(내역 탭): 큰 사진 3장 + "+N" 칸. 장소 이름은 테두리 없는 글자 링크.
+ * 내역 줄 아래에 붙는 장소 줄. md(내역 탭·달력·검색)는 가계부 보기 설정(`사진 작게`/`사진 크게`)을 따르고,
+ * sm(통계·펼친 내역)은 늘 작은 사진 한 줄이다.
+ * - 사진 작게(기본): 📍 장소 이름 옆에 작은 사진 한 줄 + "+N". 내역을 훑어보기 쉽게 줄을 낮게 둔다.
+ * - 사진 크게: 장소 이름 아래에 사진.
+ *   - 좁은 화면, sm(좁은 목록): 작은 사진 띠. 넘치는 사진은 가로로 밀어 본다.
+ *   - 넓은 화면의 md(내역 탭): 큰 사진 3장 + "+N" 칸.
+ * 사진을 누르면 크게 보고, 장소 이름을 누르면 지도를 연다.
  */
-export const PlacePhotoStrip = ({
+export const PlacePhotoStrip = (props: StripProps) => {
+  const large = useLedgerViewStore((state) => state.largePlacePhotos);
+  // 좁은 목록(통계·펼친 내역)은 훑어보는 곳이라 설정과 상관없이 늘 작은 사진 한 줄로 둔다.
+  return large && props.size !== "sm" ? (
+    <LargePlacePhotos {...props} />
+  ) : (
+    <CompactPlacePhotos {...props} />
+  );
+};
+
+const MapTextLink = ({
+  title,
+  mapUrl,
+  placeName,
+  className,
+}: {
+  title: string;
+  mapUrl: string;
+  placeName: string;
+  className?: string;
+}) => (
+  <a
+    href={mapUrl}
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label={`${title} 지도 열기`}
+    title="지도 열기"
+    className={cn(
+      "flex min-w-0 items-center gap-1 text-[11px] text-muted transition-colors hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+      className
+    )}
+  >
+    <MapPin className="size-3 shrink-0" />
+    <span className="truncate">{placeName || "지도"}</span>
+  </a>
+);
+
+const CompactPlacePhotos = ({
+  title,
+  mapUrl,
+  placeName,
+  imageUrls,
+  size = "md",
+  className,
+}: StripProps) => {
+  const { photos, fail } = useWorkingPhotos(imageUrls);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const name = placeName || title;
+  const shown = MINI_PHOTO_COUNT[size];
+  const rest = photos.length - shown;
+
+  return (
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <MapTextLink title={title} mapUrl={mapUrl} placeName={placeName} />
+      {photos.length > 0 && (
+        <div className="flex shrink-0 items-center gap-1">
+          {photos.slice(0, shown).map((photo, index) => (
+            <button
+              key={photo}
+              type="button"
+              aria-label={`${photoLabel(name, index, photos.length)} 크게 보기`}
+              onClick={() => setViewing(index)}
+              className={cn(
+                "shrink-0 cursor-zoom-in overflow-hidden rounded-md bg-canvas-soft ring-1 ring-hairline transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                size === "md" ? "size-8" : "size-7"
+              )}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photo}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                referrerPolicy="no-referrer"
+                onError={() => fail(photo)}
+                className="size-full object-cover"
+              />
+            </button>
+          ))}
+          {rest > 0 && (
+            <button
+              type="button"
+              aria-label={`${name} 사진 ${rest}장 더 보기`}
+              onClick={() => setViewing(shown)}
+              className="rounded-md px-1 text-[11px] text-muted tabular-nums transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              +{rest}
+            </button>
+          )}
+        </div>
+      )}
+      <PhotoViewer
+        photos={photos}
+        name={name}
+        mapUrl={mapUrl}
+        start={viewing}
+        onClose={() => setViewing(null)}
+      />
+    </div>
+  );
+};
+
+const LargePlacePhotos = ({
   title,
   mapUrl,
   placeName,
