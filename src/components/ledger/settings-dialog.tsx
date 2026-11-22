@@ -1,7 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, Pencil, RotateCcw, Trash2, X } from "lucide-react";
+import {
+  ChartPie,
+  Check,
+  Download,
+  Link2,
+  Pencil,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -352,7 +361,14 @@ const TripCandidates = ({ trip, onDone }: { trip: LedgerTrip; onDone: () => void
 };
 
 /** 여행 탭: 여행 목록 카드와 여행 추가 카드. */
-export const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
+export const TripsTab = ({
+  ledger,
+  onOpenStats,
+}: {
+  ledger: LedgerMonthPayload;
+  /** 통계 탭의 여행 리포트로 바로 간다. */
+  onOpenStats: (tripId: number) => void;
+}) => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -442,15 +458,25 @@ export const TripsTab = ({ ledger }: { ledger: LedgerMonthPayload }) => {
                 </Button>
               </div>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="mt-1"
-                onClick={() => setLinkingId(linkingId === trip.id ? null : trip.id)}
-              >
-                기간 내역 연결
-              </Button>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${trip.name} 통계 보기`}
+                  onClick={() => onOpenStats(trip.id)}
+                >
+                  <ChartPie /> 통계 보기
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLinkingId(linkingId === trip.id ? null : trip.id)}
+                >
+                  <Link2 /> 기간 내역 연결
+                </Button>
+              </div>
               {linkingId === trip.id && (
                 <TripCandidates trip={trip} onDone={() => setLinkingId(null)} />
               )}

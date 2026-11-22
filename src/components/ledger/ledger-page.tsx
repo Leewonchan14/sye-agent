@@ -11,7 +11,7 @@ import {
   Settings2,
   Wallet,
 } from "lucide-react";
-import { createParser, useQueryState } from "nuqs";
+import { createParser, parseAsInteger, parseAsStringLiteral, useQueryState } from "nuqs";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
@@ -29,6 +29,7 @@ import { PasteDialog } from "@/components/ledger/paste-dialog";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
 import { RecapCard, type RecapCategory } from "@/components/ledger/recap-card";
 import { RecurringTab } from "@/components/ledger/recurring-tab";
+import { reportQueryParsers } from "@/components/ledger/report-query";
 import {
   SettingsDialog,
   TripsTab,
@@ -81,6 +82,11 @@ const TABS = [
 ] as const;
 
 type LedgerTab = (typeof TABS)[number]["id"];
+
+// 탭과 고른 여행은 주소(?tab=, ?trip=)에 둔다. 새로고침·뒤로 가기·공유한 주소에서도 같은 화면이 열린다.
+const parseAsLedgerTab = parseAsStringLiteral(TABS.map((option) => option.id))
+  .withDefault("list")
+  .withOptions({ history: "push" });
 
 const PERIODS = [
   { id: "month", label: "월" },
@@ -383,9 +389,9 @@ const SearchResults = ({
 };
 
 /**
- * 달력 탭에서 고른 날은 `?day=YYYY-MM-DD`로 주소에 남긴다. 새로 고치거나 주소를 공유해도
- * 그 날이 든 달의 달력 탭에서 그 날을 고른 채로 열린다. 날짜를 누를 때마다 히스토리를
- * 쌓지 않도록 주소를 바꿔 끼운다. 형식이 맞지 않으면 없는 것으로 본다.
+ * 달력 탭에서 고른 날은 `?day=YYYY-MM-DD`로 주소에 남긴다(탭은 `?tab=calendar`). 새로 고치거나
+ * 주소를 공유해도 그 날이 든 달의 달력에서 그 날을 고른 채로 열린다. 날짜를 누를 때마다
+ * 히스토리를 쌓지 않도록 주소를 바꿔 끼운다. 형식이 맞지 않으면 없는 것으로 본다.
  */
 const parseAsDayKey = createParser({
   parse: (value) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null),
@@ -395,7 +401,7 @@ const parseAsDayKey = createParser({
 export const LedgerPage = () => {
   const token = useAuthStore((s) => s.token);
   const [selectedDay, setSelectedDay] = useQueryState("day", parseAsDayKey);
-  // 주소에 고른 날이 있으면 그 날이 든 달(주)의 달력 탭으로 연다.
+  // 주소에 고른 날이 있으면 그 날이 든 달(주)로 연다.
   const [month, setMonth] = useState<string>(
     () => selectedDay?.slice(0, 7) ?? currentMonthKst()
   );
@@ -405,7 +411,7 @@ export const LedgerPage = () => {
     weekStartOf(selectedDay ?? todayKst())
   );
   const isWeek = period === "week";
-  const [tab, setTab] = useState<LedgerTab>(() => (selectedDay ? "calendar" : "list"));
+  const [tab, setTab] = useQueryState("tab", parseAsLedgerTab);
   const [entryOpen, setEntryOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LedgerEntryView | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -419,7 +425,12 @@ export const LedgerPage = () => {
     defaultValue: false,
   });
   // 여행 하나만 골라 보기. 여행 제외와 함께 켜지지 않는다.
-  const [focusedTripId, setFocusedTripId] = useState<number | null>(null);
+  const [focusedTripId, setFocusedTripId] = useQueryState("trip", parseAsInteger);
+  // 통계 탭 기간별 리포트의 기간 종류(?report=). 여행 바로가기와 여행 해제 때 함께 바꾼다.
+  const [reportRange, setReportRange] = useQueryState(
+    "report",
+    reportQueryParsers.report
+  );
 
   const {
     data: fullLedger,
@@ -673,7 +684,9 @@ export const LedgerPage = () => {
   // 여행을 고르면, 지금 보는 기간이 여행 기간과 겹치지 않을 때 여행이 시작한 달(주)로 옮긴다.
   const changeTripScope = (next: TripScope) => {
     setExcludeTrips(next === "exclude");
-    setFocusedTripId(typeof next === "number" ? next : null);
+    void setFocusedTripId(typeof next === "number" ? next : null);
+    // 여행 고르기를 풀면 통계도 여행 리포트에서 원래 기간(월·주)으로 돌아간다.
+    if (typeof next !== "number" && reportRange === "trip") void setReportRange(null);
     const trip =
       typeof next === "number"
         ? fullLedger?.trips.find((item) => item.id === next)
@@ -686,6 +699,13 @@ export const LedgerPage = () => {
     if (trip.startDate <= to && trip.endDate >= from) return;
     if (isWeek) goWeek(weekStartOf(trip.startDate));
     else setMonth(trip.startDate.slice(0, 7));
+  };
+
+  // 여행 탭의 "통계 보기": 그 여행을 고르고 통계 탭의 여행 리포트로 간다.
+  const openTripStats = (tripId: number) => {
+    changeTripScope(tripId);
+    void setReportRange("trip");
+    void setTab("stats");
   };
 
   // 예산 카드. 분류를 고르면 그 분류의 예산(설정에서 정한 분류별 예산)을 보여 준다.
@@ -1123,7 +1143,9 @@ export const LedgerPage = () => {
 
               {tab === "recurring" && <RecurringTab ledger={fullLedger ?? ledger} />}
 
-              {tab === "trips" && <TripsTab ledger={fullLedger ?? ledger} />}
+              {tab === "trips" && (
+                <TripsTab ledger={fullLedger ?? ledger} onOpenStats={openTripStats} />
+              )}
 
               {tab === "stats" && (
                 <StatsView
