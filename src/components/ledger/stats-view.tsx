@@ -1700,8 +1700,9 @@ export const StatsView = ({
           {!isTripReport && !category && <AllTimeCard allTime={stats.allTime} />}
           {hasActivity ? (
             <>
-              {!isTripReport && !category && <BalanceCard daily={stats.daily} />}
+              {/* 얼마나 썼는지가 먼저 궁금하니 사용 금액 추이를 잔액 추이보다 위에 둔다. */}
               {!isTripReport && <SpendCard daily={stats.daily} />}
+              {!isTripReport && !category && <BalanceCard daily={stats.daily} />}
               <PeriodEntriesCard entries={stats.entries} onEdit={onEdit} />
               {!isTripReport && stats.monthly.length > 1 && (
                 <MonthlyCard monthly={stats.monthly} />
