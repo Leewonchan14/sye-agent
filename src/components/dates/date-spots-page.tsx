@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarHeart, Heart, SlidersHorizontal, Sparkles } from "lucide-react";
-import { createParser, useQueryState } from "nuqs";
+import { createParser, parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 
 import { DateDayPicker } from "@/components/dates/day-picker";
@@ -16,7 +16,13 @@ import type { DateOverview, DateReaction, DateSpotView } from "@/lib/dates/types
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
 
-type Tab = "daily" | "liked";
+const TABS = ["daily", "liked"] as const;
+
+/**
+ * 보고 있는 탭은 `?tab=`으로 주소에 남긴다. 기본값(매일 추천)이면 주소에서 빠지고,
+ * 탭을 바꿀 때마다 히스토리를 쌓아 뒤로 가기로 이전 탭에 돌아간다.
+ */
+const parseAsTab = parseAsStringLiteral(TABS).withDefault("daily").withOptions({ history: "push" });
 
 /** 날짜 칩은 오늘을 포함해 최근 이만큼만 보여 주고, 그 전 날짜는 달력으로 고른다. */
 const RECENT_DAY_CHIPS = 7;
@@ -107,7 +113,7 @@ const Empty = ({ title, children }: { title: string; children: React.ReactNode }
 
 export const DateSpotsPage = () => {
   const [day, setDay] = useQueryState("day", parseAsDayKey);
-  const [tab, setTab] = useState<Tab>("daily");
+  const [tab, setTab] = useQueryState("tab", parseAsTab);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsKey, setSettingsKey] = useState(0);
   const { data, isLoading, error } = useDateOverview(day);
@@ -154,7 +160,7 @@ export const DateSpotsPage = () => {
               disabled={!data || pending}
               onClick={() => {
                 void setDay(null);
-                setTab("daily");
+                void setTab("daily");
                 collectNow.mutate();
               }}
             >
@@ -165,11 +171,11 @@ export const DateSpotsPage = () => {
         </header>
 
         <nav aria-label="보기" className="flex gap-1.5">
-          <Chip active={tab === "daily"} onClick={() => setTab("daily")}>
+          <Chip active={tab === "daily"} onClick={() => void setTab("daily")}>
             <Sparkles className="size-3.5 text-primary" />
             매일 추천
           </Chip>
-          <Chip active={tab === "liked"} onClick={() => setTab("liked")}>
+          <Chip active={tab === "liked"} onClick={() => void setTab("liked")}>
             <Heart className="size-3.5 text-primary" />가 보고 싶은 곳
             {data && data.liked.length > 0 && (
               <span className="text-muted">{data.liked.length}</span>

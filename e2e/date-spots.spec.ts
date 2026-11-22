@@ -357,6 +357,52 @@ test("고른 날짜가 주소(?day=)에 남고, 뒤로 가기·앞으로 가기�
   await expect(page.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
 });
 
+test("보고 있는 탭이 주소(?tab=)에 남고, 뒤로 가기·새로고침에도 유지된다", async ({
+  page,
+  request,
+}) => {
+  const yesterday = daysAgo(1);
+  await seedDigest(yesterday, "어제 간 카페");
+  await pool.query("update date_spots set reaction = 'like' where name = '어제 간 카페'");
+  const token = await login(request);
+  await openDates(page, token);
+
+  const dailyTab = page.getByRole("button", { name: /매일 추천/ });
+  const likedTab = page.getByRole("button", { name: /가 보고 싶은 곳/ });
+  const daily = page.getByRole("region", { name: "매일 추천" });
+  const liked = page.getByRole("region", { name: "가 보고 싶은 곳" });
+
+  // 기본 탭(매일 추천)은 주소에 붙이지 않는다.
+  await expect(dailyTab).toHaveAttribute("aria-pressed", "true");
+  await expect(daily).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("tab")).toBeNull();
+
+  await likedTab.click();
+  await expect(page).toHaveURL(/[?&]tab=liked/);
+  await expect(likedTab).toHaveAttribute("aria-pressed", "true");
+  await expect(liked.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
+
+  // 새로고침해도 같은 탭이 열린다.
+  await page.reload();
+  await expect(likedTab).toHaveAttribute("aria-pressed", "true");
+  await expect(liked).toBeVisible();
+
+  // 뒤로 가기를 누르면 직전 탭으로 돌아간다.
+  await dailyTab.click();
+  await expect(page).toHaveURL(/\/dates$/);
+  await expect(daily).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/[?&]tab=liked/);
+  await expect(liked).toBeVisible();
+
+  // 주소로 바로 들어와도 그 탭을 보여 주고, 모르는 값은 기본 탭으로 본다.
+  await page.goto("/dates?tab=liked");
+  await expect(liked).toBeVisible();
+  await page.goto("/dates?tab=unknown");
+  await expect(dailyTab).toHaveAttribute("aria-pressed", "true");
+  await expect(daily).toBeVisible();
+});
+
 test("최근 날짜는 칩으로, 그 전 날짜는 달력으로 고른다", async ({ page, request }) => {
   // 1~8일 전과 10일 전에 조사가 있다(9일 전은 없음).
   for (const ago of [1, 2, 3, 4, 5, 6, 7, 8, 10]) {
