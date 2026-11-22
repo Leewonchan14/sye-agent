@@ -113,7 +113,8 @@ export const EntryDateList = ({
                 <MapLinkButton
                   url={entry.mapUrl}
                   label={entryTitle(entry)}
-                  className="size-6 [&_svg]:size-3.5"
+                  imageUrl={entry.mapImageUrl}
+                  className="size-6 rounded-md [&_svg]:size-3.5"
                 />
               ) : (
                 hasMapLinks && <span aria-hidden className="size-6 shrink-0" />

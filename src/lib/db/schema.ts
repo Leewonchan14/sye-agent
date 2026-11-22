@@ -216,6 +216,8 @@ export const ledgerEntries = pgTable(
     memo: text("memo").notNull().default(""),
     note: text("note").notNull().default(""), // 자세히 남기고 싶은 메모
     mapUrl: text("map_url").notNull().default(""), // 장소 지도 링크 (네이버·카카오·구글 지도 등)
+    mapPlaceName: text("map_place_name").notNull().default(""), // 네이버 지도 링크에서 읽은 장소 이름
+    mapImageUrl: text("map_image_url").notNull().default(""), // 네이버 지도 링크에서 읽은 대표 사진 주소
     tags: text("tags").notNull().default(""),
     member: text("member").notNull().default("wonchan"), // wonchan | yeeun
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

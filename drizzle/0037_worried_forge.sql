@@ -1,0 +1,2 @@
+ALTER TABLE "ledger_entries" ADD COLUMN IF NOT EXISTS "map_place_name" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "ledger_entries" ADD COLUMN IF NOT EXISTS "map_image_url" text DEFAULT '' NOT NULL;

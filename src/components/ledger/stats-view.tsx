@@ -930,7 +930,8 @@ const PeriodEntriesCard = ({
                   <MapLinkButton
                     url={entry.mapUrl}
                     label={entry.memo.trim() || (isIncome ? "입금" : "지출")}
-                    className="size-7"
+                    imageUrl={entry.mapImageUrl}
+                    className="size-7 rounded-md"
                   />
                 ) : (
                   hasMapLinks && <span aria-hidden className="size-7 shrink-0" />
