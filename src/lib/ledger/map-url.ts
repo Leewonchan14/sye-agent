@@ -21,3 +21,12 @@ export const isHttpUrl = (value: string): boolean => {
   const { protocol } = new URL(raw);
   return protocol === "https:" || protocol === "http:";
 };
+
+/**
+ * 크게 볼 때 쓰는 사진 주소. 저장한 주소는 네이버 이미지 서버의 640×380 크기라
+ * 같은 서버의 1200×800 크기로 바꾼다. 다른 주소는 그대로 둔다.
+ */
+export const toLargePlacePhotoUrl = (url: string): string =>
+  url.startsWith("https://search.pstatic.net/")
+    ? url.replace(/([?&]type=)f640_380(?=&|$)/, "$1f1200_800")
+    : url;

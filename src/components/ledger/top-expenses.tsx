@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
 
 import type { CategoryFilter } from "@/components/ledger/category-chips";
-import { MapLinkButton } from "@/components/ledger/map-link-button";
+import { PlacePhotoStrip } from "@/components/ledger/place-photos";
 import type { LedgerEntryView } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
 import { formatWon } from "@/lib/ledger/format";
@@ -70,7 +70,6 @@ export const EntryDateList = ({
   );
   const visible = showAll ? sorted : sorted.slice(0, ENTRY_PREVIEW_COUNT);
   const hidden = sorted.length - visible.length;
-  const hasMapLinks = visible.some((entry) => entry.mapUrl);
 
   return (
     <div className={className}>
@@ -95,29 +94,30 @@ export const EntryDateList = ({
             </>
           );
           return (
-            <li key={entry.id} className="flex items-center gap-1">
+            <li key={entry.id}>
               {onEdit ? (
                 <button
                   type="button"
                   onClick={() => onEdit(entry)}
-                  className="flex min-w-0 flex-1 items-baseline gap-2 rounded-md px-1 py-1 text-left text-[12px] hover:bg-surface/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="flex w-full items-baseline gap-2 rounded-md px-1 py-1 text-left text-[12px] hover:bg-surface/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   {body}
                 </button>
               ) : (
-                <div className="flex min-w-0 flex-1 items-baseline gap-2 px-1 py-1 text-[12px]">
+                <div className="flex items-baseline gap-2 px-1 py-1 text-[12px]">
                   {body}
                 </div>
               )}
-              {entry.mapUrl ? (
-                <MapLinkButton
-                  url={entry.mapUrl}
-                  label={entryTitle(entry)}
+              {entry.mapUrl && (
+                // 5.25rem: 여백(0.25) + 날짜 칸(4.5) + 간격(0.5) = 내용 시작점
+                <PlacePhotoStrip
+                  title={entryTitle(entry)}
+                  mapUrl={entry.mapUrl}
+                  placeName={entry.mapPlaceName}
                   imageUrls={entry.mapImageUrls}
-                  className="size-6 rounded-md [&_svg]:size-3.5"
+                  size="sm"
+                  className="pb-1 pl-[5.25rem]"
                 />
-              ) : (
-                hasMapLinks && <span aria-hidden className="size-6 shrink-0" />
               )}
             </li>
           );

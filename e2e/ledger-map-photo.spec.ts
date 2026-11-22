@@ -138,21 +138,59 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
 
   await openLedger(page, token);
 
-  // 내역 줄의 지도 버튼은 첫 사진과 장수를 보여 준다.
-  const thumbLink = page.getByRole("link", { name: "성수동 파스타 지도 열기" }).first();
-  const thumb = thumbLink.locator("img");
-  await expect(thumb).toHaveAttribute("src", PHOTOS[0]);
+  // 내역 줄 아래에 장소 이름(누르면 지도)과 사진 띠가 붙는다.
+  const mapChip = page.getByRole("link", { name: "성수동 파스타 지도 열기" }).first();
+  await expect(mapChip).toHaveText("성수 파스타집");
+  await expect(mapChip).toHaveAttribute(
+    "href",
+    "https://map.naver.com/p/entry/place/1001"
+  );
+  const stripPhotos = page.getByRole("button", {
+    name: /^성수 파스타집 사진 \d 크게 보기$/,
+  });
+  await expect(stripPhotos).toHaveCount(3);
+  const firstThumb = stripPhotos.first().locator("img");
+  await expect(firstThumb).toHaveAttribute("src", PHOTOS[0]);
   await expect
-    .poll(() => thumb.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .poll(() => firstThumb.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0);
-  await expect(thumbLink).toContainText("3");
+  // 사진이 없는 줄에는 빈 자리를 두지 않아 금액이 오른쪽 끝에 붙는다.
+  await createEntry(request, "사진 없는 내역", "");
+  await page.reload();
+  const amountRight = async (memo: string) => {
+    const row = page.getByRole("button", { name: new RegExp(memo) }).first();
+    const box = (await row.getByText(/원$/).boundingBox())!;
+    return Math.round(box.x + box.width);
+  };
+  expect(await amountRight("사진 없는 내역")).toBe(await amountRight("성수동 파스타"));
+
+  // 사진을 누르면 크게 보고 넘긴다. 크게 볼 때는 1200×800 주소를 쓴다.
+  await page
+    .getByRole("button", { name: "성수 파스타집 사진 2 크게 보기" })
+    .first()
+    .click();
+  const viewer = page.getByRole("dialog", { name: "성수 파스타집 사진 크게 보기" });
+  await expect(viewer.getByText("2 / 3")).toBeVisible();
+  const large = viewer.getByRole("img", { name: "성수 파스타집 사진 2" });
+  await expect(large).toHaveAttribute("src", PHOTOS[1].replace("f640_380", "f1200_800"));
+  await expect(large).toBeInViewport();
+  await viewer.getByRole("button", { name: "다음 사진" }).click();
+  await expect(viewer.getByText("3 / 3")).toBeVisible();
+  await page.keyboard.press("ArrowLeft");
+  await expect(viewer.getByText("2 / 3")).toBeVisible();
+  await expect(viewer.getByRole("link", { name: /성수 파스타집/ })).toHaveAttribute(
+    "href",
+    "https://map.naver.com/p/entry/place/1001"
+  );
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
 
   // 수정 화면에서는 사진을 넘겨 보고, 장소 이름을 누르면 지도를 연다.
   await page
     .getByRole("button", { name: /성수동 파스타/ })
     .first()
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "내역 수정" });
   const photos = dialog.getByRole("region", { name: "성수 파스타집 사진 3장" });
   await expect(photos.getByRole("img")).toHaveCount(3);
   await expect(photos.getByText("1 / 3")).toBeVisible();
@@ -163,6 +201,13 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
   ).toBeInViewport();
   // 사진을 넘겨도 창은 저장되지 않고 그대로 열려 있다.
   await expect(dialog).toBeVisible();
+  // 수정 화면에서도 사진을 누르면 크게 보고, 닫으면 수정 화면으로 돌아온다.
+  await photos.getByRole("button", { name: "성수 파스타집 사진 2 크게 보기" }).click();
+  const cardViewer = page.getByRole("dialog", { name: "성수 파스타집 사진 크게 보기" });
+  await expect(cardViewer.getByText("2 / 3")).toBeVisible();
+  await cardViewer.getByRole("button", { name: "닫기" }).click();
+  await expect(cardViewer).toBeHidden();
+  await expect(dialog.locator("#ledger-map-url")).toBeVisible();
   const card = dialog.getByRole("link", { name: "성수 파스타집 지도 열기" });
   await expect(card).toHaveAttribute("href", "https://map.naver.com/p/entry/place/1001");
 
@@ -182,7 +227,7 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
   });
 });
 
-test("네이버가 아니거나 장소를 못 찾으면 사진 없이 핀으로 보여 준다", async ({
+test("네이버가 아니거나 장소를 못 찾으면 사진 없이 지도 칩만 보여 준다", async ({
   page,
   request,
 }) => {
@@ -198,9 +243,11 @@ test("네이버가 아니거나 장소를 못 찾으면 사진 없이 핀으로 
   });
 
   await openLedger(page, token);
+  // 사진이 없으면 지도 칩만 붙는다.
   await expect(
-    page.getByRole("link", { name: "카카오 카페 지도 열기" }).first().locator("img")
-  ).toHaveCount(0);
+    page.getByRole("link", { name: "카카오 카페 지도 열기" }).first()
+  ).toHaveText("지도");
+  await expect(page.getByRole("button", { name: /크게 보기$/ })).toHaveCount(0);
 
   await page
     .getByRole("button", { name: /없는 장소/ })

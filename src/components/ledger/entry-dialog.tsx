@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { CategoryIcon } from "@/components/ledger/category-icon";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
-import { MapPlaceCard } from "@/components/ledger/map-link-button";
+import { MapPlaceCard } from "@/components/ledger/place-photos";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
