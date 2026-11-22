@@ -3,6 +3,11 @@
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
+import {
+  DayPlacesPreview,
+  PolaroidStack,
+  placesByDate,
+} from "@/components/ledger/calendar-photos";
 import { CATEGORY_COLOR_HEX } from "@/components/ledger/category-icon";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { LedgerEntryList } from "@/components/ledger/entry-list";
@@ -80,6 +85,7 @@ export const CalendarView = ({
   const totalsByDate = new Map(calendar.map((day) => [day.date, day]));
   const activeTotals = totalsByDate.get(activeDay) ?? { expense: 0, income: 0 };
   const dayEntries = entries.filter((entry) => entry.entryDate === activeDay);
+  const placesOn = useMemo(() => placesByDate(ledger.entries), [ledger.entries]);
 
   const cityDays = useMemo((): CityDay[] => {
     const topByDate = topExpenseCategoryBy(ledger.entries, (entry) => entry.entryDate);
@@ -168,16 +174,17 @@ export const CalendarView = ({
                   const isToday = date === today;
                   const isSelected = date === activeDay;
                   const weekday = index % 7;
+                  const places = placesOn.get(date) ?? [];
 
-                  return (
+                  const cell = (
                     <button
                       key={date}
                       type="button"
                       aria-pressed={isSelected}
-                      aria-label={`${formatDayKo(date)}${totals ? `, 지출 ${formatWon(totals.expense)}` : ""}`}
+                      aria-label={`${formatDayKo(date)}${totals ? `, 지출 ${formatWon(totals.expense)}` : ""}${places.length ? `, 간 곳 ${places.map((place) => place.name).join(", ")}` : ""}`}
                       onClick={() => onSelectDay(date)}
                       className={cn(
-                        "flex min-h-16 flex-col items-start rounded-lg border p-1 text-left transition-colors md:min-h-20 md:p-1.5",
+                        "relative flex min-h-16 flex-col items-start rounded-lg border p-1 text-left transition-colors md:min-h-20 md:p-1.5",
                         isSelected && "border-hairline bg-canvas-card",
                         !isSelected && "border-transparent hover:bg-canvas-soft/70",
                         isToday && "ring-1 ring-primary/40"
@@ -207,7 +214,20 @@ export const CalendarView = ({
                           )}
                         </span>
                       )}
+                      {/* 칸이 좁으면 금액 아래에, 넉넉한 넓은 화면은 오른쪽 아래 구석에 띄운다. */}
+                      <PolaroidStack
+                        places={places}
+                        className="mt-auto self-end pt-1 lg:absolute lg:right-2 lg:bottom-2 lg:mt-0 lg:pt-0"
+                      />
                     </button>
+                  );
+
+                  return places.length ? (
+                    <DayPlacesPreview key={date} date={date} places={places}>
+                      {cell}
+                    </DayPlacesPreview>
+                  ) : (
+                    cell
                   );
                 })}
               </div>
