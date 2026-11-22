@@ -1093,6 +1093,117 @@ test("여행 리포트는 미리 결제한 내역까지 분류별로 보여 준�
   await expect(page.getByText("전월 대비")).toHaveCount(0);
 });
 
+test("여행 탭의 통계 보기로 그 여행 리포트를 바로 열고, 주소로 다시 연다", async ({
+  page,
+  request,
+}) => {
+  await createTrip(request, "제주 여행", daysAgo(10), daysAgo(8));
+  const tripId = await createTrip(request, "춘천 여행", today(), today());
+  await addEntry(request, token, {
+    entryDate: today(),
+    amount: 33_000,
+    memo: "닭갈비",
+    tripId,
+  });
+
+  await openLedger(page, token);
+  const main = await openTripsTab(page);
+  await main.getByRole("button", { name: "춘천 여행 통계 보기" }).click();
+
+  await expect(page.getByRole("tab", { name: "통계" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await expect(
+    reportPeriod(page).getByRole("button", { name: "여행", exact: true })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page
+      .getByRole("group", { name: "여행 선택" })
+      .getByRole("button", { name: "춘천 여행" })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("춘천 여행 총 지출")).toBeVisible();
+  await expect(page.getByRole("button", { name: /닭갈비/ })).toBeVisible();
+
+  const url = new URL(page.url());
+  expect(url.searchParams.get("tab")).toBe("stats");
+  expect(url.searchParams.get("report")).toBe("trip");
+  expect(url.searchParams.get("trip")).toBe(String(tripId));
+
+  await page.reload();
+  await expect(page.getByText("춘천 여행 총 지출")).toBeVisible();
+
+  // 월별로 바꾸면 여행 고르기도 풀린다.
+  await reportPeriod(page).getByRole("button", { name: "월별", exact: true }).click();
+  await expect(page).toHaveURL(/report=month/);
+  await expect(page).not.toHaveURL(/trip=/);
+
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "여행" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+});
+
+test("직접 설정은 날짜와 시각으로 고르고 주소에 남는다", async ({ page, request }) => {
+  const add = (memo: string, amount: number, entryTime: string | null, date = today()) =>
+    addEntry(request, token, { entryDate: date, amount, memo, entryTime });
+  await add("아침 빵", 5_000, "08:00");
+  await add("점심 국수", 7_000, "12:00");
+  await add("시각 모름", 1_000, null);
+  await add("저녁 고기", 9_000, "20:00");
+  await add("사흘 전 커피", 2_000, "12:00", daysAgo(3));
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  await reportPeriod(page)
+    .getByRole("button", { name: "직접 설정", exact: true })
+    .click();
+
+  // 처음에는 30일 전 0시부터 오늘 23:59까지
+  await expect(page).toHaveURL(new RegExp(`from=${daysAgo(30)}T00:00`));
+  await expect(page.getByText("총 지출 · 5건")).toBeVisible();
+
+  await page.getByRole("button", { name: "시작 날짜" }).click();
+  // 달력은 고른 날(30일 전)이 든 달로 열린다. 오늘이 다른 달이면 다음 달로 넘긴다.
+  const picker = page.getByRole("dialog");
+  if (daysAgo(30).slice(0, 7) !== thisMonth()) {
+    await picker.getByRole("button", { name: "Go to the Next Month" }).click();
+  }
+  await picker
+    .getByRole("button", { name: new RegExp(`${kst().format("YYYY년 M월 D일 dddd")}$`) })
+    .click();
+  await expect(page.getByRole("button", { name: "시작 날짜" })).toContainText(
+    today().replaceAll("-", ".")
+  );
+  await page.getByLabel("시작 시각").fill("10:00");
+  await page.getByLabel("종료 시각").fill("18:00");
+  await page.getByRole("button", { name: "조회" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`from=${today()}T10:00`));
+  await expect(page).toHaveURL(new RegExp(`to=${today()}T18:00`));
+  const label = `${today().replaceAll("-", ".")} 10:00 ~ ${today().replaceAll("-", ".")} 18:00`;
+  await expect(page.getByText(label)).toBeVisible();
+  await expect(page.getByText("총 지출 · 2건")).toBeVisible();
+  await expect(page.getByRole("button", { name: /점심 국수/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /시각 모름/ })).toBeVisible();
+  for (const memo of ["아침 빵", "저녁 고기", "사흘 전 커피"]) {
+    await expect(page.getByRole("button", { name: new RegExp(memo) })).toHaveCount(0);
+  }
+
+  await page.reload();
+  await expect(
+    reportPeriod(page).getByRole("button", { name: "직접 설정", exact: true })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(label)).toBeVisible();
+  await expect(page.getByText("총 지출 · 2건")).toBeVisible();
+  await expect(page.getByLabel("시작 시각")).toHaveValue("10:00");
+
+  await page.getByLabel("시작 시각").fill("19:00");
+  await page.getByRole("button", { name: "조회" }).click();
+  await expect(page.getByText("시작은 종료보다 늦을 수 없어요.")).toBeVisible();
+});
+
 test("내역 입력에서 날짜로 여행을 추천하고 해제할 수 있다", async ({ page, request }) => {
   await createTrip(request, "제주 여행", today(), today());
   await openLedger(page, token);

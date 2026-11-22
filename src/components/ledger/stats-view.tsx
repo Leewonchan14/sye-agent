@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Wallet,
 } from "lucide-react";
+import { useQueryStates } from "nuqs";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
@@ -29,9 +30,15 @@ import {
   CategoryIcon,
   EntryIcon,
 } from "@/components/ledger/category-icon";
+import { DateTimePicker } from "@/components/ledger/date-time-picker";
 import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
+import {
+  REPORT_RANGES,
+  reportQueryParsers,
+  type ReportRangeId,
+} from "@/components/ledger/report-query";
 import {
   EntryDateList,
   groupTopExpenses,
@@ -135,18 +142,14 @@ const scopeStatsToCategory = (
   };
 };
 
-const RANGES = [
-  { id: "month", label: "월별" },
-  { id: "week", label: "주별" },
-  { id: "trip", label: "여행" },
-  { id: "all", label: "전체" },
-  { id: "3m", label: "최근 3개월" },
-  { id: "30", label: "최근 30일" },
-  { id: "7", label: "최근 7일" },
-  { id: "custom", label: "직접 설정" },
-] as const;
+/** 직접 설정을 처음 열 때의 기간: 30일 전 0시부터 오늘 23:59까지. */
+const defaultCustomRange = () => ({
+  from: `${kst(todayKst()).subtract(30, "day").format("YYYY-MM-DD")}T00:00`,
+  to: `${todayKst()}T23:59`,
+});
 
-type RangeId = (typeof RANGES)[number]["id"];
+/** `YYYY-MM-DDTHH:mm` → `YYYY.MM.DD HH:mm` */
+const formatBound = (value: string) => value.replaceAll("-", ".").replace("T", " ");
 
 const fetchStats = async (
   token: string,
@@ -1114,7 +1117,7 @@ const TopExpensesCard = ({
   );
 };
 
-const presetRange = (id: RangeId): { from?: string; to?: string } => {
+const presetRange = (id: ReportRangeId): { from?: string; to?: string } => {
   const today = todayKst();
   const base = kst(today);
   const day = (value: typeof base) => value.format("YYYY-MM-DD");
@@ -1330,18 +1333,38 @@ export const StatsView = ({
   category,
 }: Props) => {
   const token = useAuthStore((s) => s.token);
+  // 기간 종류와 직접 설정 기간은 주소 쿼리(?report=&from=&to=)에 둔다.
+  const [reportQuery, setReportQuery] = useQueryStates(reportQueryParsers);
   // 내역·달력에서 여행을 골라 두었으면 그 여행 리포트로 연다.
-  const [range, setRange] = useState<RangeId>(tripId != null ? "trip" : initialPeriod);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const range: ReportRangeId =
+    reportQuery.report === "trip" || tripId != null
+      ? "trip"
+      : (reportQuery.report ?? initialPeriod);
+  const fallbackCustom = defaultCustomRange();
+  const customApplied = {
+    from: reportQuery.from ?? fallbackCustom.from,
+    to: reportQuery.to ?? fallbackCustom.to,
+  };
+  // 조회 전에 고르고 있는 값. 주소의 기간이 바뀌면(뒤로 가기 등) 그 값으로 맞춘다.
+  const [customFrom, setCustomFrom] = useState(customApplied.from);
+  const [customTo, setCustomTo] = useState(customApplied.to);
+  const [syncedCustom, setSyncedCustom] = useState(
+    `${customApplied.from}|${customApplied.to}`
+  );
+  if (syncedCustom !== `${customApplied.from}|${customApplied.to}`) {
+    setSyncedCustom(`${customApplied.from}|${customApplied.to}`);
+    setCustomFrom(customApplied.from);
+    setCustomTo(customApplied.to);
+  }
   const [customError, setCustomError] = useState<string | null>(null);
-  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
   const applied =
     range === "month"
       ? monthRange(month)
       : range === "week"
         ? weekRange(weekStart, todayKst())
-        : appliedRange;
+        : range === "custom"
+          ? customApplied
+          : presetRange(range);
   const isTripReport = range === "trip";
   const activeTrip = trips.find((trip) => trip.id === tripId) ?? trips[0] ?? null;
   const shouldExclude = !isTripReport && excludeTrips;
@@ -1349,38 +1372,31 @@ export const StatsView = ({
   const thisMonth = currentMonthKst();
   const thisWeek = weekStartOf(todayKst());
 
-  const selectRange = (id: RangeId) => {
-    setRange(id);
+  const selectRange = (id: ReportRangeId) => {
     setCustomError(null);
     // 여행 리포트에서 고른 여행은 내역·달력 탭과 함께 쓴다.
     if (id === "trip") onTripChange(activeTrip?.id ?? null);
     else if (range === "trip") onTripChange(null);
 
-    if (id === "month" || id === "week" || id === "trip") return;
-
-    if (id === "custom") {
-      const from = customFrom || kst(todayKst()).subtract(30, "day").format("YYYY-MM-DD");
-      const to = customTo || todayKst();
-      setCustomFrom(from);
-      setCustomTo(to);
-      setAppliedRange({ from, to });
-      return;
-    }
-
-    setAppliedRange(presetRange(id));
+    // 직접 설정은 지금 고르고 있던 기간으로 바로 조회한다. 다른 기간은 직접 설정 값을 지운다.
+    void setReportQuery(
+      id === "custom"
+        ? { report: id, from: customFrom, to: customTo }
+        : { report: id, from: null, to: null }
+    );
   };
 
   const applyCustomRange = () => {
     if (!customFrom || !customTo) {
-      setCustomError("시작일과 종료일을 모두 선택해 주세요.");
+      setCustomError("시작과 종료를 모두 선택해 주세요.");
       return;
     }
     if (customFrom > customTo) {
-      setCustomError("시작일은 종료일보다 늦을 수 없어요.");
+      setCustomError("시작은 종료보다 늦을 수 없어요.");
       return;
     }
     setCustomError(null);
-    setAppliedRange({ from: customFrom, to: customTo });
+    void setReportQuery({ report: "custom", from: customFrom, to: customTo });
   };
 
   const statsQuery = useQuery({
@@ -1440,11 +1456,13 @@ export const StatsView = ({
   const hasActivity = stats
     ? stats.summary.income !== 0 || stats.summary.expense !== 0
     : false;
-  const rangeLabel = stats
-    ? `${stats.from.replaceAll("-", ".")} ~ ${stats.to.replaceAll("-", ".")} · ${
-        stats.days
-      }일`
-    : "기간 확인 중…";
+  const rangeLabel = !stats
+    ? "기간 확인 중…"
+    : range === "custom"
+      ? `${formatBound(customApplied.from)} ~ ${formatBound(customApplied.to)} · ${stats.days}일`
+      : `${stats.from.replaceAll("-", ".")} ~ ${stats.to.replaceAll("-", ".")} · ${
+          stats.days
+        }일`;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
@@ -1456,7 +1474,7 @@ export const StatsView = ({
             aria-label="리포트 기간"
             className="flex flex-wrap rounded-full bg-canvas-soft p-1"
           >
-            {RANGES.map((option) => {
+            {REPORT_RANGES.map((option) => {
               const active = option.id === range;
               return (
                 <button
@@ -1559,36 +1577,34 @@ export const StatsView = ({
 
           {range === "custom" ? (
             <div className="w-full">
-              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:items-end">
-                <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
-                  <span className="text-[10px] text-muted">시작</span>
-                  <input
-                    type="date"
+              <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:items-end">
+                <div className="min-w-0 sm:w-[15rem] sm:flex-none">
+                  <DateTimePicker
+                    label="시작"
                     value={customFrom}
-                    onChange={(event) => {
-                      setCustomFrom(event.target.value);
+                    max={todayKst()}
+                    invalid={Boolean(customError)}
+                    onChange={(value) => {
+                      setCustomFrom(value);
                       setCustomError(null);
                     }}
-                    aria-invalid={Boolean(customError)}
-                    className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   />
-                </label>
-                <label className="flex min-w-0 flex-col gap-0.5 sm:w-[8.5rem] sm:flex-none">
-                  <span className="text-[10px] text-muted">종료</span>
-                  <input
-                    type="date"
+                </div>
+                <div className="min-w-0 sm:w-[15rem] sm:flex-none">
+                  <DateTimePicker
+                    label="종료"
                     value={customTo}
-                    onChange={(event) => {
-                      setCustomTo(event.target.value);
+                    max={todayKst()}
+                    invalid={Boolean(customError)}
+                    onChange={(value) => {
+                      setCustomTo(value);
                       setCustomError(null);
                     }}
-                    aria-invalid={Boolean(customError)}
-                    className="h-8 w-full min-w-0 rounded-lg border border-hairline bg-surface px-2 text-[12px] text-ink tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   />
-                </label>
+                </div>
                 <Button
                   size="sm"
-                  className="col-span-2 h-8 w-full sm:col-span-1 sm:w-auto"
+                  className="h-8 w-full sm:w-auto"
                   onClick={applyCustomRange}
                 >
                   조회
