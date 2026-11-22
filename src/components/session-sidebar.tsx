@@ -34,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/lib/auth-store";
 import { dayjs } from "@/lib/kst";
 import { cn } from "@/lib/utils";
@@ -288,43 +289,45 @@ export const SessionSidebar = ({
           <div className="px-5 pt-3 pb-1 text-xs font-medium text-muted-soft">
             최근 대화
           </div>
-          <nav className="flex-1 overflow-y-auto px-2 py-1">
-            {!loading && !sessions.length && (
-              <div className="px-3 py-4 text-xs text-muted-soft">
-                아직 채팅이 없습니다
-              </div>
-            )}
-            {sessions.map((s) => {
-              const active = s.id === activeSessionId;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onSelect(s.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors ${active && "bg-canvas-card text-ink"}`}
-                  onMouseEnter={(e) => {
-                    if (!active)
-                      e.currentTarget.style.backgroundColor = css("color-canvas-soft");
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) e.currentTarget.style.backgroundColor = "transparent";
-                  }}
-                >
-                  <span className="flex-1 truncate">{truncate(s.title, 28)}</span>
-                  <span className="shrink-0 text-[11px] text-muted-soft">
-                    {dayjs(s.lastActivity).fromNow()}
-                  </span>
-                </button>
-              );
-            })}
-            {/* Infinite scroll sentinel */}
-            <div ref={sentinelRef} className="h-px" />
-            {isFetchingNextPage && (
-              <div className="px-3 py-3 text-center text-xs text-muted-soft">
-                불러오는 중…
-              </div>
-            )}
-          </nav>
+          <ScrollArea className="min-h-0 flex-1">
+            <nav className="px-2 py-1">
+              {!loading && !sessions.length && (
+                <div className="px-3 py-4 text-xs text-muted-soft">
+                  아직 채팅이 없습니다
+                </div>
+              )}
+              {sessions.map((s) => {
+                const active = s.id === activeSessionId;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => onSelect(s.id)}
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors ${active && "bg-canvas-card text-ink"}`}
+                    onMouseEnter={(e) => {
+                      if (!active)
+                        e.currentTarget.style.backgroundColor = css("color-canvas-soft");
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) e.currentTarget.style.backgroundColor = "transparent";
+                    }}
+                  >
+                    <span className="flex-1 truncate">{truncate(s.title, 28)}</span>
+                    <span className="shrink-0 text-[11px] text-muted-soft">
+                      {dayjs(s.lastActivity).fromNow()}
+                    </span>
+                  </button>
+                );
+              })}
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} className="h-px" />
+              {isFetchingNextPage && (
+                <div className="px-3 py-3 text-center text-xs text-muted-soft">
+                  불러오는 중…
+                </div>
+              )}
+            </nav>
+          </ScrollArea>
 
           {/* Footer: settings, sister sites, logout */}
           <div className="border-t border-hairline px-3 py-2">
