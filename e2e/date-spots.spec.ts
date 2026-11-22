@@ -12,6 +12,7 @@ import { daysAgo, login, pool, today } from "./helpers";
  * 데이트 추천 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
  * 아래 가짜 Hermes가 프롬프트에서 콜백 주소·토큰을 읽어 하치와레처럼 결과를 보낸다.
  * `INSTAGRAM_EMBED_ORIGIN`도 같은 주소로 두면 인스타그램 임베드·사진 서버 역할까지 한다.
+ * 즐길 거리의 소개 페이지(`/store/…`)도 같은 서버가 대표 이미지(og:image)를 실어 내보낸다.
  */
 const FAKE_HERMES_PORT = Number(process.env.E2E_FAKE_HERMES_PORT ?? 8972);
 const ingestKey = process.env.MONITOR_INGEST_KEY ?? "";
@@ -31,7 +32,8 @@ const futureOe = () =>
   Math.floor(Date.now() / 1000 + 3 * 86400)
     .toString(16)
     .toUpperCase();
-const photoBase = () => `http://127.0.0.1:${FAKE_HERMES_PORT}/img`;
+const fakeOrigin = () => `http://127.0.0.1:${FAKE_HERMES_PORT}`;
+const photoBase = () => `${fakeOrigin()}/img`;
 /** 1×1 PNG */
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -99,20 +101,35 @@ const spot = (code: string, name: string, extra: Record<string, unknown> = {}) =
   ...extra,
 });
 
+/** 소개 페이지 주소. 가짜 서버가 대표 이미지(og:image)를 실은 HTML로 답한다. */
+const storeUrl = (name: string) => `${fakeOrigin()}/store/${encodeURIComponent(name)}`;
+/** 소개 페이지 대표 이미지 — 페이지에는 상대 주소로 실려 있다. */
+const STORE_IMAGE_PATH = "/img/store-cover.png";
+
 /** 즐길거리 — 인스타 대신 공식·소개 페이지를 근거로 받는다. */
 const content = (name: string, extra: Record<string, unknown> = {}) => ({
   kind: "content",
   name,
   area: "집",
-  category: "게임",
+  category: "집데이트",
   summary: `${name} 소개 문장입니다.`,
-  reason: "둘이 같이 하면 더 무서워요.",
-  sourceUrl: `https://store.example.com/app/${encodeURIComponent(name)}#reviews`,
+  reason: "둘이 같이 하면 더 재밌어요.",
+  sourceUrl: `${storeUrl(name)}#reviews`,
   period: "상시",
   priceHint: "2인 3만원대",
-  tags: ["협동", "공포", "2인"],
+  tags: ["협동", "2인"],
   ...extra,
 });
+
+/** 게임 — 인스타그램 게시물이 소개한 것만 받는다. 상점 페이지는 확인용 근거로 같이 둔다. */
+const game = (code: string, name: string, extra: Record<string, unknown> = {}) =>
+  content(name, {
+    category: "게임",
+    instagramUrl: `https://www.instagram.com/p/${code}/`,
+    instagramAuthor: "couple_games",
+    tags: ["협동", "공포", "2인"],
+    ...extra,
+  });
 
 /** 프롬프트의 curl 예시에서 하치와레가 쓰는 것과 같은 값을 꺼낸다. */
 const callBack = async (input: string, spots: unknown[]) => {
@@ -156,6 +173,16 @@ const startFakeHermes = () =>
         const missing = embedMatch[1].startsWith("NOPIC");
         res.writeHead(missing ? 404 : 200, { "Content-Type": "text/html" });
         res.end(missing ? "" : embedHtml(embedMatch[1]));
+        return;
+      }
+      if (req.method === "GET" && path.startsWith("/store/")) {
+        // 이름에 "이미지 없는"이 들어간 페이지는 대표 이미지 태그가 없다.
+        const noImage = decodeURIComponent(path).includes("이미지 없는");
+        const meta = noImage
+          ? ""
+          : `<meta content="${STORE_IMAGE_PATH}?v=1&amp;w=640" property="og:image" />`;
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(`<html><head><title>상점</title>${meta}</head><body><img src="/img/logo.png" /></body></html>`);
         return;
       }
       if (req.method === "GET" && path.startsWith("/img/")) {
@@ -479,7 +506,7 @@ test("장소와 같이 즐길 거리(팝업·게임)를 한 목록으로 받아 
 }) => {
   nextSpots = () => [
     spot("PLC111", "성수 온실카페"),
-    content("둘이서 탈출하는 공포 게임"),
+    game("GAME111", "둘이서 탈출하는 공포 게임"),
     content("캐릭터 팝업스토어", {
       area: "용산",
       category: "팝업·전시",
@@ -508,15 +535,22 @@ test("장소와 같이 즐길 거리(팝업·게임)를 한 목록으로 받아 
     /캐릭터 팝업스토어/,
   ]);
 
-  // 집에서 하는 게임은 인스타·지도 대신 소개 페이지만 연결한다(# 조각은 뗀다).
-  const game = daily.getByRole("article", { name: "둘이서 탈출하는 공포 게임" });
-  await expect(game.getByRole("link", { name: "자세히" })).toHaveAttribute(
+  // 집에서 하는 게임은 소개한 인스타 게시물과 상점 페이지를 연결하고 지도는 없다(# 조각은 뗀다).
+  const gameCard = daily.getByRole("article", { name: "둘이서 탈출하는 공포 게임" });
+  await expect(gameCard.getByRole("link", { name: "자세히" })).toHaveAttribute(
     "href",
-    `https://store.example.com/app/${encodeURIComponent("둘이서 탈출하는 공포 게임")}`
+    storeUrl("둘이서 탈출하는 공포 게임")
   );
-  await expect(game.getByRole("link", { name: /^인스타/ })).toHaveCount(0);
-  await expect(game.getByRole("link", { name: "지도" })).toHaveCount(0);
-  await expect(game.getByText("상시")).toBeVisible();
+  await expect(gameCard.getByRole("link", { name: /^인스타/ })).toHaveAttribute(
+    "href",
+    "https://www.instagram.com/p/GAME111/"
+  );
+  await expect(gameCard.getByRole("link", { name: "지도" })).toHaveCount(0);
+  await expect(gameCard.getByText("상시")).toBeVisible();
+  // 상점 대표 이미지보다 인스타그램 게시물 사진을 먼저 쓴다.
+  await expect(
+    gameCard.getByRole("img", { name: "둘이서 탈출하는 공포 게임 사진" })
+  ).toHaveAttribute("src", /\/img\/GAME111-640\.png/);
 
   // 팝업은 기간·주소와 함께 인스타·소개 페이지·지도를 모두 연결하고 게시물 사진도 보여 준다.
   const popup = daily.getByRole("article", { name: "캐릭터 팝업스토어" });
@@ -530,7 +564,7 @@ test("장소와 같이 즐길 거리(팝업·게임)를 한 목록으로 받아 
   await expect(popup.getByRole("img", { name: "캐릭터 팝업스토어 사진" })).toBeVisible();
 
   // 즐길거리도 찜할 수 있다.
-  await game.getByRole("button", { name: "가 보고 싶어" }).click();
+  await gameCard.getByRole("button", { name: "가 보고 싶어" }).click();
   await page.getByRole("button", { name: /가 보고 싶은 곳/ }).click();
   await expect(
     page.getByRole("article", { name: "둘이서 탈출하는 공포 게임" })
@@ -542,6 +576,10 @@ test("장소와 같이 즐길 거리(팝업·게임)를 한 목록으로 받아 
   expect(input).toContain("한 목록으로 섞어서");
   expect(input).toContain('"kind": "place"');
   expect(input).toContain('"kind": "content"');
+  // 게임은 상점에서 직접 고르지 않고 인스타그램 게시물이 소개한 것만 고르게 한다.
+  expect(input).toContain("#커플게임");
+  expect(input).toContain("인스타그램 게시물이 소개한 게임만");
+  expect(input).not.toContain("커플 공포 게임 스팀");
 
   const { rows } = await pool.query(
     "select name, kind, instagram_url, source_url, period from date_spots order by id"
@@ -557,8 +595,8 @@ test("장소와 같이 즐길 거리(팝업·게임)를 한 목록으로 받아 
     {
       name: "둘이서 탈출하는 공포 게임",
       kind: "content",
-      instagram_url: null,
-      source_url: `https://store.example.com/app/${encodeURIComponent("둘이서 탈출하는 공포 게임")}`,
+      instagram_url: "https://www.instagram.com/p/GAME111/",
+      source_url: storeUrl("둘이서 탈출하는 공포 게임"),
       period: "상시",
     },
     {
@@ -625,6 +663,13 @@ test("즐길거리는 근거 주소가 있어야 하고, 같은 소개 페이지
     content("이상한 주소", { sourceUrl: "javascript:alert(1)" }),
   ]);
   expect(badSource.status()).toBe(400);
+
+  // 게임은 상점 페이지만으로는 받지 않는다 — 소개한 인스타그램 게시물이 있어야 한다.
+  const gameNoInsta = await post([
+    game("x", "상점에서 고른 게임", { instagramUrl: null, instagramAuthor: null }),
+  ]);
+  expect(gameNoInsta.status()).toBe(400);
+  expect((await gameNoInsta.json()).error).toContain("게임은 그 게임을 소개한");
 
   // 장소는 여전히 인스타그램 게시물이 있어야 한다.
   const placeNoInsta = await post([
@@ -896,6 +941,42 @@ test("카드에 게시물 사진을 보여 주고, 여러 장이면 넘겨 볼 �
     { name: "한 장 카페", photos: 1, checked: true },
     { name: "사진 없는 공방", photos: 0, checked: true },
     { name: "영상 섞인 카페", photos: 2, checked: true },
+  ]);
+});
+
+test("인스타 게시물이 없는 즐길 거리는 소개 페이지의 대표 이미지를 보여 준다", async ({
+  page,
+  request,
+}) => {
+  nextSpots = () => [
+    content("연말 재즈 공연", { area: "마포", category: "공연·영화", period: "12.20~12.31" }),
+    content("대표 이미지 없는 집데이트"),
+  ];
+  const token = await login(request);
+  await openDates(page, token);
+  await page.getByRole("button", { name: "지금 찾아 줘" }).click();
+
+  // og:image의 상대 주소를 소개 페이지 주소 기준으로 풀어 한 장만 보여 준다.
+  const concert = page.getByRole("article", { name: "연말 재즈 공연" });
+  await expect(concert.getByRole("img", { name: "연말 재즈 공연 사진" })).toHaveAttribute(
+    "src",
+    `${fakeOrigin()}${STORE_IMAGE_PATH}?v=1&w=640`,
+    { timeout: 20_000 }
+  );
+  await expect(concert.getByRole("button", { name: "다음 사진" })).toHaveCount(0);
+  await expect(
+    page.getByRole("article", { name: "대표 이미지 없는 집데이트" }).getByRole("img")
+  ).toHaveCount(0);
+
+  // 대표 이미지는 만료되지 않으니 일주일 뒤에 다시 읽는다.
+  const { rows } = await pool.query(
+    `select name, cardinality(photo_urls) as photos, photo_checked_at is not null as checked,
+       photo_expires_at > now() + interval '6 days' as long_lived
+     from date_spots order by id`
+  );
+  expect(rows).toEqual([
+    { name: "연말 재즈 공연", photos: 1, checked: true, long_lived: true },
+    { name: "대표 이미지 없는 집데이트", photos: 0, checked: true, long_lived: null },
   ]);
 });
 

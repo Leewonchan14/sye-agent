@@ -1,3 +1,5 @@
+import ogs from "open-graph-scraper-lite";
+
 import { spotMediaUrls, toSpotVideo } from "@/lib/dates/media";
 
 /**
@@ -7,6 +9,9 @@ import { spotMediaUrls, toSpotVideo } from "@/lib/dates/media";
  * 데이터가 없으면 임베드에 보이는 대표 사진 한 장만 쓴다.
  * 영상은 영상 주소(.mp4)에 표지 사진을 붙여 넣고(`toSpotVideo`), 카드에서 GIF처럼 소리 없이 반복 재생한다.
  * 게시물 데이터에 영상 주소가 없으면 예전처럼 표지 사진을 쓴다.
+ *
+ * 인스타그램 게시물이 없는 즐길 거리(게임 상점·예매처·공식 공지 등)는 근거 페이지(`sourceUrl`)의
+ * 대표 이미지(`og:image`, 없으면 `twitter:image`) 한 장을 대신 쓴다(`fetchPageImage`).
  *
  * 사진 파일은 저장하지 않는다. CDN 주소에 만료 시각(`oe`, 16진수 초)이 붙어 있어 4~5일 뒤 열리지 않으므로,
  * 주소와 가장 이른 만료 시각만 저장해 두고 만료가 가까우면 다시 읽는다. 화면은 인스타그램 CDN에서 바로 받는다.
@@ -19,6 +24,8 @@ export const MAX_SPOT_PHOTOS = 10;
 const FETCH_TIMEOUT_MS = 8_000;
 /** `oe`가 없을 때 쓰는 보수적인 유효 기간 */
 const FALLBACK_TTL_MS = 24 * 60 * 60 * 1000;
+/** 페이지 대표 이미지는 주소가 만료되지 않으니 일주일에 한 번만 다시 읽는다. */
+const PAGE_IMAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const embedOrigin = () =>
   (process.env.INSTAGRAM_EMBED_ORIGIN || "https://www.instagram.com").replace(/\/+$/, "");
@@ -158,6 +165,46 @@ export const fetchInstagramPhotos = async (
       Math.min(...urls.flatMap(spotMediaUrls).map((url) => photoExpiresAt(url).valueOf()))
     );
     return { urls, expiresAt };
+  } catch {
+    return null;
+  }
+};
+
+/** 페이지 HTML의 대표 이미지(`og:image`, 없으면 `twitter:image`). 상대 주소는 페이지 주소 기준으로 푼다. */
+export const parsePageImage = async (html: string, pageUrl: string): Promise<string | null> => {
+  try {
+    // 메타 태그만 읽는다. 대체 규칙(본문 첫 <img> 등)은 로고·아이콘을 고르기 쉬워 끈다.
+    const { result } = await ogs({ html, onlyGetOpenGraphInfo: true });
+    const candidates = [...(result.ogImage ?? []), ...(result.twitterImage ?? [])];
+    for (const { url } of candidates) {
+      try {
+        const resolved = new URL(decodeEntities(url.trim()), pageUrl).toString();
+        if (isHttp(resolved)) return resolved;
+      } catch {
+        // 주소로 읽을 수 없는 값은 건너뛴다.
+      }
+    }
+  } catch {
+    // 메타 태그를 못 읽으면 대표 이미지가 없는 것으로 본다.
+  }
+  return null;
+};
+
+/** 근거 페이지의 대표 이미지 한 장. 못 읽거나 없으면 null */
+export const fetchPageImage = async (sourceUrl: string): Promise<SpotPhotos | null> => {
+  try {
+    const res = await fetch(sourceUrl, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (!res.ok || !/html/i.test(res.headers.get("content-type") ?? "")) return null;
+    const image = await parsePageImage(await res.text(), res.url || sourceUrl);
+    return image ? { urls: [image], expiresAt: new Date(Date.now() + PAGE_IMAGE_TTL_MS) } : null;
   } catch {
     return null;
   }

@@ -55,6 +55,9 @@ const optionalText = (max: number) =>
     .nullish()
     .transform((v) => v || null);
 
+/** 즐길 거리 분류 중 게임인지 — 하치와레가 "게임", "협동 게임"처럼 써도 잡는다. */
+export const isGameCategory = (category: string) => category.includes("게임");
+
 const instagramUrlField = z
   .string()
   .max(500)
@@ -116,6 +119,15 @@ export const agentSpotSchema = z
         path: ["instagramUrl"],
         message:
           "장소는 인스타그램 게시물 주소(instagram.com/p/… 또는 /reel/…)가 있어야 해요.",
+      });
+    }
+    // 게임은 상점에서 직접 고르지 않고 인스타그램 게시물이 소개한 것만 추천한다.
+    if (spot.kind === "content" && isGameCategory(spot.category) && !spot.instagramUrl) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["instagramUrl"],
+        message:
+          "게임은 그 게임을 소개한 인스타그램 게시물 주소(instagram.com/p/… 또는 /reel/…)가 있어야 해요.",
       });
     }
     if (spot.kind === "content" && !spot.instagramUrl && !spot.sourceUrl) {

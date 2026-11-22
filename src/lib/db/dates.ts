@@ -12,7 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { fetchInstagramPhotos } from "@/lib/dates/photo";
+import { fetchInstagramPhotos, fetchPageImage } from "@/lib/dates/photo";
 import {
   type AgentDigestInput,
   DATE_REACTIONS,
@@ -367,7 +367,7 @@ const PHOTO_RETRY_MS = 6 * 60 * 60 * 1000;
 const PHOTO_BATCH = 12;
 
 /**
- * 사진이 없거나 만료가 가까운 장소의 사진 주소를 공식 임베드에서 다시 읽는다.
+ * 사진이 없거나 만료가 가까운 추천의 사진 주소를 인스타그램 임베드(없으면 근거 페이지의 대표 이미지)에서 다시 읽는다.
  * `spotIds`를 주면 그 장소만, 아니면 고른 날(`digestId`)의 장소와 찜한 곳 중에서 고른다.
  */
 export const refreshSpotPhotos = async (target: {
@@ -385,13 +385,17 @@ export const refreshSpotPhotos = async (target: {
   const retryBefore = new Date(now - PHOTO_RETRY_MS);
   const hasNoPhotos = sql`cardinality(${spotsT.photoUrls}) = 0`;
   const stale = await db
-    .select({ id: spotsT.id, instagramUrl: spotsT.instagramUrl })
+    .select({
+      id: spotsT.id,
+      instagramUrl: spotsT.instagramUrl,
+      sourceUrl: spotsT.sourceUrl,
+    })
     .from(spotsT)
     .where(
       and(
         scope,
-        // 인스타그램 근거가 없는 즐길거리는 읽을 사진이 없다.
-        isNotNull(spotsT.instagramUrl),
+        // 인스타그램 게시물도 근거 페이지도 없으면 읽을 사진이 없다.
+        or(isNotNull(spotsT.instagramUrl), isNotNull(spotsT.sourceUrl)),
         or(
           // 한 번도 안 찾아봤거나, 못 찾은 지 오래됐거나
           and(
@@ -415,8 +419,10 @@ export const refreshSpotPhotos = async (target: {
 
   await Promise.all(
     stale.map(async (spot) => {
-      if (!spot.instagramUrl) return;
-      const photos = await fetchInstagramPhotos(spot.instagramUrl);
+      // 인스타그램 게시물 사진을 먼저 쓰고, 없거나 못 읽으면 근거 페이지의 대표 이미지를 쓴다.
+      const photos =
+        (spot.instagramUrl ? await fetchInstagramPhotos(spot.instagramUrl) : null) ??
+        (spot.sourceUrl ? await fetchPageImage(spot.sourceUrl) : null);
       await db
         .update(spotsT)
         .set({
