@@ -90,7 +90,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
     entry != null &&
     entry.mapUrl !== "" &&
     extractMapUrl(mapUrl) === entry.mapUrl &&
-    Boolean(entry.mapImageUrl || entry.mapPlaceName);
+    Boolean(entry.mapImageUrls.length || entry.mapPlaceName);
   const [tags, setTags] = useState(entry?.tags ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   // undefined면 아직 고르지 않은 상태라 날짜로 여행을 추천한다.
@@ -463,7 +463,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
               <MapPlaceCard
                 url={entry.mapUrl}
                 placeName={entry.mapPlaceName}
-                imageUrl={entry.mapImageUrl}
+                imageUrls={entry.mapImageUrls}
               />
             ) : (
               isNaverMapUrl(extractMapUrl(mapUrl)) && (

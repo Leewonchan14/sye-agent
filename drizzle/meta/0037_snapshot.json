@@ -1,5 +1,5 @@
 {
-  "id": "d051c3a8-f4af-4676-aedf-071f486f1d0d",
+  "id": "2c3ce671-357b-483f-8993-46f6a524f9b7",
   "prevId": "16ee8c45-39d1-467d-a038-89643f2ab892",
   "version": "7",
   "dialect": "postgresql",
@@ -1041,12 +1041,12 @@
           "notNull": true,
           "default": "''"
         },
-        "map_image_url": {
-          "name": "map_image_url",
-          "type": "text",
+        "map_image_urls": {
+          "name": "map_image_urls",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "''"
+          "default": "'[]'::jsonb"
         },
         "tags": {
           "name": "tags",

@@ -58,7 +58,8 @@ export const LedgerEntryRow = ({ entry, onEdit, reserveMapSlot }: RowProps) => {
         <MapLinkButton
           url={entry.mapUrl}
           label={title}
-          imageUrl={entry.mapImageUrl}
+          imageUrls={entry.mapImageUrls}
+          showCount
           className="size-10"
         />
       ) : (

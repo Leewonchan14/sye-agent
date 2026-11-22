@@ -12,7 +12,11 @@ import {
   findUnusualSpending,
   type InsightEntry,
 } from "../src/lib/ledger/insights";
-import { extractNaverPlaceId, parseNaverPlaceHtml } from "../src/lib/ledger/naver-place";
+import {
+  extractNaverPlaceId,
+  parseNaverPlaceHtml,
+  toPlacePhotoUrl,
+} from "../src/lib/ledger/naver-place";
 import {
   parseLedgerNotifications,
   suggestLedgerCategoryName,
@@ -512,14 +516,46 @@ test.describe("네이버 지도 링크", () => {
   test("플레이스 페이지에서 장소 이름과 대표 사진을 읽는다", () => {
     const html = `<meta id="og:title" property="og:title" content="더 하우스 오브 테라로사 서울 : 네이버\x1c" data-isomorphic-meta="true"/>
       <meta id="og:image" property="og:image" content="https://search.pstatic.net/common/?autoRotate=true&amp;type=f640_380&amp;src=a.jpg"/>`;
+    // 상단 사진 목록이 없으면 og:image 한 장을 쓴다.
     expect(parseNaverPlaceHtml(html)).toEqual({
       placeName: "더 하우스 오브 테라로사 서울",
-      imageUrl:
+      imageUrls: [
         "https://search.pstatic.net/common/?autoRotate=true&type=f640_380&src=a.jpg",
+      ],
     });
     // https가 아닌 사진은 쓰지 않는다.
     expect(
       parseNaverPlaceHtml('<meta property="og:image" content="javascript:alert(1)"/>')
-    ).toEqual({ placeName: "", imageUrl: "" });
+    ).toEqual({ placeName: "", imageUrls: [] });
+  });
+
+  test("상단 사진 목록에서 영상·https 아닌 것·중복을 빼고 최대 10장까지 읽는다", () => {
+    const state: Record<string, unknown> = {};
+    const photo = (key: string, item: Record<string, unknown>) => {
+      state[`PlaceDetailTopPhotoItem:${key}`] = {
+        mediaFormat: "image",
+        video: null,
+        ...item,
+      };
+    };
+    photo("a", { originalUrl: "https://x.pstatic.net/a.jpg", title: '괄호 "}{" 문자열' });
+    photo("clip", {
+      mediaFormat: "video",
+      video: { id: 1 },
+      originalUrl: "https://x/v.jpg",
+    });
+    photo("http", { originalUrl: "http://x.pstatic.net/insecure.jpg" });
+    photo("dup", { originalUrl: "https://x.pstatic.net/a.jpg" });
+    for (let i = 0; i < 12; i += 1) photo(`n${i}`, { originalUrl: `https://x/${i}.jpg` });
+    const html = `<meta property="og:image" content="https://og.jpg"/>
+      <script>window.__APOLLO_STATE__ = ${JSON.stringify(state)};window.__OTHER__ = {"a":1};</script>`;
+
+    const { imageUrls } = parseNaverPlaceHtml(html);
+    expect(imageUrls).toHaveLength(10);
+    expect(imageUrls[0]).toBe(toPlacePhotoUrl("https://x.pstatic.net/a.jpg"));
+    expect(imageUrls[1]).toBe(toPlacePhotoUrl("https://x/0.jpg"));
+    expect(imageUrls[0]).toMatch(
+      /^https:\/\/search\.pstatic\.net\/common\/\?.*type=f640_380&src=https%3A%2F%2Fx\.pstatic\.net%2Fa\.jpg$/
+    );
   });
 });

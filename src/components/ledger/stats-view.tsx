@@ -930,7 +930,7 @@ const PeriodEntriesCard = ({
                   <MapLinkButton
                     url={entry.mapUrl}
                     label={entry.memo.trim() || (isIncome ? "입금" : "지출")}
-                    imageUrl={entry.mapImageUrl}
+                    imageUrls={entry.mapImageUrls}
                     className="size-7 rounded-md"
                   />
                 ) : (

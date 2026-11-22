@@ -38,8 +38,8 @@ export type LedgerEntryView = {
   mapUrl: string;
   /** 네이버 지도 링크에서 읽은 장소 이름. 없으면 빈 문자열 */
   mapPlaceName: string;
-  /** 네이버 지도 링크에서 읽은 대표 사진 주소. 없으면 빈 문자열 */
-  mapImageUrl: string;
+  /** 네이버 지도 링크에서 읽은 장소 사진 주소들. 앞의 것이 대표 사진 */
+  mapImageUrls: string[];
   tags: string;
   tripId: number | null;
   tripName: string | null;
@@ -438,7 +438,7 @@ export const toLedgerEntryView = (
     note: entry.note,
     mapUrl: entry.mapUrl,
     mapPlaceName: entry.mapPlaceName,
-    mapImageUrl: entry.mapImageUrl,
+    mapImageUrls: entry.mapImageUrls,
     tripId: entry.tripId,
     tripName: entry.tripId == null ? null : (tripById.get(entry.tripId)?.name ?? null),
   };
@@ -871,7 +871,7 @@ export const ensureJointAssetId = async (): Promise<number> => {
 /** 지도 링크로 장소 이름·사진을 채운다. 네이버 지도가 아니거나 읽지 못하면 비운다. */
 const readMapPlace = async (mapUrl: string) => {
   const place = mapUrl ? await fetchNaverPlacePreview(mapUrl) : null;
-  return { mapPlaceName: place?.placeName ?? "", mapImageUrl: place?.imageUrl ?? "" };
+  return { mapPlaceName: place?.placeName ?? "", mapImageUrls: place?.imageUrls ?? [] };
 };
 
 export const createLedgerEntry = async (
@@ -1045,7 +1045,7 @@ export const updateLedgerEntry = async (
   // 링크가 바뀌었거나, 예전에 사진을 못 읽은 링크를 다시 저장하면 장소 정보를 새로 읽는다.
   const needsMapPlace =
     mapUrl !== undefined &&
-    (mapUrl !== before.mapUrl || (!before.mapPlaceName && !before.mapImageUrl));
+    (mapUrl !== before.mapUrl || (!before.mapPlaceName && !before.mapImageUrls.length));
   const mapUrlPatch =
     mapUrl === undefined
       ? {}

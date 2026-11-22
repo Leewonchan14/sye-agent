@@ -1,9 +1,12 @@
 /**
- * 네이버 지도 링크에서 장소 이름과 대표 사진을 읽는다.
+ * 네이버 지도 링크에서 장소 이름과 사진들을 읽는다.
  *
  * 앱의 공유 링크(`https://naver.me/...`)는 `map.naver.com?...&pinId=<장소 id>`를 거쳐
  * `map.naver.com/p/entry/place/<장소 id>`로 넘어간다. 장소 id를 찾으면 모바일 플레이스 페이지
- * (`m.place.naver.com/place/<id>/home`)의 og:title·og:image를 읽는다.
+ * (`m.place.naver.com/place/<id>/home`)를 읽는다.
+ * - 이름: og:title
+ * - 사진: 페이지에 들어 있는 데이터(`__APOLLO_STATE__`)의 상단 사진 목록(`topPhotos`).
+ *   업체·방문자 사진만 쓰고 영상은 뺀다. 목록이 없으면 og:image 한 장을 쓴다.
  *
  * 사진 파일은 저장하지 않고 주소만 저장한다. 화면은 네이버 이미지 서버에서 바로 받는다.
  * 읽지 못하면 null을 돌려주고, 내역 저장은 그대로 진행한다.
@@ -19,10 +22,14 @@ const MOBILE_UA =
 const placeOrigin = () =>
   (process.env.NAVER_PLACE_ORIGIN || "https://m.place.naver.com").replace(/\/+$/, "");
 
+/** 한 장소에서 저장할 최대 사진 수 */
+export const MAX_PLACE_PHOTOS = 10;
+
 export interface NaverPlacePreview {
   placeId: string;
   placeName: string;
-  imageUrl: string;
+  /** 앞의 것이 대표 사진 */
+  imageUrls: string[];
 }
 
 const toUrl = (value: string): URL | null =>
@@ -94,13 +101,71 @@ const toPlaceName = (title: string | null) =>
     .replace(/\s*:\s*네이버\s*$/, "")
     .trim();
 
-export const parseNaverPlaceHtml = (html: string) => {
-  const image = metaContent(html, "og:image");
-  const imageUrl = image && /^https:\/\//.test(image) ? image : "";
-  return { placeName: toPlaceName(metaContent(html, "og:title")), imageUrl };
+const isHttps = (url: unknown): url is string =>
+  typeof url === "string" && /^https:\/\//.test(url);
+
+/** `window.__APOLLO_STATE__ = {...}`의 객체를 문자열 안의 괄호까지 따져 잘라 읽는다. */
+const readApolloState = (html: string): Record<string, unknown> | null => {
+  const marker = html.indexOf("__APOLLO_STATE__");
+  const start = marker < 0 ? -1 : html.indexOf("{", marker);
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < html.length; i += 1) {
+    const ch = html[i];
+    if (inString) {
+      if (ch === "\\") i += 1;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(html.slice(start, i + 1)) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
 };
 
-/** 네이버 지도 링크의 장소 이름·대표 사진. 네이버 링크가 아니거나 읽지 못하면 null */
+interface TopPhotoItem {
+  mediaFormat?: unknown;
+  video?: unknown;
+  originalUrl?: unknown;
+}
+
+/**
+ * 원본은 수 MB짜리도 있어, 네이버 이미지 서버가 640×380으로 줄여 준 주소를 쓴다.
+ * (og:image도 같은 꼴이다.)
+ */
+export const toPlacePhotoUrl = (originalUrl: string) =>
+  `https://search.pstatic.net/common/?autoRotate=true&quality=95&type=f640_380&src=${encodeURIComponent(originalUrl)}`;
+
+/** 상단 사진 목록의 사진 원본 주소들. 화면에 보이는 순서대로 */
+const readTopPhotos = (state: Record<string, unknown>): string[] =>
+  Object.entries(state)
+    .filter(([key]) => key.startsWith("PlaceDetailTopPhotoItem:"))
+    .map(([, value]) => value as TopPhotoItem)
+    .filter((item) => item.mediaFormat === "image" && !item.video)
+    .map((item) => item.originalUrl)
+    .filter(isHttps);
+
+export const parseNaverPlaceHtml = (html: string) => {
+  const state = readApolloState(html);
+  const photos = state ? readTopPhotos(state).map(toPlacePhotoUrl) : [];
+  const ogImage = metaContent(html, "og:image");
+  const imageUrls = photos.length ? photos : isHttps(ogImage) ? [ogImage] : [];
+  return {
+    placeName: toPlaceName(metaContent(html, "og:title")),
+    imageUrls: [...new Set(imageUrls)].slice(0, MAX_PLACE_PHOTOS),
+  };
+};
+
+/** 네이버 지도 링크의 장소 이름·사진들. 네이버 링크가 아니거나 읽지 못하면 null */
 export const fetchNaverPlacePreview = async (
   mapUrl: string
 ): Promise<NaverPlacePreview | null> => {
@@ -110,9 +175,9 @@ export const fetchNaverPlacePreview = async (
     if (!placeId) return null;
     const res = await fetchWithTimeout(`${placeOrigin()}/place/${placeId}/home`);
     if (!res.ok) return null;
-    const { placeName, imageUrl } = parseNaverPlaceHtml(await res.text());
-    if (!placeName && !imageUrl) return null;
-    return { placeId, placeName, imageUrl };
+    const { placeName, imageUrls } = parseNaverPlaceHtml(await res.text());
+    if (!placeName && !imageUrls.length) return null;
+    return { placeId, placeName, imageUrls };
   } catch (error) {
     console.warn("[ledger] 네이버 장소 사진을 읽지 못했어요.", error);
     return null;

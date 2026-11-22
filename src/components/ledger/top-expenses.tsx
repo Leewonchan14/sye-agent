@@ -113,7 +113,7 @@ export const EntryDateList = ({
                 <MapLinkButton
                   url={entry.mapUrl}
                   label={entryTitle(entry)}
-                  imageUrl={entry.mapImageUrl}
+                  imageUrls={entry.mapImageUrls}
                   className="size-6 rounded-md [&_svg]:size-3.5"
                 />
               ) : (
