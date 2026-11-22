@@ -13,7 +13,7 @@ import { kst } from "@/lib/kst";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** 고른 날(없으면 오늘, 오늘 조사가 없으면 가장 최근 날)의 추천과 찜 목록 */
+/** 고른 날(없으면 오늘, 오늘 조사가 없으면 가장 최근 날)의 추천과 찜·다녀온 곳 목록 */
 export const getDateOverview = async (day: string | null): Promise<DateOverview> => {
   const todayKey = kst().format("YYYY-MM-DD");
   const [settings, days, today] = await Promise.all([
@@ -33,7 +33,10 @@ export const getDateOverview = async (day: string | null): Promise<DateOverview>
   await refreshSpotPhotos({ digestId: digest?.id ?? null }).catch((error) =>
     console.error("[date-spots] photo", error)
   );
-  const liked = await listSpotsByReaction("like");
+  const [liked, visited] = await Promise.all([
+    listSpotsByReaction("like"),
+    listSpotsByReaction("visited"),
+  ]);
 
   return {
     settings,
@@ -41,6 +44,7 @@ export const getDateOverview = async (day: string | null): Promise<DateOverview>
     dayKey,
     days,
     liked,
+    visited,
     nextCollectAt:
       nextDateCollectAt(settings, Boolean(today?.autoState))?.toISOString() ?? null,
   };

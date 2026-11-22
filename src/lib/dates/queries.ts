@@ -68,14 +68,16 @@ const patchSpot = (
   if (!data) return data;
   const update = (s: DateSpotView) => (s.id === spotId ? { ...s, reaction } : s);
   const spots = data.digest?.spots.map(update) ?? [];
-  const changed =
-    spots.find((s) => s.id === spotId) ?? data.liked.find((s) => s.id === spotId);
+  const changed = [...spots, ...data.liked, ...data.visited].find((s) => s.id === spotId);
   const liked = data.liked.filter((s) => s.id !== spotId);
+  const visited = data.visited.filter((s) => s.id !== spotId);
   if (changed && reaction === "like") liked.unshift({ ...changed, reaction });
+  if (changed && reaction === "visited") visited.unshift({ ...changed, reaction });
   return {
     ...data,
     digest: data.digest ? { ...data.digest, spots } : null,
     liked,
+    visited,
   };
 };
 
