@@ -30,8 +30,8 @@ import {
   EntryIcon,
 } from "@/components/ledger/category-icon";
 import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
-import { MapLinkButton } from "@/components/ledger/map-link-button";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
+import { PlacePhotoStrip } from "@/components/ledger/place-photos";
 import {
   EntryDateList,
   groupTopExpenses,
@@ -808,7 +808,6 @@ const PeriodEntriesCard = ({
   const rows = entries.filter((entry) => kind === "all" || entry.kind === kind).reverse();
   const sortedRows = sortEntries(rows, sortKey, sortDir);
   const visibleRows = sortedRows.slice(0, visibleCount);
-  const hasMapLinks = visibleRows.some((entry) => entry.mapUrl);
 
   const expenseTotal = rows
     .filter((entry) => entry.kind === "expense")
@@ -904,11 +903,11 @@ const PeriodEntriesCard = ({
           {visibleRows.map((entry) => {
             const isIncome = entry.kind === "income";
             return (
-              <li key={entry.id} className="flex items-center gap-1">
+              <li key={entry.id}>
                 <button
                   type="button"
                   onClick={() => onEdit(entry)}
-                  className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="flex w-full items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   <EntryIcon entry={entry} size={20} />
                   <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
@@ -926,15 +925,16 @@ const PeriodEntriesCard = ({
                     {formatWon(entry.amount)}
                   </span>
                 </button>
-                {entry.mapUrl ? (
-                  <MapLinkButton
-                    url={entry.mapUrl}
-                    label={entry.memo.trim() || (isIncome ? "입금" : "지출")}
+                {entry.mapUrl && (
+                  // pl-7: 아이콘 + 간격
+                  <PlacePhotoStrip
+                    title={entry.memo.trim() || (isIncome ? "입금" : "지출")}
+                    mapUrl={entry.mapUrl}
+                    placeName={entry.mapPlaceName}
                     imageUrls={entry.mapImageUrls}
-                    className="size-7 rounded-md"
+                    size="sm"
+                    className="pb-2 pl-7"
                   />
-                ) : (
-                  hasMapLinks && <span aria-hidden className="size-7 shrink-0" />
                 )}
               </li>
             );

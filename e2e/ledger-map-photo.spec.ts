@@ -17,12 +17,16 @@ const ORIGINALS = [
   "https://blogfiles.pstatic.net/pasta-3.jpg",
 ];
 const PHOTOS = ORIGINALS.map(toPlacePhotoUrl);
+const MANY_ORIGINALS = Array.from(
+  { length: 6 },
+  (_, i) => `https://pup-review-phinf.pstatic.net/cafe-${i + 1}.jpg`
+);
 const CAFE_OG_IMAGE = "https://search.pstatic.net/common/?type=f640_380&src=cafe.jpg";
 
 /** 네이버 플레이스 페이지처럼 상단 사진 목록을 `__APOLLO_STATE__`에 넣는다. 영상은 빠져야 한다. */
-const apolloScript = (id: string) => {
+const apolloScript = (id: string, originals: string[]) => {
   const state: Record<string, unknown> = { ROOT_QUERY: { __typename: "Query" } };
-  ORIGINALS.forEach((originalUrl, index) => {
+  originals.forEach((originalUrl, index) => {
     state[`PlaceDetailTopPhotoItem:${id}_photo_${index}`] = {
       __typename: "PlaceDetailTopPhotoItem",
       mediaFormat: "image",
@@ -47,17 +51,22 @@ const PNG = Buffer.from(
   "base64"
 );
 
-const PLACES: Record<string, { title: string; image: string; photos: boolean }> = {
+const PLACES: Record<string, { title: string; image: string; photos: string[] }> = {
   "1001": {
     title: "성수 파스타집 : 네이버\x1c",
     image: "https://search.pstatic.net/common/?type=f640_380&amp;src=og.jpg",
-    photos: true,
+    photos: ORIGINALS,
   },
   // 상단 사진 목록이 없으면 og:image 한 장을 쓴다.
   "1002": {
     title: "망원 카페 : 네이버",
     image: CAFE_OG_IMAGE.replace(/&/g, "&amp;"),
-    photos: false,
+    photos: [],
+  },
+  "1003": {
+    title: "연남 카페 : 네이버",
+    image: CAFE_OG_IMAGE.replace(/&/g, "&amp;"),
+    photos: MANY_ORIGINALS,
   },
 };
 
@@ -79,7 +88,7 @@ test.beforeAll(
           `<html><head>
             <meta id="og:title" property="og:title" content="${place.title}"/>
             <meta id="og:image" property="og:image" content="${place.image}"/>
-          </head><body>${place.photos ? apolloScript(id!) : ""}</body></html>`
+          </head><body>${place.photos.length ? apolloScript(id!, place.photos) : ""}</body></html>`
         );
       });
       server.listen(FAKE_PLACE_PORT, "127.0.0.1", resolve);
@@ -138,21 +147,59 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
 
   await openLedger(page, token);
 
-  // 내역 줄의 지도 버튼은 첫 사진과 장수를 보여 준다.
-  const thumbLink = page.getByRole("link", { name: "성수동 파스타 지도 열기" }).first();
-  const thumb = thumbLink.locator("img");
-  await expect(thumb).toHaveAttribute("src", PHOTOS[0]);
+  // 내역 줄 아래에 장소 이름(누르면 지도)과 사진 띠가 붙는다.
+  const mapChip = page.getByRole("link", { name: "성수동 파스타 지도 열기" }).first();
+  await expect(mapChip).toHaveText("성수 파스타집");
+  await expect(mapChip).toHaveAttribute(
+    "href",
+    "https://map.naver.com/p/entry/place/1001"
+  );
+  const stripPhotos = page.getByRole("button", {
+    name: /^성수 파스타집 사진 \d 크게 보기$/,
+  });
+  await expect(stripPhotos).toHaveCount(3);
+  const firstThumb = stripPhotos.first().locator("img");
+  await expect(firstThumb).toHaveAttribute("src", PHOTOS[0]);
   await expect
-    .poll(() => thumb.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .poll(() => firstThumb.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0);
-  await expect(thumbLink).toContainText("3");
+  // 사진이 없는 줄에는 빈 자리를 두지 않아 금액이 오른쪽 끝에 붙는다.
+  await createEntry(request, "사진 없는 내역", "");
+  await page.reload();
+  const amountRight = async (memo: string) => {
+    const row = page.getByRole("button", { name: new RegExp(memo) }).first();
+    const box = (await row.getByText(/원$/).boundingBox())!;
+    return Math.round(box.x + box.width);
+  };
+  expect(await amountRight("사진 없는 내역")).toBe(await amountRight("성수동 파스타"));
+
+  // 사진을 누르면 크게 보고 넘긴다. 크게 볼 때는 1200×800 주소를 쓴다.
+  await page
+    .getByRole("button", { name: "성수 파스타집 사진 2 크게 보기" })
+    .first()
+    .click();
+  const viewer = page.getByRole("dialog", { name: "성수 파스타집 사진 크게 보기" });
+  await expect(viewer.getByText("2 / 3")).toBeVisible();
+  const large = viewer.getByRole("img", { name: "성수 파스타집 사진 2" });
+  await expect(large).toHaveAttribute("src", PHOTOS[1].replace("f640_380", "f1200_800"));
+  await expect(large).toBeInViewport();
+  await viewer.getByRole("button", { name: "다음 사진" }).click();
+  await expect(viewer.getByText("3 / 3")).toBeVisible();
+  await page.keyboard.press("ArrowLeft");
+  await expect(viewer.getByText("2 / 3")).toBeVisible();
+  await expect(viewer.getByRole("link", { name: /성수 파스타집/ })).toHaveAttribute(
+    "href",
+    "https://map.naver.com/p/entry/place/1001"
+  );
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
 
   // 수정 화면에서는 사진을 넘겨 보고, 장소 이름을 누르면 지도를 연다.
   await page
     .getByRole("button", { name: /성수동 파스타/ })
     .first()
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "내역 수정" });
   const photos = dialog.getByRole("region", { name: "성수 파스타집 사진 3장" });
   await expect(photos.getByRole("img")).toHaveCount(3);
   await expect(photos.getByText("1 / 3")).toBeVisible();
@@ -163,6 +210,13 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
   ).toBeInViewport();
   // 사진을 넘겨도 창은 저장되지 않고 그대로 열려 있다.
   await expect(dialog).toBeVisible();
+  // 수정 화면에서도 사진을 누르면 크게 보고, 닫으면 수정 화면으로 돌아온다.
+  await photos.getByRole("button", { name: "성수 파스타집 사진 2 크게 보기" }).click();
+  const cardViewer = page.getByRole("dialog", { name: "성수 파스타집 사진 크게 보기" });
+  await expect(cardViewer.getByText("2 / 3")).toBeVisible();
+  await cardViewer.getByRole("button", { name: "닫기" }).click();
+  await expect(cardViewer).toBeHidden();
+  await expect(dialog.locator("#ledger-map-url")).toBeVisible();
   const card = dialog.getByRole("link", { name: "성수 파스타집 지도 열기" });
   await expect(card).toHaveAttribute("href", "https://map.naver.com/p/entry/place/1001");
 
@@ -182,7 +236,7 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
   });
 });
 
-test("네이버가 아니거나 장소를 못 찾으면 사진 없이 핀으로 보여 준다", async ({
+test("네이버가 아니거나 장소를 못 찾으면 사진 없이 지도 칩만 보여 준다", async ({
   page,
   request,
 }) => {
@@ -198,9 +252,11 @@ test("네이버가 아니거나 장소를 못 찾으면 사진 없이 핀으로 
   });
 
   await openLedger(page, token);
+  // 사진이 없으면 지도 칩만 붙는다.
   await expect(
-    page.getByRole("link", { name: "카카오 카페 지도 열기" }).first().locator("img")
-  ).toHaveCount(0);
+    page.getByRole("link", { name: "카카오 카페 지도 열기" }).first()
+  ).toHaveText("지도");
+  await expect(page.getByRole("button", { name: /크게 보기$/ })).toHaveCount(0);
 
   await page
     .getByRole("button", { name: /없는 장소/ })
@@ -250,4 +306,37 @@ test("지도 링크를 보내지 않는 수정은 장소 사진을 그대로 둔
     map_place_name: "",
     map_image_urls: [],
   });
+});
+
+test("넓은 화면은 큰 사진 3장과 +N 칸, 좁은 화면은 모든 사진을 밀어 본다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, "연남 카페", "https://map.naver.com/p/entry/place/1003");
+  await openLedger(page, token);
+  const wide = (page.viewportSize()?.width ?? 0) >= 640;
+  const photoButtons = page.getByRole("button", {
+    name: /^연남 카페 사진 \d 크게 보기$/,
+  });
+  const moreButton = page.getByRole("button", { name: "연남 카페 사진 3장 더 보기" });
+
+  if (wide) {
+    // 큰 사진 3장(160×96) + 나머지 3장을 묶은 "+3" 칸
+    await expect(photoButtons.filter({ visible: true })).toHaveCount(3);
+    const box = (await photoButtons.first().boundingBox())!;
+    expect(Math.round(box.width)).toBe(160);
+    expect(Math.round(box.height)).toBe(96);
+    await expect(moreButton).toHaveText("+3");
+    // 장소 이름은 테두리 없는 글자 링크로 사진 위에 둔다.
+    const link = page.getByRole("link", { name: "연남 카페 지도 열기" }).first();
+    await expect(link).toHaveCSS("border-top-width", "0px");
+    expect((await link.boundingBox())!.y).toBeLessThan(box.y);
+    // "+3"을 누르면 4번째 사진부터 크게 본다.
+    await moreButton.click();
+    const viewer = page.getByRole("dialog", { name: "연남 카페 사진 크게 보기" });
+    await expect(viewer.getByText("4 / 6")).toBeVisible();
+  } else {
+    await expect(photoButtons).toHaveCount(6);
+    await expect(moreButton).toBeHidden();
+  }
 });
