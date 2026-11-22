@@ -149,7 +149,7 @@ export const DateSpotsPage = () => {
   const pickedOlderDay =
     data && !recentDays.some((d) => d.dayKey === data.dayKey) ? data.dayKey : null;
   /**
-   * 하트를 끄면 지우지 않고 다녀온 곳으로 옮길지 묻는다.
+   * 하트를 끄면 가 보고 싶은 곳에서 뺄지 묻고, 빼면 지우지 않고 다녀온 곳으로 옮긴다.
    * 다녀왔어를 끄거나 "별로"로 바꾸면 어느 탭에도 남지 않으므로 뺄지 한 번 묻는다.
    * 하트·다녀왔어를 새로 켜는 건 바로 바꾼다.
    */
@@ -343,23 +343,18 @@ export const DateSpotsPage = () => {
       <AlertDialog open={ask !== null} onOpenChange={(open) => !open && setAsk(null)}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {ask?.move ? "다녀온 곳으로 옮길까요?" : `${askFrom}에서 뺄까요?`}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{askFrom}에서 뺄까요?</AlertDialogTitle>
             <AlertDialogDescription>
               {ask &&
                 (ask.move
-                  ? `‘${ask.spot.name}’ 카드를 다녀온 곳 탭으로 옮겨요.`
+                  ? `‘${ask.spot.name}’ 카드는 지워지지 않고 다녀온 곳 탭으로 옮겨져요.`
                   : `‘${ask.spot.name}’ 카드가 ${askFrom} 목록에서 사라져요.`)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>그대로 둘래</AlertDialogCancel>
-            <AlertDialogAction
-              variant={ask?.move ? "default" : "destructive"}
-              onClick={confirmAsk}
-            >
-              {ask?.move ? "옮길래" : "뺄래"}
+            <AlertDialogAction variant="destructive" onClick={confirmAsk}>
+              뺄래
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
