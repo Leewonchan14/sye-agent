@@ -149,27 +149,32 @@ export const DateSpotsPage = () => {
   const pickedOlderDay =
     data && !recentDays.some((d) => d.dayKey === data.dayKey) ? data.dayKey : null;
   /**
-   * 하트나 "다녀왔어"를 끄거나 "별로"로 바꾸면 그 카드가 가 보고 싶은 곳·다녀온 곳 탭에서 사라지므로
-   * 한 번 묻는다. 가 보고 싶은 곳 ↔ 다녀온 곳처럼 탭만 옮기는 건 바로 바꾼다.
+   * 하트를 끄면 지우지 않고 다녀온 곳으로 옮길지 묻는다.
+   * 다녀왔어를 끄거나 "별로"로 바꾸면 어느 탭에도 남지 않으므로 뺄지 한 번 묻는다.
+   * 하트·다녀왔어를 새로 켜는 건 바로 바꾼다.
    */
-  const [removal, setRemoval] = useState<{
+  const [ask, setAsk] = useState<{
     spot: DateSpotView;
     reaction: DateReaction | null;
+    move: boolean;
   } | null>(null);
   const onReact = (spot: DateSpotView, reaction: DateReaction | null) => {
+    if (spot.reaction === "like" && reaction === null) {
+      setAsk({ spot, reaction: "visited", move: true });
+      return;
+    }
     const kept = spot.reaction === "like" || spot.reaction === "visited";
     if (kept && (reaction === null || reaction === "pass")) {
-      setRemoval({ spot, reaction });
+      setAsk({ spot, reaction, move: false });
       return;
     }
     react.mutate({ spotId: spot.id, reaction });
   };
-  const confirmRemoval = () => {
-    if (removal) react.mutate({ spotId: removal.spot.id, reaction: removal.reaction });
-    setRemoval(null);
+  const confirmAsk = () => {
+    if (ask) react.mutate({ spotId: ask.spot.id, reaction: ask.reaction });
+    setAsk(null);
   };
-  const removalFrom =
-    removal?.spot.reaction === "visited" ? "다녀온 곳" : "가 보고 싶은 곳";
+  const askFrom = ask?.spot.reaction === "visited" ? "다녀온 곳" : "가 보고 싶은 곳";
 
   return (
     <SidebarLayout activeNav="dates">
@@ -335,22 +340,26 @@ export const DateSpotsPage = () => {
         <div className="h-6" />
       </main>
 
-      <AlertDialog
-        open={removal !== null}
-        onOpenChange={(open) => !open && setRemoval(null)}
-      >
+      <AlertDialog open={ask !== null} onOpenChange={(open) => !open && setAsk(null)}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>{removalFrom}에서 뺄까요?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {ask?.move ? "다녀온 곳으로 옮길까요?" : `${askFrom}에서 뺄까요?`}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {removal &&
-                `‘${removal.spot.name}’ 카드가 ${removalFrom} 목록에서 사라져요.`}
+              {ask &&
+                (ask.move
+                  ? `‘${ask.spot.name}’ 카드를 다녀온 곳 탭으로 옮겨요.`
+                  : `‘${ask.spot.name}’ 카드가 ${askFrom} 목록에서 사라져요.`)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>그대로 둘래</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmRemoval}>
-              뺄래
+            <AlertDialogAction
+              variant={ask?.move ? "default" : "destructive"}
+              onClick={confirmAsk}
+            >
+              {ask?.move ? "옮길래" : "뺄래"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

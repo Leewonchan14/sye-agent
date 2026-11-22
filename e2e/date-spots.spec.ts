@@ -405,7 +405,7 @@ test("보고 있는 탭이 주소(?tab=)에 남고, 뒤로 가기·새로고침�
   await expect(daily).toBeVisible();
 });
 
-test("다녀온 곳은 따로 탭에 모이고, 목록에서 빠지게 하는 표시는 한 번 묻고 바꾼다", async ({
+test("하트를 끄면 다녀온 곳으로 옮길지 묻고, 다녀온 곳에서 빼는 건 한 번 묻는다", async ({
   page,
   request,
 }) => {
@@ -424,26 +424,24 @@ test("다녀온 곳은 따로 탭에 모이고, 목록에서 빠지게 하는 �
     (await pool.query("select reaction from date_spots where name = $1", [name])).rows[0]
       .reaction;
 
-  // 하트를 끄려 하면 먼저 묻고, "그대로 둘래"면 아무것도 바뀌지 않는다.
+  // 하트를 끄면 지우지 않고 다녀온 곳으로 옮길지 묻는다. "그대로 둘래"면 아무것도 바뀌지 않는다.
   await likedTab.click();
   const cafe = liked.getByRole("article", { name: "어제 간 카페" });
   await cafe.getByRole("button", { name: "가 보고 싶어" }).click();
-  await expect(dialog).toContainText("가 보고 싶은 곳에서 뺄까요?");
-  await expect(dialog).toContainText(
-    "‘어제 간 카페’ 카드가 가 보고 싶은 곳 목록에서 사라져요."
-  );
+  await expect(dialog).toContainText("다녀온 곳으로 옮길까요?");
+  await expect(dialog).toContainText("‘어제 간 카페’ 카드를 다녀온 곳 탭으로 옮겨요.");
   await dialog.getByRole("button", { name: "그대로 둘래" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(cafe).toBeVisible();
   expect(await reactionOf("어제 간 카페")).toBe("like");
 
-  // "뺄래"를 눌러야 목록에서 빠진다.
+  // "옮길래"를 누르면 다녀온 곳으로 간다.
   await cafe.getByRole("button", { name: "가 보고 싶어" }).click();
-  await dialog.getByRole("button", { name: "뺄래" }).click();
+  await dialog.getByRole("button", { name: "옮길래" }).click();
   await expect(cafe).toHaveCount(0);
-  await expect.poll(() => reactionOf("어제 간 카페")).toBeNull();
+  await expect.poll(() => reactionOf("어제 간 카페")).toBe("visited");
 
-  // 다녀왔어는 묻지 않고 다녀온 곳 탭으로 옮긴다.
+  // 다녀왔어를 직접 누르면 묻지 않고 다녀온 곳 탭으로 옮긴다.
   await liked
     .getByRole("article", { name: "그저께 간 전시" })
     .getByRole("button", { name: "다녀왔어" })
@@ -455,15 +453,19 @@ test("다녀온 곳은 따로 탭에 모이고, 목록에서 빠지게 하는 �
   await expect(page).toHaveURL(/[?&]tab=visited/);
   const exhibit = visited.getByRole("article", { name: "그저께 간 전시" });
   await expect(exhibit).toBeVisible();
+  await expect(visited.getByRole("article", { name: "어제 간 카페" })).toBeVisible();
 
-  // 다녀온 곳에서 빼는 것도 한 번 묻는다.
+  // 다녀온 곳에서 빼는 건 한 번 묻는다.
   await exhibit.getByRole("button", { name: "다녀왔어" }).click();
   await expect(dialog).toContainText("다녀온 곳에서 뺄까요?");
+  await expect(dialog).toContainText(
+    "‘그저께 간 전시’ 카드가 다녀온 곳 목록에서 사라져요."
+  );
   await dialog.getByRole("button", { name: "뺄래" }).click();
   await expect(exhibit).toHaveCount(0);
   await expect.poll(() => reactionOf("그저께 간 전시")).toBeNull();
 
-  // 하트를 새로 켤 때는 묻지 않는다.
+  // 다녀온 곳에서 다시 하트를 켤 때는 묻지 않는다.
   await page.goto(`/dates?day=${daysAgo(1)}`);
   await page
     .getByRole("article", { name: "어제 간 카페" })
