@@ -1,5 +1,7 @@
 "use client";
 
+import { MapPin } from "lucide-react";
+
 import { EntryIcon } from "@/components/ledger/category-icon";
 import type { LedgerEntryView } from "@/lib/db/ledger";
 import { formatWon } from "@/lib/ledger/format";
@@ -31,7 +33,16 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
     >
       <EntryIcon entry={entry} size={36} className="rounded-[10px]" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-ink">{title}</span>
+        <span className="flex items-center gap-1">
+          <span className="truncate text-[13px] font-medium text-ink">{title}</span>
+          {entry.mapUrl && (
+            <MapPin
+              className="size-3 shrink-0 text-muted"
+              role="img"
+              aria-label="지도 링크 있음"
+            />
+          )}
+        </span>
         <span className="mt-0.5 block truncate text-[11px] text-muted">{meta}</span>
         {entry.note && (
           <span className="mt-0.5 block truncate text-[11px] text-muted/80">

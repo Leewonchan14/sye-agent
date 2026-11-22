@@ -1,0 +1,1 @@
+ALTER TABLE "ledger_entries" ADD COLUMN IF NOT EXISTS "map_url" text DEFAULT '' NOT NULL;

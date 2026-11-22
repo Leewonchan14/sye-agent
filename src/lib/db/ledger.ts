@@ -14,6 +14,7 @@ import {
   type LedgerCategoryColorKey,
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
+import { extractMapUrl, isHttpUrl, MAX_MAP_URL_LENGTH } from "@/lib/ledger/map-url";
 import { suggestLedgerCategoryName } from "@/lib/ledger/notification";
 
 export type LedgerEntryKind = "expense" | "income";
@@ -32,6 +33,8 @@ export type LedgerEntryView = {
   categoryColor: LedgerCategoryColorKey | null;
   memo: string;
   note: string;
+  /** 장소 지도 링크. 없으면 빈 문자열 */
+  mapUrl: string;
   tags: string;
   tripId: number | null;
   tripName: string | null;
@@ -124,6 +127,8 @@ export interface LedgerEntryInput {
   memo?: string;
   /** 생략하면 수정할 때 기존 메모를 그대로 둔다. */
   note?: string;
+  /** 생략하면 수정할 때 기존 지도 링크를 그대로 둔다. */
+  mapUrl?: string;
   tags?: string;
   /** 생략하면 날짜로 여행을 찾고, null이면 여행에 넣지 않는다. */
   tripId?: number | null;
@@ -282,6 +287,20 @@ export const normalizeEntryNote = (value: unknown): string => {
   return note;
 };
 
+export const normalizeEntryMapUrl = (value: unknown): string => {
+  if (value == null) return "";
+  if (typeof value !== "string") throw new LedgerError("지도 링크를 확인해 주세요.");
+  if (!value.trim()) return "";
+  const raw = extractMapUrl(value);
+  if (raw.length > MAX_MAP_URL_LENGTH) {
+    throw new LedgerError(`지도 링크는 ${MAX_MAP_URL_LENGTH}자 이하로 입력해 주세요.`);
+  }
+  if (!isHttpUrl(raw)) {
+    throw new LedgerError("지도 링크는 https://로 시작하는 주소로 입력해 주세요.");
+  }
+  return new URL(raw).href;
+};
+
 const normalizeTags = (value: unknown): string => {
   if (value == null) return "";
   if (typeof value !== "string") throw new LedgerError("태그를 확인해 주세요.");
@@ -412,6 +431,7 @@ export const toLedgerEntryView = (
     categoryColor: (category?.color ?? null) as LedgerCategoryColorKey | null,
     memo: entry.memo,
     note: entry.note,
+    mapUrl: entry.mapUrl,
     tripId: entry.tripId,
     tripName: entry.tripId == null ? null : (tripById.get(entry.tripId)?.name ?? null),
   };
@@ -855,9 +875,10 @@ export const createLedgerEntry = async (
   );
   const assetId = await ensureJointAssetId();
   const note = normalizeEntryNote(input.note);
+  const mapUrl = normalizeEntryMapUrl(input.mapUrl);
   const [entry] = await getDb()
     .insert(schema.ledgerEntries)
-    .values({ ...values, note, assetId, member: "joint", tripId })
+    .values({ ...values, note, mapUrl, assetId, member: "joint", tripId })
     .returning();
   await logEntryHistory(entry.id, "create", source, null, entry);
   return entry;
@@ -1004,10 +1025,12 @@ export const updateLedgerEntry = async (
   // 메모를 보내지 않는 호출(에이전트 등)이 기존 메모를 지우지 않게 한다.
   const notePatch =
     input.note === undefined ? {} : { note: normalizeEntryNote(input.note) };
+  const mapUrlPatch =
+    input.mapUrl === undefined ? {} : { mapUrl: normalizeEntryMapUrl(input.mapUrl) };
   const before = await findActiveEntry(entryId);
   const [entry] = await getDb()
     .update(schema.ledgerEntries)
-    .set({ ...values, ...notePatch, ...tripPatch, updatedAt: new Date() })
+    .set({ ...values, ...notePatch, ...mapUrlPatch, ...tripPatch, updatedAt: new Date() })
     .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
     .returning();
   if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");

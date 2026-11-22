@@ -1588,7 +1588,7 @@ test("CSV 내보내기: Excel용 BOM, 수식 이스케이프, 삭제 내역 제�
   const bytes = await res.body();
   expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
   const csv = bytes.toString("utf-8");
-  expect(csv).toContain("날짜,시각,구분,금액,분류,내용,메모,태그");
+  expect(csv).toContain("날짜,시각,구분,금액,분류,내용,메모,태그,여행,지도");
   expect(csv).toContain("'=SUM(A1)");
   expect(csv).not.toContain("지운 기록");
 });
