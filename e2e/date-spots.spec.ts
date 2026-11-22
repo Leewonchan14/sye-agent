@@ -182,7 +182,9 @@ const startFakeHermes = () =>
           ? ""
           : `<meta content="${STORE_IMAGE_PATH}?v=1&amp;w=640" property="og:image" />`;
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(`<html><head><title>상점</title>${meta}</head><body><img src="/img/logo.png" /></body></html>`);
+        res.end(
+          `<html><head><title>상점</title>${meta}</head><body><img src="/img/logo.png" /></body></html>`
+        );
         return;
       }
       if (req.method === "GET" && path.startsWith("/img/")) {
@@ -401,6 +403,74 @@ test("보고 있는 탭이 주소(?tab=)에 남고, 뒤로 가기·새로고침�
   await page.goto("/dates?tab=unknown");
   await expect(dailyTab).toHaveAttribute("aria-pressed", "true");
   await expect(daily).toBeVisible();
+});
+
+test("다녀온 곳은 따로 탭에 모이고, 목록에서 빠지게 하는 표시는 한 번 묻고 바꾼다", async ({
+  page,
+  request,
+}) => {
+  await seedDigest(daysAgo(1), "어제 간 카페");
+  await seedDigest(daysAgo(2), "그저께 간 전시");
+  await pool.query("update date_spots set reaction = 'like'");
+  const token = await login(request);
+  await openDates(page, token);
+
+  const likedTab = page.getByRole("button", { name: /가 보고 싶은 곳/ });
+  const visitedTab = page.getByRole("button", { name: /다녀온 곳/ });
+  const liked = page.getByRole("region", { name: "가 보고 싶은 곳" });
+  const visited = page.getByRole("region", { name: "다녀온 곳" });
+  const dialog = page.getByRole("alertdialog");
+  const reactionOf = async (name: string) =>
+    (await pool.query("select reaction from date_spots where name = $1", [name])).rows[0]
+      .reaction;
+
+  // 하트를 끄려 하면 먼저 묻고, "그대로 둘래"면 아무것도 바뀌지 않는다.
+  await likedTab.click();
+  const cafe = liked.getByRole("article", { name: "어제 간 카페" });
+  await cafe.getByRole("button", { name: "가 보고 싶어" }).click();
+  await expect(dialog).toContainText("가 보고 싶은 곳에서 뺄까요?");
+  await expect(dialog).toContainText(
+    "‘어제 간 카페’ 카드가 가 보고 싶은 곳 목록에서 사라져요."
+  );
+  await dialog.getByRole("button", { name: "그대로 둘래" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(cafe).toBeVisible();
+  expect(await reactionOf("어제 간 카페")).toBe("like");
+
+  // "뺄래"를 눌러야 목록에서 빠진다.
+  await cafe.getByRole("button", { name: "가 보고 싶어" }).click();
+  await dialog.getByRole("button", { name: "뺄래" }).click();
+  await expect(cafe).toHaveCount(0);
+  await expect.poll(() => reactionOf("어제 간 카페")).toBeNull();
+
+  // 다녀왔어는 묻지 않고 다녀온 곳 탭으로 옮긴다.
+  await liked
+    .getByRole("article", { name: "그저께 간 전시" })
+    .getByRole("button", { name: "다녀왔어" })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect(liked.getByRole("article", { name: "그저께 간 전시" })).toHaveCount(0);
+  await expect.poll(() => reactionOf("그저께 간 전시")).toBe("visited");
+  await visitedTab.click();
+  await expect(page).toHaveURL(/[?&]tab=visited/);
+  const exhibit = visited.getByRole("article", { name: "그저께 간 전시" });
+  await expect(exhibit).toBeVisible();
+
+  // 다녀온 곳에서 빼는 것도 한 번 묻는다.
+  await exhibit.getByRole("button", { name: "다녀왔어" }).click();
+  await expect(dialog).toContainText("다녀온 곳에서 뺄까요?");
+  await dialog.getByRole("button", { name: "뺄래" }).click();
+  await expect(exhibit).toHaveCount(0);
+  await expect.poll(() => reactionOf("그저께 간 전시")).toBeNull();
+
+  // 하트를 새로 켤 때는 묻지 않는다.
+  await page.goto(`/dates?day=${daysAgo(1)}`);
+  await page
+    .getByRole("article", { name: "어제 간 카페" })
+    .getByRole("button", { name: "가 보고 싶어" })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => reactionOf("어제 간 카페")).toBe("like");
 });
 
 test("최근 날짜는 칩으로, 그 전 날짜는 달력으로 고른다", async ({ page, request }) => {
@@ -995,7 +1065,11 @@ test("인스타 게시물이 없는 즐길 거리는 소개 페이지의 대표 
   request,
 }) => {
   nextSpots = () => [
-    content("연말 재즈 공연", { area: "마포", category: "공연·영화", period: "12.20~12.31" }),
+    content("연말 재즈 공연", {
+      area: "마포",
+      category: "공연·영화",
+      period: "12.20~12.31",
+    }),
     content("대표 이미지 없는 집데이트"),
   ];
   const token = await login(request);

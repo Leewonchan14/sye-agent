@@ -195,5 +195,7 @@ export interface DateOverview {
   days: DateDaySummary[];
   /** 가 보고 싶다고 표시한 곳 (최신순) */
   liked: DateSpotView[];
+  /** 다녀왔다고 표시한 곳 (최신순) */
+  visited: DateSpotView[];
   nextCollectAt: string | null;
 }

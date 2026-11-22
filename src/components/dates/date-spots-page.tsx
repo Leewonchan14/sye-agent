@@ -1,6 +1,12 @@
 "use client";
 
-import { CalendarHeart, Heart, SlidersHorizontal, Sparkles } from "lucide-react";
+import {
+  CalendarHeart,
+  Footprints,
+  Heart,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { createParser, parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 
@@ -8,6 +14,16 @@ import { DateDayPicker } from "@/components/dates/day-picker";
 import { DateSettingsDialog } from "@/components/dates/settings-dialog";
 import { SpotCard } from "@/components/dates/spot-card";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -16,13 +32,15 @@ import type { DateOverview, DateReaction, DateSpotView } from "@/lib/dates/types
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
 
-const TABS = ["daily", "liked"] as const;
+const TABS = ["daily", "liked", "visited"] as const;
 
 /**
  * 보고 있는 탭은 `?tab=`으로 주소에 남긴다. 기본값(매일 추천)이면 주소에서 빠지고,
  * 탭을 바꿀 때마다 히스토리를 쌓아 뒤로 가기로 이전 탭에 돌아간다.
  */
-const parseAsTab = parseAsStringLiteral(TABS).withDefault("daily").withOptions({ history: "push" });
+const parseAsTab = parseAsStringLiteral(TABS)
+  .withDefault("daily")
+  .withOptions({ history: "push" });
 
 /** 날짜 칩은 오늘을 포함해 최근 이만큼만 보여 주고, 그 전 날짜는 달력으로 고른다. */
 const RECENT_DAY_CHIPS = 7;
@@ -88,7 +106,7 @@ const SpotGrid = ({
   showDay,
 }: {
   spots: DateSpotView[];
-  onReact: (spotId: number, reaction: DateReaction | null) => void;
+  onReact: (spot: DateSpotView, reaction: DateReaction | null) => void;
   showDay?: boolean;
 }) => (
   <div className="grid gap-3 sm:grid-cols-2">
@@ -97,7 +115,7 @@ const SpotGrid = ({
         key={spot.id}
         spot={spot}
         showDay={showDay}
-        onReact={(reaction) => onReact(spot.id, reaction)}
+        onReact={(reaction) => onReact(spot, reaction)}
       />
     ))}
   </div>
@@ -130,8 +148,28 @@ export const DateSpotsPage = () => {
   const recentDays = days.slice(0, RECENT_DAY_CHIPS);
   const pickedOlderDay =
     data && !recentDays.some((d) => d.dayKey === data.dayKey) ? data.dayKey : null;
-  const onReact = (spotId: number, reaction: DateReaction | null) =>
-    react.mutate({ spotId, reaction });
+  /**
+   * 하트나 "다녀왔어"를 끄거나 "별로"로 바꾸면 그 카드가 가 보고 싶은 곳·다녀온 곳 탭에서 사라지므로
+   * 한 번 묻는다. 가 보고 싶은 곳 ↔ 다녀온 곳처럼 탭만 옮기는 건 바로 바꾼다.
+   */
+  const [removal, setRemoval] = useState<{
+    spot: DateSpotView;
+    reaction: DateReaction | null;
+  } | null>(null);
+  const onReact = (spot: DateSpotView, reaction: DateReaction | null) => {
+    const kept = spot.reaction === "like" || spot.reaction === "visited";
+    if (kept && (reaction === null || reaction === "pass")) {
+      setRemoval({ spot, reaction });
+      return;
+    }
+    react.mutate({ spotId: spot.id, reaction });
+  };
+  const confirmRemoval = () => {
+    if (removal) react.mutate({ spotId: removal.spot.id, reaction: removal.reaction });
+    setRemoval(null);
+  };
+  const removalFrom =
+    removal?.spot.reaction === "visited" ? "다녀온 곳" : "가 보고 싶은 곳";
 
   return (
     <SidebarLayout activeNav="dates">
@@ -179,6 +217,13 @@ export const DateSpotsPage = () => {
             <Heart className="size-3.5 text-primary" />가 보고 싶은 곳
             {data && data.liked.length > 0 && (
               <span className="text-muted">{data.liked.length}</span>
+            )}
+          </Chip>
+          <Chip active={tab === "visited"} onClick={() => void setTab("visited")}>
+            <Footprints className="size-3.5 text-success" />
+            다녀온 곳
+            {data && data.visited.length > 0 && (
+              <span className="text-muted">{data.visited.length}</span>
             )}
           </Chip>
         </nav>
@@ -275,8 +320,41 @@ export const DateSpotsPage = () => {
             )}
           </section>
         )}
+
+        {data && tab === "visited" && (
+          <section aria-label="다녀온 곳">
+            {data.visited.length > 0 ? (
+              <SpotGrid spots={data.visited} onReact={onReact} showDay />
+            ) : (
+              <Empty title="아직 다녀온 곳이 없어요">
+                추천 카드에서 발자국(다녀왔어)을 누르면 여기에 모여요.
+              </Empty>
+            )}
+          </section>
+        )}
         <div className="h-6" />
       </main>
+
+      <AlertDialog
+        open={removal !== null}
+        onOpenChange={(open) => !open && setRemoval(null)}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{removalFrom}에서 뺄까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removal &&
+                `‘${removal.spot.name}’ 카드가 ${removalFrom} 목록에서 사라져요.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>그대로 둘래</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmRemoval}>
+              뺄래
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {data && (
         <DateSettingsDialog
