@@ -56,15 +56,22 @@ export type LedgerStats = {
   }[];
 };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** 날짜만(YYYY-MM-DD) 또는 날짜와 시각(YYYY-MM-DDTHH:mm, KST). */
+const BOUND_RE = /^(\d{4}-\d{2}-\d{2})(?:T([01]\d|2[0-3]):([0-5]\d))?$/;
 /** 직접 고른 기간만 제한한다. 전체 보기는 기록이 쌓여도 실패하면 안 된다. */
 const MAX_CUSTOM_RANGE_DAYS = 3660;
 
-const normalizeDate = (value: string, label: string): string => {
-  if (!DATE_RE.test(value) || kst(value).format("YYYY-MM-DD") !== value) {
+/** 기간 경계를 날짜와 시각(없으면 null)으로 나눈다. */
+const parseBound = (
+  value: string,
+  label: string
+): { date: string; time: string | null } => {
+  const match = BOUND_RE.exec(value);
+  const date = match?.[1];
+  if (!date || kst(date).format("YYYY-MM-DD") !== date) {
     throw new LedgerError(`${label} 형식이 올바르지 않아요.`);
   }
-  return value;
+  return { date, time: match[2] ? `${match[2]}:${match[3]}` : null };
 };
 
 /**
@@ -79,12 +86,15 @@ export const getLedgerStats = async (
   const db = getDb();
   const today = kst().format("YYYY-MM-DD");
 
-  let from = fromInput?.trim() || null;
-  let to = toInput?.trim() || null;
+  const fromBound = fromInput?.trim() ? parseBound(fromInput.trim(), "시작 날짜") : null;
+  const toBound = toInput?.trim() ? parseBound(toInput.trim(), "종료 날짜") : null;
+  let from = fromBound?.date ?? null;
+  let to = toBound?.date ?? null;
+  // 직접 설정에서 시각까지 고르면 첫날·마지막 날 내역을 그 시각으로 자른다.
+  // 시각을 모르는 내역(entryTime null)은 그날 안에 있는 것으로 본다.
+  let fromTime = fromBound?.time ?? null;
+  let toTime = toBound?.time ?? null;
   const hasExplicitFrom = Boolean(from);
-
-  if (from) from = normalizeDate(from, "시작 날짜");
-  if (to) to = normalizeDate(to, "종료 날짜");
 
   const [entryRows, categoryRows, openingBalance, tripRows] = await Promise.all([
     db
@@ -112,12 +122,14 @@ export const getLedgerStats = async (
   if (trip) {
     from = trip.startDate;
     to = trip.endDate;
+    fromTime = null;
+    toTime = null;
   }
 
   if (!from) from = entryRows[0]?.entryDate ?? today;
   if (!to) to = today;
 
-  if (from > to) {
+  if (`${from}T${fromTime ?? "00:00"}` > `${to}T${toTime ?? "23:59"}`) {
     throw new LedgerError("시작 날짜는 종료 날짜보다 늦을 수 없어요.");
   }
 
@@ -168,11 +180,21 @@ export const getLedgerStats = async (
       // 미리 결제한 항공권처럼 여행 기간 밖의 내역도 연결돼 있으면 포함한다.
       if (entry.tripId !== trip.id) continue;
     } else {
-      if (entry.entryDate < from) {
+      const beforeFromTime =
+        entry.entryDate === from &&
+        fromTime != null &&
+        entry.entryTime != null &&
+        entry.entryTime < fromTime;
+      if (entry.entryDate < from || beforeFromTime) {
         balanceBeforeRange += isIncome ? entry.amount : -entry.amount;
         continue;
       }
-      if (entry.entryDate > to) continue;
+      const afterToTime =
+        entry.entryDate === to &&
+        toTime != null &&
+        entry.entryTime != null &&
+        entry.entryTime > toTime;
+      if (entry.entryDate > to || afterToTime) continue;
 
       // 잔액 추이는 실제 통장 기준이라 여행 제외와 상관없이 모두 더한다.
       const dayTotals = dailyTotals.get(entry.entryDate);
