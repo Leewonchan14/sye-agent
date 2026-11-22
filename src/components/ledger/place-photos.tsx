@@ -420,6 +420,104 @@ const LargePlacePhotos = ({
   );
 };
 
+interface PlaceCarouselProps {
+  /** 장소 이름. 사진 이름과 크게 보기 제목에 쓴다. */
+  name: string;
+  mapUrl: string;
+  imageUrls: string[];
+}
+
+/** 장소 사진을 넘겨 보고, 누르면 크게 본다. 사진이 없으면 아무것도 그리지 않는다. */
+export const PlacePhotoCarousel = ({ name, mapUrl, imageUrls }: PlaceCarouselProps) => {
+  const { photos, fail } = useWorkingPhotos(imageUrls);
+  const [api, setApi] = useState<CarouselApi>();
+  const current = useCarouselIndex(api);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const many = photos.length > 1;
+  if (!photos.length) return null;
+
+  return (
+    <>
+      <Carousel
+        setApi={setApi}
+        // 트랙패드·가로 휠로 좌우로 밀면 넘어간다.
+        plugins={[WheelGesturesPlugin()]}
+        aria-label={`${name} 사진 ${photos.length}장`}
+        className="group/photos relative bg-canvas-card"
+      >
+        <CarouselContent className="ml-0">
+          {photos.map((photo, index) => (
+            <CarouselItem key={photo} className="pl-0">
+              {/* 밀어서 넘긴 것은 캐러셀이 누름으로 치지 않아 크게 보지 않는다. */}
+              <button
+                type="button"
+                aria-label={`${photoLabel(name, index, photos.length)} 크게 보기`}
+                onClick={() => setViewing(index)}
+                className="block w-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo}
+                  alt={photoLabel(name, index, photos.length)}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                  onError={() => fail(photo)}
+                  className="aspect-[16/9] w-full object-cover select-none"
+                />
+              </button>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+        {many && (
+          <>
+            <span
+              aria-live="polite"
+              className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums"
+            >
+              {current + 1} / {photos.length}
+            </span>
+            <CarouselPrevious
+              type="button"
+              aria-label="이전 사진"
+              variant="secondary"
+              className={cn("left-2", NAV_BUTTON_CLASS)}
+            />
+            <CarouselNext
+              type="button"
+              aria-label="다음 사진"
+              variant="secondary"
+              className={cn("right-2", NAV_BUTTON_CLASS)}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1"
+            >
+              {photos.map((photo, index) => (
+                <span
+                  key={photo}
+                  className={cn(
+                    "size-1.5 rounded-full bg-white/55 transition-colors",
+                    index === current && "bg-white"
+                  )}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </Carousel>
+      <PhotoViewer
+        photos={photos}
+        name={name}
+        mapUrl={mapUrl}
+        start={viewing}
+        onClose={() => setViewing(null)}
+      />
+    </>
+  );
+};
+
 interface PlaceCardProps {
   url: string;
   placeName: string;
@@ -431,86 +529,11 @@ interface PlaceCardProps {
  * 장소 이름을 누르면 지도를 연다.
  */
 export const MapPlaceCard = ({ url, placeName, imageUrls }: PlaceCardProps) => {
-  const { photos, fail } = useWorkingPhotos(imageUrls);
-  const [api, setApi] = useState<CarouselApi>();
-  const current = useCarouselIndex(api);
-  const [viewing, setViewing] = useState<number | null>(null);
   const name = placeName || "장소";
-  const many = photos.length > 1;
 
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-hairline bg-canvas-soft">
-      {photos.length > 0 && (
-        <Carousel
-          setApi={setApi}
-          // 트랙패드·가로 휠로 좌우로 밀면 넘어간다.
-          plugins={[WheelGesturesPlugin()]}
-          aria-label={`${name} 사진 ${photos.length}장`}
-          className="group/photos relative bg-canvas-card"
-        >
-          <CarouselContent className="ml-0">
-            {photos.map((photo, index) => (
-              <CarouselItem key={photo} className="pl-0">
-                {/* 밀어서 넘긴 것은 캐러셀이 누름으로 치지 않아 크게 보지 않는다. */}
-                <button
-                  type="button"
-                  aria-label={`${photoLabel(name, index, photos.length)} 크게 보기`}
-                  onClick={() => setViewing(index)}
-                  className="block w-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photo}
-                    alt={photoLabel(name, index, photos.length)}
-                    loading={index === 0 ? "eager" : "lazy"}
-                    decoding="async"
-                    draggable={false}
-                    referrerPolicy="no-referrer"
-                    onError={() => fail(photo)}
-                    className="aspect-[16/9] w-full object-cover select-none"
-                  />
-                </button>
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-          {many && (
-            <>
-              <span
-                aria-live="polite"
-                className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums"
-              >
-                {current + 1} / {photos.length}
-              </span>
-              <CarouselPrevious
-                type="button"
-                aria-label="이전 사진"
-                variant="secondary"
-                className={cn("left-2", NAV_BUTTON_CLASS)}
-              />
-              <CarouselNext
-                type="button"
-                aria-label="다음 사진"
-                variant="secondary"
-                className={cn("right-2", NAV_BUTTON_CLASS)}
-              />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1"
-              >
-                {photos.map((photo, index) => (
-                  <span
-                    key={photo}
-                    className={cn(
-                      "size-1.5 rounded-full bg-white/55 transition-colors",
-                      index === current && "bg-white"
-                    )}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </Carousel>
-      )}
+      <PlacePhotoCarousel name={name} mapUrl={url} imageUrls={imageUrls} />
       <a
         href={url}
         target="_blank"
@@ -521,13 +544,6 @@ export const MapPlaceCard = ({ url, placeName, imageUrls }: PlaceCardProps) => {
         <MapPin className="size-3.5 shrink-0 text-muted" />
         <span className="min-w-0 truncate">{name}</span>
       </a>
-      <PhotoViewer
-        photos={photos}
-        name={name}
-        mapUrl={url}
-        start={viewing}
-        onClose={() => setViewing(null)}
-      />
     </div>
   );
 };

@@ -28,6 +28,9 @@ import {
   recapRange,
 } from "../src/lib/ledger/recap";
 
+/** 장소 기본 정보가 없는 페이지에서 읽은 좌표·주소·업종 */
+const NO_PLACE_DETAIL = { lat: null, lng: null, address: "", category: "" };
+
 test.describe("은행 알림 해석", () => {
   const today = "2026-11-08";
 
@@ -522,11 +525,45 @@ test.describe("네이버 지도 링크", () => {
       imageUrls: [
         "https://search.pstatic.net/common/?autoRotate=true&type=f640_380&src=a.jpg",
       ],
+      ...NO_PLACE_DETAIL,
     });
     // https가 아닌 사진은 쓰지 않는다.
     expect(
       parseNaverPlaceHtml('<meta property="og:image" content="javascript:alert(1)"/>')
-    ).toEqual({ placeName: "", imageUrls: [] });
+    ).toEqual({ placeName: "", imageUrls: [], ...NO_PLACE_DETAIL });
+  });
+
+  test("플레이스 페이지에서 데이트 지도용 좌표·주소·업종을 읽는다", () => {
+    const page = (base: Record<string, unknown>) =>
+      `<script>window.__APOLLO_STATE__ = ${JSON.stringify({
+        "PlaceDetailBase:11704746": { __typename: "PlaceDetailBase", ...base },
+      })};</script>`;
+    expect(
+      parseNaverPlaceHtml(
+        page({
+          coordinate: { x: "126.9283111", y: "37.4876315" },
+          roadAddress: "서울 관악구 신림동길 4",
+          address: "서울 관악구 신림동 1430-11",
+          category: "중식당",
+        })
+      )
+    ).toMatchObject({
+      lat: 37.4876315,
+      lng: 126.9283111,
+      address: "서울 관악구 신림동길 4",
+      category: "중식당",
+    });
+    // 도로명 주소가 없으면 지번 주소를 쓴다.
+    expect(
+      parseNaverPlaceHtml(page({ roadAddress: "", address: "제주 서귀포시 1" }))
+    ).toMatchObject({ address: "제주 서귀포시 1", lat: null, lng: null });
+    // 좌표 한쪽이 없거나 범위를 벗어나면 둘 다 버린다.
+    expect(
+      parseNaverPlaceHtml(page({ coordinate: { x: "126.9", y: "" } }))
+    ).toMatchObject({ lat: null, lng: null });
+    expect(
+      parseNaverPlaceHtml(page({ coordinate: { x: "999", y: "37.5" } }))
+    ).toMatchObject({ lat: null, lng: null });
   });
 
   test("상단 사진 목록에서 영상·https 아닌 것·중복을 빼고 최대 10장까지 읽는다", () => {
