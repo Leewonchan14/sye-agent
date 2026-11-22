@@ -11,8 +11,8 @@ import {
   Settings2,
   Wallet,
 } from "lucide-react";
-import { parseAsInteger, parseAsStringLiteral, useQueryState } from "nuqs";
-import { useDeferredValue, useMemo, useState } from "react";
+import { createParser, parseAsInteger, parseAsStringLiteral, useQueryState } from "nuqs";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
 import { CalendarView } from "@/components/ledger/calendar-view";
@@ -388,12 +388,28 @@ const SearchResults = ({
   );
 };
 
+/**
+ * 달력 탭에서 고른 날은 `?day=YYYY-MM-DD`로 주소에 남긴다(탭은 `?tab=calendar`). 새로 고치거나
+ * 주소를 공유해도 그 날이 든 달의 달력에서 그 날을 고른 채로 열린다. 날짜를 누를 때마다
+ * 히스토리를 쌓지 않도록 주소를 바꿔 끼운다. 형식이 맞지 않으면 없는 것으로 본다.
+ */
+const parseAsDayKey = createParser({
+  parse: (value) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null),
+  serialize: (value: string) => value,
+}).withOptions({ history: "replace" });
+
 export const LedgerPage = () => {
   const token = useAuthStore((s) => s.token);
-  const [month, setMonth] = useState<string>(() => currentMonthKst());
+  const [selectedDay, setSelectedDay] = useQueryState("day", parseAsDayKey);
+  // 주소에 고른 날이 있으면 그 날이 든 달(주)로 연다.
+  const [month, setMonth] = useState<string>(
+    () => selectedDay?.slice(0, 7) ?? currentMonthKst()
+  );
   // 주 단위로 볼 때 그 주의 월요일. 이때 month는 그 주가 속한 달을 따라간다.
   const [period, setPeriod] = useState<LedgerPeriod>("month");
-  const [weekStart, setWeekStart] = useState<string>(() => weekStartOf(todayKst()));
+  const [weekStart, setWeekStart] = useState<string>(() =>
+    weekStartOf(selectedDay ?? todayKst())
+  );
   const isWeek = period === "week";
   const [tab, setTab] = useQueryState("tab", parseAsLedgerTab);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -401,7 +417,6 @@ export const LedgerPage = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<LedgerSettingsTab>("budget");
   const [pasteOpen, setPasteOpen] = useState(false);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -623,7 +638,14 @@ export const LedgerPage = () => {
   const inPeriod = (date: string) =>
     isWeek ? isInWeek(date, weekStart) : date.startsWith(`${month}-`);
   const fallbackDay = inPeriod(today) ? today : isWeek ? weekStart : `${month}-01`;
-  const activeDay = selectedDay && inPeriod(selectedDay) ? selectedDay : fallbackDay;
+  const dayInPeriod = selectedDay != null && inPeriod(selectedDay);
+  const activeDay = dayInPeriod ? selectedDay : fallbackDay;
+  // 고른 날은 달력 탭에서, 보고 있는 기간 안에 있을 때만 주소에 남긴다.
+  // 다른 탭으로 가거나 달(주)을 옮겨 그 날이 빠지면 주소에서도 지운다.
+  const staleDay = selectedDay != null && (tab !== "calendar" || !dayInPeriod);
+  useEffect(() => {
+    if (staleDay) void setSelectedDay(null);
+  }, [staleDay, setSelectedDay]);
   const defaultEntryDate = tab === "calendar" ? activeDay : fallbackDay;
   // 통계·반복·여행 탭은 월과 상관없는 화면이라 월 이동과 요약을 숨긴다.
   const hidesMonthSummary = tab === "stats" || tab === "recurring" || tab === "trips";

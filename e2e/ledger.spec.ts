@@ -1790,6 +1790,47 @@ test("내역 추가 날짜는 달력에서 고른 날이나 보고 있는 달을
   );
 });
 
+test("달력에서 고른 날은 주소(?day=)에 남아 새로 고쳐도 그 날로 열린다", async ({
+  page,
+  request,
+}) => {
+  const day = `${lastMonth()}-15`;
+  await addEntry(request, token, {
+    entryDate: day,
+    amount: 12_000,
+    memo: "고른 날 지출",
+  });
+  await openLedger(page, token);
+
+  await page.getByRole("button", { name: "이전 달" }).click();
+  await page.getByRole("tab", { name: "달력" }).click();
+  await page.getByRole("button", { name: /15일/ }).click();
+  await expect(page).toHaveURL(new RegExp(`[?&]day=${day}`));
+
+  // 새로 고치면 그 날이 든 달의 달력 탭에서 그 날을 고른 채로 열린다.
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "달력" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await expect(page.getByRole("button", { name: /15일/ })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  await expect(page.getByRole("button", { name: /고른 날 지출/ })).toBeVisible();
+
+  // 다른 탭으로 가면 주소에서 지운다.
+  await page.getByRole("tab", { name: "내역" }).click();
+  await expect(page).not.toHaveURL(/[?&]day=/);
+
+  // 형식이 틀린 값은 무시하고 평소처럼 내역 탭으로 연다.
+  await page.goto("/ledger?day=not-a-day");
+  await expect(page.getByRole("tab", { name: "내역" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+});
+
 test("지난달을 볼 때 '이번 달' 문구를 쓰지 않는다", async ({ page }) => {
   await openLedger(page, token);
   await page.getByRole("button", { name: "이전 달" }).click();
