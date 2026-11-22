@@ -173,6 +173,31 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
   };
   expect(await amountRight("사진 없는 내역")).toBe(await amountRight("성수동 파스타"));
 
+  // 줄에 마우스를 올리면 장소 사진까지 내역 한 건 전체를 칠한다(버튼만 칠하지 않는다).
+  const rowButton = page.getByRole("button", { name: /성수동 파스타/ }).first();
+  const rowCell = rowButton.locator("xpath=..");
+  const canHover = await page.evaluate(() => matchMedia("(hover: hover)").matches);
+  // 데스크톱에서는 반드시 마우스 올림을 확인한다.
+  if (!test.info().project.use.isMobile) expect(canHover).toBe(true);
+  if (canHover) {
+    await rowButton.hover();
+    await expect(rowCell).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(rowButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(
+      rowCell.getByRole("link", { name: "성수동 파스타 지도 열기" })
+    ).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(rowCell).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+  // 터치 화면에서는 탭한 뒤 수정 창을 닫아도 줄 배경이 남지 않는다.
+  if (test.info().project.use.hasTouch) {
+    await rowButton.tap();
+    const editDialog = page.getByRole("dialog", { name: "내역 수정" });
+    await editDialog.getByRole("button", { name: "취소" }).tap();
+    await expect(editDialog).toBeHidden();
+    await expect(rowCell).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+
   // 사진을 누르면 크게 보고 넘긴다. 크게 볼 때는 1200×800 주소를 쓴다.
   await page
     .getByRole("button", { name: "성수 파스타집 사진 2 크게 보기" })
@@ -308,7 +333,7 @@ test("지도 링크를 보내지 않는 수정은 장소 사진을 그대로 둔
   });
 });
 
-test("넓은 화면은 큰 사진 3장과 +N 칸, 좁은 화면은 모든 사진을 밀어 본다", async ({
+test("기본은 작은 사진 한 줄, 사진 크게를 켜면 큰 사진으로 바꾸고 기억한다", async ({
   page,
   request,
 }) => {
@@ -318,25 +343,70 @@ test("넓은 화면은 큰 사진 3장과 +N 칸, 좁은 화면은 모든 사진
   const photoButtons = page.getByRole("button", {
     name: /^연남 카페 사진 \d 크게 보기$/,
   });
-  const moreButton = page.getByRole("button", { name: "연남 카페 사진 3장 더 보기" });
+  const viewer = page.getByRole("dialog", { name: "연남 카페 사진 크게 보기" });
+  const row = page.getByRole("button", { name: /연남 카페/ }).first();
 
+  // 아이콘 자리에 대표 사진을 보여 준다.
+  const icon = row.locator('[data-slot="entry-photo"] img');
+  await expect(icon).toHaveAttribute("src", toPlacePhotoUrl(MANY_ORIGINALS[0]));
+
+  // 기본: 장소 이름 옆에 작은 사진(32px) 4장 + "+2". 줄 높이를 낮게 둔다.
+  await expect(photoButtons).toHaveCount(4);
+  const mini = (await photoButtons.first().boundingBox())!;
+  expect(Math.round(mini.height)).toBe(32);
+  const link = page.getByRole("link", { name: "연남 카페 지도 열기" }).first();
+  expect(Math.abs((await link.boundingBox())!.y + 8 - mini.y)).toBeLessThan(16);
+  const compactMore = page.getByRole("button", { name: "연남 카페 사진 2장 더 보기" });
+  await expect(compactMore).toHaveText("+2");
+  await compactMore.click();
+  await expect(viewer.getByText("5 / 6")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
+
+  // 사진 크게를 켠다.
+  const sizeToggle = page.getByRole("group", { name: "장소 사진 크기" });
+  await sizeToggle.getByRole("button", { name: "사진 크게" }).click();
+  await expect(sizeToggle.getByRole("button", { name: "사진 크게" })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  const largeMore = page.getByRole("button", { name: "연남 카페 사진 3장 더 보기" });
   if (wide) {
     // 큰 사진 3장(160×96) + 나머지 3장을 묶은 "+3" 칸
     await expect(photoButtons.filter({ visible: true })).toHaveCount(3);
     const box = (await photoButtons.first().boundingBox())!;
     expect(Math.round(box.width)).toBe(160);
     expect(Math.round(box.height)).toBe(96);
-    await expect(moreButton).toHaveText("+3");
+    await expect(largeMore).toHaveText("+3");
     // 장소 이름은 테두리 없는 글자 링크로 사진 위에 둔다.
-    const link = page.getByRole("link", { name: "연남 카페 지도 열기" }).first();
     await expect(link).toHaveCSS("border-top-width", "0px");
     expect((await link.boundingBox())!.y).toBeLessThan(box.y);
     // "+3"을 누르면 4번째 사진부터 크게 본다.
-    await moreButton.click();
-    const viewer = page.getByRole("dialog", { name: "연남 카페 사진 크게 보기" });
+    await largeMore.click();
     await expect(viewer.getByText("4 / 6")).toBeVisible();
+    await page.keyboard.press("Escape");
   } else {
+    // 좁은 화면은 모든 사진을 밀어 본다.
     await expect(photoButtons).toHaveCount(6);
-    await expect(moreButton).toBeHidden();
+    await expect(largeMore).toBeHidden();
   }
+
+  // 새로고침해도 고른 크기를 기억한다.
+  await page.reload();
+  await expect(
+    page
+      .getByRole("group", { name: "장소 사진 크기" })
+      .getByRole("button", { name: "사진 크게" })
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("button", { name: "연남 카페 사진 2장 더 보기" })
+  ).toHaveCount(0);
+
+  // 통계 탭의 좁은 목록은 사진 크게를 켜도 작은 사진 한 줄이다.
+  await page.getByRole("tab", { name: "통계" }).click();
+  const statsMore = page
+    .getByRole("button", { name: "연남 카페 사진 3장 더 보기" })
+    .first();
+  await expect(statsMore).toHaveText("+3");
+  expect(Math.round((await photoButtons.first().boundingBox())!.height)).toBe(28);
 });

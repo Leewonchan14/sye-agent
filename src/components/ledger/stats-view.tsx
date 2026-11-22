@@ -903,11 +903,15 @@ const PeriodEntriesCard = ({
           {visibleRows.map((entry) => {
             const isIncome = entry.kind === "income";
             return (
-              <li key={entry.id}>
+              // 줄에 마우스를 올리면 아래 장소 사진까지 함께 칠한다.
+              <li
+                key={entry.id}
+                className="transition-colors [@media(hover:hover)]:has-[>button:hover]:bg-canvas-soft/60"
+              >
                 <button
                   type="button"
                   onClick={() => onEdit(entry)}
-                  className="flex w-full items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="flex w-full items-center gap-2 py-2 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   <EntryIcon entry={entry} size={20} />
                   <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
