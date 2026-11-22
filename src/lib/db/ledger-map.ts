@@ -1,7 +1,13 @@
 import { and, asc, eq, gte, isNotNull, isNull, lte, ne } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
-import { activeEntry, readMapPlace } from "@/lib/db/ledger";
+import {
+  activeEntry,
+  getTripRows,
+  LedgerError,
+  normalizeDate,
+  readMapPlace,
+} from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
 import { isNaverMapUrl } from "@/lib/ledger/map-url";
 
@@ -9,16 +15,63 @@ import {
   toMapRange,
   type LedgerMapPayload,
   type LedgerMapPlace,
+  type LedgerMapQuery,
   type LedgerMapRange,
+  type LedgerMapTrip,
   type LedgerMapVisit,
 } from "@/lib/ledger/map-types";
 
-export type { LedgerMapPayload, LedgerMapPlace, LedgerMapRange, LedgerMapVisit };
+export type {
+  LedgerMapPayload,
+  LedgerMapPlace,
+  LedgerMapQuery,
+  LedgerMapRange,
+  LedgerMapTrip,
+  LedgerMapVisit,
+};
 
-const rangeStart = (range: LedgerMapRange): string | null => {
-  if (range === "year") return kst().startOf("year").format("YYYY-MM-DD");
-  if (range === "month") return kst().startOf("month").format("YYYY-MM-DD");
-  return null;
+type ResolvedRange = {
+  range: LedgerMapRange;
+  from: string | null;
+  to: string;
+  trip: LedgerMapTrip | null;
+};
+
+/** 고른 기간을 실제 날짜 범위(또는 여행)로 바꾼다. 잘못된 값이면 400으로 알린다. */
+const resolveRange = (query: LedgerMapQuery, trips: LedgerMapTrip[]): ResolvedRange => {
+  const range = toMapRange(query.range);
+  const today = kst().format("YYYY-MM-DD");
+  if (range === "year") {
+    return {
+      range,
+      from: kst().startOf("year").format("YYYY-MM-DD"),
+      to: today,
+      trip: null,
+    };
+  }
+  if (range === "month") {
+    return {
+      range,
+      from: kst().startOf("month").format("YYYY-MM-DD"),
+      to: today,
+      trip: null,
+    };
+  }
+  if (range === "custom") {
+    if (!query.from) throw new LedgerError("시작 날짜를 골라 주세요.");
+    const from = normalizeDate(query.from);
+    const to = query.to ? normalizeDate(query.to) : from;
+    // 거꾸로 고르면 앞뒤를 바꿔 준다.
+    return from <= to
+      ? { range, from, to, trip: null }
+      : { range, from: to, to: from, trip: null };
+  }
+  if (range === "trip") {
+    const trip = trips.find((item) => item.id === query.trip);
+    if (!trip) throw new LedgerError("여행을 찾을 수 없어요.");
+    return { range, from: trip.startDate, to: trip.endDate, trip };
+  }
+  return { range, from: null, to: today, trip: null };
 };
 
 const ledgerExpense = and(activeEntry, eq(schema.ledgerEntries.kind, "expense"));
@@ -46,12 +99,17 @@ const countUnresolved = async () =>
  * 모임통장 가계부라 지출은 모두 둘의 지출이고, 지도 링크는 오프라인 가게에만 붙는다.
  */
 export const getLedgerMapPlaces = async (
-  rangeInput?: unknown
+  query: LedgerMapQuery = { range: "all" }
 ): Promise<LedgerMapPayload> => {
-  const range = toMapRange(rangeInput);
-  const from = rangeStart(range);
-  const to = kst().format("YYYY-MM-DD");
+  const trips: LedgerMapTrip[] = (await getTripRows()).map(
+    ({ id, name, startDate, endDate }) => ({ id, name, startDate, endDate })
+  );
+  const { range, from, to, trip } = resolveRange(query, trips);
   const entries = schema.ledgerEntries;
+  // 여행은 날짜가 아니라 가계부에서 그 여행에 묶은 지출로 고른다.
+  const period = trip
+    ? eq(entries.tripId, trip.id)
+    : and(lte(entries.entryDate, to), from ? gte(entries.entryDate, from) : undefined);
 
   const [rows, unresolved] = await Promise.all([
     getDb()
@@ -77,13 +135,7 @@ export const getLedgerMapPlaces = async (
         eq(entries.categoryId, schema.ledgerCategories.id)
       )
       .where(
-        and(
-          ledgerExpense,
-          isNotNull(entries.mapLat),
-          isNotNull(entries.mapLng),
-          lte(entries.entryDate, to),
-          from ? gte(entries.entryDate, from) : undefined
-        )
+        and(ledgerExpense, isNotNull(entries.mapLat), isNotNull(entries.mapLng), period)
       ),
     countUnresolved(),
   ]);
@@ -140,7 +192,7 @@ export const getLedgerMapPlaces = async (
   const places = [...byKey.values()].sort(
     (a, b) => b.visits - a.visits || b.lastDate.localeCompare(a.lastDate)
   );
-  return { range, from, to, places, unresolved };
+  return { range, from, to, trip, trips, places, unresolved };
 };
 
 /** 한 번에 다시 읽을 최대 지출 수. 네이버가 요청이 몰리면 막기 때문에 순서대로 읽는다. */

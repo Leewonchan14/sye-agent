@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { kst } from "../src/lib/kst";
-import { authHeaders, login, pool, resetLedger, today } from "./helpers";
+import { authHeaders, daysAgo, login, pool, resetLedger, today } from "./helpers";
 
 /**
  * 데이트 지도(/map). 앱은 NAVER_PLACE_ORIGIN을 이 가짜 플레이스 서버로 두고 띄운다.
@@ -294,4 +294,110 @@ test("좌표를 못 읽은 네이버 지도 링크는 다시 찾기로 지도에
   await expect(items).toHaveCount(2);
   await expect(placeList(page)).toContainText("신림 중식당");
   await expect(placeList(page)).toContainText("샤로수길 사진관");
+});
+
+const popup = (page: Page) => page.locator('[data-slot="popover-content"]');
+
+/** 열린 달력에서 iso 날짜가 보일 때까지 달을 넘긴 뒤 누른다. */
+const clickDay = async (page: Page, iso: string) => {
+  for (let step = 0; step < 24; step += 1) {
+    const cell = popup(page).locator(`td[data-day="${iso}"]:not([data-outside])`);
+    if (await cell.count()) {
+      await cell.getByRole("button").click();
+      return;
+    }
+    const shown = await popup(page)
+      .locator("td[data-day]:not([data-outside])")
+      .first()
+      .getAttribute("data-day");
+    await popup(page)
+      .locator(shown && shown > iso ? ".rdp-button_previous" : ".rdp-button_next")
+      .click();
+  }
+  throw new Error(`달력에서 ${iso}를 찾지 못했어요`);
+};
+
+test("날짜를 직접 고르거나 여행을 골라 그때 간 곳만 지도에 본다", async ({
+  page,
+  request,
+}) => {
+  const trip = await request.post("/api/ledger/trips", {
+    headers: authHeaders(token),
+    data: { name: "성수 나들이", startDate: daysAgo(10), endDate: daysAgo(8) },
+  });
+  expect(trip.ok()).toBe(true);
+  const tripId = ((await trip.json()) as { trip: { id: number } }).trip.id;
+  // 여행 기간의 지출은 저장할 때 그 여행에 묶인다.
+  await createEntry(request, {
+    memo: "여행 파스타",
+    amount: 21_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+    entryDate: daysAgo(9),
+  });
+  await createEntry(request, {
+    memo: "한 달 전 카페",
+    amount: 6_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2002",
+    entryDate: daysAgo(30),
+  });
+  await createEntry(request, {
+    memo: "오늘 중식",
+    amount: 30_000,
+    mapUrl: "https://map.naver.com/p/entry/place/3001",
+  });
+
+  // 주소로 바로 열어도 같은 기간을 본다.
+  await openMap(page, `/map?range=custom&from=${daysAgo(31)}&to=${daysAgo(29)}`);
+  const items = placeList(page).getByRole("button");
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText("망원 카페");
+  const period = page.getByRole("navigation", { name: "기간" });
+  await expect(period.getByRole("button", { name: /~/ })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+
+  // 달력에서 오늘 하루만 고른다. "적용"을 눌러야 바뀐다.
+  await period.getByRole("button", { name: /~/ }).click();
+  await clickDay(page, daysAgo(0));
+  await clickDay(page, daysAgo(0));
+  await popup(page).getByRole("button", { name: "적용" }).click();
+  await expect(page).toHaveURL(new RegExp(`range=custom&from=${today()}&to=${today()}`));
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText("신림 중식당");
+
+  // 여행을 고르면 그 여행에 묶인 지출만 보고, 날짜 값은 주소에서 지운다.
+  await period.getByRole("button", { name: "여행" }).click();
+  await popup(page)
+    .getByRole("button", { name: /성수 나들이/ })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`range=trip&trip=${tripId}$`));
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText("성수 파스타집");
+  await expect(
+    page.getByText(/^성수 나들이 · .* · 다녀온 곳 1곳 · 1번 · 21,000원$/)
+  ).toBeVisible();
+  await expect(period.getByRole("button", { name: /성수 나들이/ })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+
+  // 뒤로 가기로 직접 고른 날짜로, 전체를 누르면 기간 값이 모두 빠진다.
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`from=${today()}`));
+  await expect(items.first()).toContainText("신림 중식당");
+  await period.getByRole("button", { name: "전체" }).click();
+  await expect(page).not.toHaveURL(/range=|from=|trip=/);
+  await expect(items).toHaveCount(3);
+});
+
+test("기간 값이 잘못되면 400으로 알린다", async ({ request }) => {
+  const get = (query: string) =>
+    request.get(`/api/ledger/map?${query}`, { headers: authHeaders(token) });
+  expect((await get("range=custom")).status()).toBe(400);
+  expect((await get("range=custom&from=2026-02-30")).status()).toBe(400);
+  expect((await get("range=trip&trip=999")).status()).toBe(400);
+  // 거꾸로 고른 날짜는 앞뒤를 바꿔 준다.
+  const swapped = await get(`range=custom&from=${today()}&to=${daysAgo(3)}`);
+  expect(await swapped.json()).toMatchObject({ from: daysAgo(3), to: today() });
 });
