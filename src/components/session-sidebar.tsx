@@ -6,14 +6,17 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   Activity,
   CalendarHeart,
+  ChevronUp,
+  ExternalLink,
   FileText,
   LogOut,
   MessageCircle,
   Newspaper,
   Palmtree,
   PanelLeft,
-  Plus,
   Search,
+  Settings,
+  SquarePen,
   Upload,
   Wallet,
 } from "lucide-react";
@@ -22,11 +25,31 @@ import { useRouter } from "next/navigation";
 
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/lib/auth-store";
 import { dayjs } from "@/lib/kst";
+import { cn } from "@/lib/utils";
 
 const JEJU_URL = "https://jeju.성예은.shop";
 const MONITOR_URL = "https://monitor.성예은.shop";
+
+/** Sidebar entry that the current page belongs to. */
+export type SidebarNav =
+  | "ledger"
+  | "monitor"
+  | "dates"
+  | "search"
+  | "instructions"
+  | "suggestions"
+  | "kakao-chat";
 
 interface Session {
   id: string;
@@ -37,14 +60,115 @@ interface Session {
 
 interface Props {
   activeSessionId: string;
-  activeNav?: "ledger" | "monitor" | "dates";
+  activeNav?: SidebarNav;
   onSelect: (id: string) => void;
   onNew: () => void;
   isOpen: boolean;
   onToggle: () => void;
 }
 
+/** Frequently used in-app features, always visible. */
+const APP_NAV = [
+  { key: "ledger", href: "/ledger", label: "가계부", icon: Wallet },
+  { key: "dates", href: "/dates", label: "데이트 추천", icon: CalendarHeart },
+  { key: "monitor", href: "/monitor", label: "언론 모니터링", icon: Newspaper },
+] as const;
+
+/** Occasionally used chat settings, tucked into the footer menu. */
+const SETTINGS_NAV = [
+  { key: "instructions", href: "/instructions", label: "지시 사항", icon: FileText },
+  { key: "suggestions", href: "/suggestions", label: "추천 질문", icon: MessageCircle },
+  { key: "kakao-chat", href: "/kakao-chat", label: "카톡 업로드", icon: Upload },
+] as const;
+
+/** Sister sites on other subdomains. */
+const EXTERNAL_LINKS = [
+  { href: JEJU_URL, label: "제주 여행", icon: Palmtree },
+  { href: MONITOR_URL, label: "모니터 사이트", icon: Activity },
+] as const;
+
+const SETTINGS_KEYS: readonly string[] = SETTINGS_NAV.map((n) => n.key);
+
 const truncate = (t: string, n: number) => (t.length > n ? t.slice(0, n) + "..." : t);
+
+interface MoreMenuProps {
+  activeNav?: SidebarNav;
+  collapsed: boolean;
+}
+
+/** Footer menu holding chat settings, sister-site links and logout. */
+const MoreMenu = ({ activeNav, collapsed }: MoreMenuProps) => {
+  const router = useRouter();
+  const logout = useAuthStore((s) => s.logout);
+  const inSettings = !!activeNav && SETTINGS_KEYS.includes(activeNav);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          collapsed ? (
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              aria-label="설정 · 더보기"
+              className={cn(inSettings && "bg-canvas-card text-ink")}
+            />
+          ) : (
+            <Button
+              variant="ghost"
+              className={`w-full justify-start ${inSettings && "bg-canvas-card text-ink"}`}
+            />
+          )
+        }
+      >
+        {collapsed ? (
+          <Settings className="h-5 w-5" />
+        ) : (
+          <>
+            <Settings className="h-4 w-4" />
+            <span className="flex-1 text-left">설정 · 더보기</span>
+            <ChevronUp className="h-4 w-4 text-muted-soft" />
+          </>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side={collapsed ? "right" : "top"}
+        align={collapsed ? "end" : "start"}
+        className={cn(collapsed && "w-52")}
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>채팅 설정</DropdownMenuLabel>
+          {SETTINGS_NAV.map(({ key, href, label, icon: Icon }) => (
+            <DropdownMenuItem
+              key={key}
+              onClick={() => router.push(href)}
+              className={cn(activeNav === key && "bg-accent text-accent-foreground")}
+            >
+              <Icon />
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>바로가기</DropdownMenuLabel>
+          {EXTERNAL_LINKS.map(({ href, label, icon: Icon }) => (
+            <DropdownMenuItem key={href} render={<a href={href} />}>
+              <Icon />
+              <span className="flex-1">{label}</span>
+              <ExternalLink className="text-muted-soft" />
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={logout}>
+          <LogOut />
+          로그아웃
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 export const SessionSidebar = ({
   activeSessionId,
@@ -97,8 +221,6 @@ export const SessionSidebar = ({
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const logout = useAuthStore((s) => s.logout);
-
   const css = (k: string) => `var(--${k})`;
 
   return (
@@ -109,14 +231,33 @@ export const SessionSidebar = ({
     >
       {isOpen ? (
         <>
-          {/* Header */}
-          <div className="flex h-14 items-center justify-between px-4">
-            <div className="flex items-center gap-2">
+          {/* Header: brand + primary chat actions */}
+          <div className="flex h-14 items-center gap-1 pr-2 pl-4">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <Avatar size="sm">
                 <AvatarImage src="/munjackgui.png" alt="하치와레" />
               </Avatar>
-              <span className="text-sm font-medium">하치와레 메이트</span>
+              <span className="truncate text-sm font-medium">하치와레 메이트</span>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push("/search")}
+              aria-label="대화 검색"
+              title="대화 검색"
+              className={cn(activeNav === "search" && "bg-canvas-card text-ink")}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNew}
+              aria-label="새 채팅"
+              title="새 채팅"
+            >
+              <SquarePen className="h-4 w-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -127,88 +268,26 @@ export const SessionSidebar = ({
             </Button>
           </div>
 
-          {/* Actions */}
-          <div className="space-y-1 px-3 pb-3">
-            <Button variant="ghost" className="w-full justify-start" onClick={onNew}>
-              <Plus className="h-4 w-4" />새 채팅
-            </Button>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start ${activeNav === "ledger" && "bg-canvas-card text-ink"}`}
-              onClick={() => router.push("/ledger")}
-            >
-              <Wallet className="h-4 w-4" />
-              가계부
-            </Button>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start ${activeNav === "monitor" && "bg-canvas-card text-ink"}`}
-              onClick={() => router.push("/monitor")}
-            >
-              <Newspaper className="h-4 w-4" />
-              언론 모니터링
-            </Button>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start ${activeNav === "dates" && "bg-canvas-card text-ink"}`}
-              onClick={() => router.push("/dates")}
-            >
-              <CalendarHeart className="h-4 w-4" />
-              데이트 추천
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => router.push("/search")}
-            >
-              <Search className="h-4 w-4" />
-              대화 검색
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => router.push("/kakao-chat")}
-            >
-              <Upload className="h-4 w-4" />
-              카톡 업로드
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => router.push("/instructions")}
-            >
-              <FileText className="h-4 w-4" />
-              지시 사항
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => router.push("/suggestions")}
-            >
-              <MessageCircle className="h-4 w-4" />
-              추천 질문
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              render={<a href={JEJU_URL} />}
-              nativeButton={false}
-            >
-              <Palmtree className="h-4 w-4" />
-              제주 여행
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              render={<a href={MONITOR_URL} />}
-              nativeButton={false}
-            >
-              <Activity className="h-4 w-4" />
-              모니터
-            </Button>
+          {/* In-app features */}
+          <div className="space-y-1 px-3 pb-2">
+            {APP_NAV.map(({ key, href, label, icon: Icon }) => (
+              <Button
+                key={key}
+                variant="ghost"
+                className={`w-full justify-start ${activeNav === key && "bg-canvas-card text-ink"}`}
+                onClick={() => router.push(href)}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Button>
+            ))}
           </div>
 
           {/* Session list */}
+          <div className="mx-3 border-t border-hairline" />
+          <div className="px-5 pt-3 pb-1 text-xs font-medium text-muted-soft">
+            최근 대화
+          </div>
           <nav className="flex-1 overflow-y-auto px-2 py-1">
             {!loading && !sessions.length && (
               <div className="px-3 py-4 text-xs text-muted-soft">
@@ -247,18 +326,14 @@ export const SessionSidebar = ({
             )}
           </nav>
 
-          {/* Logout */}
-          <div className="px-3 pb-3">
-            <Button variant="ghost" className="w-full justify-start" onClick={logout}>
-              <LogOut className="h-4 w-4" />
-              로그아웃
-            </Button>
+          {/* Footer: settings, sister sites, logout */}
+          <div className="border-t border-hairline px-3 py-2">
+            <MoreMenu activeNav={activeNav} collapsed={false} />
           </div>
         </>
       ) : (
         /* Collapsed: Claude.ai-style icon-only strip */
         <div className="flex h-full flex-col items-center gap-2 py-3">
-          {/* Open toggle */}
           <Button
             variant="ghost"
             size="icon-lg"
@@ -268,83 +343,39 @@ export const SessionSidebar = ({
             <PanelLeft className="h-5 w-5" />
           </Button>
 
-          {/* New Chat */}
-          <Button variant="ghost" size="icon-lg" onClick={onNew} aria-label="New chat">
-            <Plus className="h-5 w-5" />
+          <Button variant="ghost" size="icon-lg" onClick={onNew} aria-label="새 채팅">
+            <SquarePen className="h-5 w-5" />
           </Button>
 
-          {/* Search */}
           <Button
             variant="ghost"
             size="icon-lg"
             onClick={() => router.push("/search")}
-            aria-label="Search"
+            aria-label="대화 검색"
+            className={cn(activeNav === "search" && "bg-canvas-card text-ink")}
           >
             <Search className="h-5 w-5" />
           </Button>
 
-          {/* Ledger */}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            onClick={() => router.push("/ledger")}
-            aria-label="가계부"
-            className={activeNav === "ledger" ? "bg-canvas-card text-ink" : ""}
-          >
-            <Wallet className="h-5 w-5" />
-          </Button>
+          <div className="my-1 w-6 border-t border-hairline" />
 
-          {/* Monitor */}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            onClick={() => router.push("/monitor")}
-            aria-label="언론 모니터링"
-            className={activeNav === "monitor" ? "bg-canvas-card text-ink" : ""}
-          >
-            <Newspaper className="h-5 w-5" />
-          </Button>
-
-          {/* Date spots */}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            onClick={() => router.push("/dates")}
-            aria-label="데이트 추천"
-            className={activeNav === "dates" ? "bg-canvas-card text-ink" : ""}
-          >
-            <CalendarHeart className="h-5 w-5" />
-          </Button>
-
-          {/* Jeju trip site */}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            render={<a href={JEJU_URL} />}
-            nativeButton={false}
-            aria-label="제주 여행"
-          >
-            <Palmtree className="h-5 w-5" />
-          </Button>
-
-          {/* Monitor site */}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            render={<a href={MONITOR_URL} />}
-            nativeButton={false}
-            aria-label="모니터"
-          >
-            <Activity className="h-5 w-5" />
-          </Button>
+          {APP_NAV.map(({ key, href, label, icon: Icon }) => (
+            <Button
+              key={key}
+              variant="ghost"
+              size="icon-lg"
+              onClick={() => router.push(href)}
+              aria-label={label}
+              className={cn(activeNav === key && "bg-canvas-card text-ink")}
+            >
+              <Icon className="h-5 w-5" />
+            </Button>
+          ))}
 
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Logout */}
-          <Button variant="ghost" size="icon-lg" onClick={logout} aria-label="Logout">
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <MoreMenu activeNav={activeNav} collapsed />
         </div>
       )}
     </aside>

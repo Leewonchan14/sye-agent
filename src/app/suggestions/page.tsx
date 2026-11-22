@@ -329,7 +329,7 @@ const SuggestionsContent = () => {
 };
 
 const SuggestionsPage = () => (
-  <SidebarLayout>
+  <SidebarLayout activeNav="suggestions">
     <SuggestionsContent />
   </SidebarLayout>
 );
