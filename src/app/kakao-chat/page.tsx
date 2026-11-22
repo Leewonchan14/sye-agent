@@ -187,7 +187,7 @@ const KakaoChatPage = () => {
   const onPick = useCallback(() => fileRef.current?.click(), []);
 
   return (
-    <SidebarLayout>
+    <SidebarLayout activeNav="kakao-chat">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
         {/* Header */}
         <div className="mt-16 mb-8 text-center md:mt-20">

@@ -410,7 +410,7 @@ const InstructionsContent = () => {
 };
 
 const InstructionsPage = () => (
-  <SidebarLayout>
+  <SidebarLayout activeNav="instructions">
     <InstructionsContent />
   </SidebarLayout>
 );

@@ -9,7 +9,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PasswordGate } from "@/components/password-gate";
-import { SessionSidebar } from "@/components/session-sidebar";
+import { type SidebarNav, SessionSidebar } from "@/components/session-sidebar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
@@ -19,7 +19,7 @@ interface Props {
   /** Highlight this session in the sidebar. Empty string for search page. */
   activeSessionId?: string;
   /** Highlight a non-chat nav item in the sidebar. */
-  activeNav?: "ledger" | "monitor" | "dates";
+  activeNav?: SidebarNav;
   /** Custom loading state */
   loading?: React.ReactNode;
 }
@@ -148,7 +148,7 @@ export const SidebarLayout = ({
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="relative h-full w-64">
+          <div className="relative h-full w-72 max-w-[85vw]">
             <SessionSidebar
               activeSessionId={activeSessionId}
               activeNav={activeNav}

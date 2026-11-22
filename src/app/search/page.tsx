@@ -110,7 +110,7 @@ const SearchPage = () => {
   const isInitialLoad = isFetching && !isFetched;
 
   return (
-    <SidebarLayout activeSessionId="">
+    <SidebarLayout activeSessionId="" activeNav="search">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 text-ink">
         {/* Search section */}
         <div className="mt-16 mb-8 text-center md:mt-20">
