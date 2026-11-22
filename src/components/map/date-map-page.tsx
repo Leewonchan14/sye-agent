@@ -7,7 +7,13 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { ExternalLink, MapPin, MapPinned, RefreshCw } from "lucide-react";
-import { parseAsStringLiteral, useQueryState } from "nuqs";
+import {
+  createParser,
+  parseAsInteger,
+  parseAsStringLiteral,
+  useQueryState,
+  useQueryStates,
+} from "nuqs";
 import { toast } from "sonner";
 
 import { useRef } from "react";
@@ -15,7 +21,12 @@ import { useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import {
+  ExpenseCategoryChips,
+  type CategoryFilter,
+} from "@/components/ledger/category-chips";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
+import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -25,9 +36,9 @@ import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/clien
 import { formatWon } from "@/lib/ledger/format";
 import {
   MAP_RANGES,
+  toMapSearchParams,
   type LedgerMapPayload,
   type LedgerMapPlace,
-  type LedgerMapRange,
 } from "@/lib/ledger/map-types";
 import { cn } from "@/lib/utils";
 
@@ -44,45 +55,43 @@ const PlaceMap = dynamic(
   }
 );
 
-const RANGE_LABEL: Record<LedgerMapRange, string> = {
-  all: "전체",
-  year: "올해",
-  month: "이번 달",
-};
+/** YYYY-MM-DD만 받는다. 형식이 맞지 않으면 없는 것으로 본다. */
+const parseAsDayKey = createParser({
+  parse: (value) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null),
+  serialize: (value: string) => value,
+});
 
-/** 기간은 `?range=`로 주소에 남기고, 바꿀 때마다 히스토리를 쌓아 뒤로 가기로 돌아간다. */
-const rangeParser = parseAsStringLiteral(MAP_RANGES)
-  .withDefault("all")
-  .withOptions({ history: "push" });
+/**
+ * 기간은 주소에 남긴다. 바꿀 때마다 히스토리를 쌓아 뒤로 가기로 이전 기간으로 돌아간다.
+ * - `?range=custom&from=2026-11-01&to=2026-11-22`: 직접 고른 날짜
+ * - `?range=trip&trip=3`: 가계부 여행 하나
+ */
+const periodParsers = {
+  range: parseAsStringLiteral(MAP_RANGES).withDefault("all"),
+  from: parseAsDayKey,
+  to: parseAsDayKey,
+  trip: parseAsInteger,
+  /** `?category=<분류 id>`: 어느 기간이든 그 분류 지출만 본다. */
+  category: parseAsInteger,
+};
 /** 고른 장소. 공유·새로고침해도 같은 장소가 열린다. */
 const placeParser = { history: "replace" } as const;
+
+/** 헤더 요약 앞에 붙이는 기간 이름. 전체·올해·이번 달은 칩으로 충분하다. */
+const periodTitle = (data: LedgerMapPayload) => {
+  if (data.trip) return `${data.trip.name} · ${formatPeriod(data.from ?? "", data.to)}`;
+  if (data.range === "custom" && data.from) return formatPeriod(data.from, data.to);
+  return null;
+};
+
+/** 헤더 요약 앞에 붙이는 고른 분류 이름 */
+const categoryTitle = (data: LedgerMapPayload) =>
+  data.categories.find((item) => item.id === data.category)?.name ?? null;
 
 const visitDate = (date: string) => {
   const day = kst(date);
   return day.format(day.isSame(kst(), "year") ? "M.D (dd)" : "YY.M.D (dd)");
 };
-
-const Chip = ({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) => (
-  <button
-    type="button"
-    aria-pressed={active}
-    onClick={onClick}
-    className={cn(
-      "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[13px] font-medium whitespace-nowrap text-muted ring-1 ring-transparent transition-colors hover:bg-canvas-soft hover:text-body",
-      active && "bg-canvas-card text-ink ring-hairline"
-    )}
-  >
-    {children}
-  </button>
-);
 
 const PlacePhoto = ({ src, className }: { src: string | null; className?: string }) => (
   <div
@@ -220,20 +229,42 @@ const Empty = () => (
   </div>
 );
 
+const EmptyPeriod = () => (
+  <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-hairline px-6 py-12 text-center">
+    <MapPinned className="size-7 text-muted-soft" />
+    <h2 className="text-lg font-medium text-ink">이 조건에는 지도에 찍힌 곳이 없어요</h2>
+    <p className="max-w-md text-sm text-muted">다른 기간·여행·분류를 골라 보세요.</p>
+  </div>
+);
+
 export const DateMapPage = () => {
   const token = useAuthStore((s) => s.token) ?? "";
   const queryClient = useQueryClient();
-  const [range, setRange] = useQueryState("range", rangeParser);
+  const [period, setPeriod] = useQueryStates(periodParsers, { history: "push" });
   const [selectedKey, setSelectedKey] = useQueryState("place", placeParser);
+  // 기간에 쓰지 않는 값(예: 전체인데 남은 from)은 API에 보내지 않는다.
+  const search = toMapSearchParams(period);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ledgerKeys.map(range),
-    queryFn: () =>
-      ledgerRequest<LedgerMapPayload>(token, `/api/ledger/map?range=${range}`),
+    queryKey: ledgerKeys.map(search),
+    queryFn: () => ledgerRequest<LedgerMapPayload>(token, `/api/ledger/map?${search}`),
     enabled: Boolean(token),
     placeholderData: keepPreviousData,
     ...LEDGER_LIVE_QUERY,
   });
+
+  /**
+   * 기간을 바꾸면 고른 장소는 닫고, 그 기간에 쓰지 않는 값은 주소에서 지운다.
+   * 분류는 기간과 따로 고르므로 그대로 둔다.
+   */
+  const changePeriod = (next: Partial<typeof period>) => {
+    void setSelectedKey(null);
+    void setPeriod({ from: null, to: null, trip: null, ...next });
+  };
+  const changeCategory = (value: CategoryFilter) => {
+    void setSelectedKey(null);
+    void setPeriod({ category: value === "all" ? null : value });
+  };
 
   const refresh = useMutation({
     mutationFn: () =>
@@ -275,25 +306,37 @@ export const DateMapPage = () => {
             </h1>
             <p className="text-[13px] text-muted tabular-nums" aria-live="polite">
               {data
-                ? `다녀온 곳 ${places.length}곳 · ${totalVisits}번 · ${formatWon(totalSpent)}`
+                ? [
+                    periodTitle(data),
+                    categoryTitle(data),
+                    `다녀온 곳 ${places.length}곳 · ${totalVisits}번 · ${formatWon(totalSpent)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
                 : "가계부에 남긴 네이버 지도 링크로 다녀온 곳을 모아 봐요."}
             </p>
           </div>
-          <nav aria-label="기간" className="flex gap-1.5">
-            {MAP_RANGES.map((option) => (
-              <Chip
-                key={option}
-                active={range === option}
-                onClick={() => {
-                  void setSelectedKey(null);
-                  void setRange(option);
-                }}
-              >
-                {RANGE_LABEL[option]}
-              </Chip>
-            ))}
-          </nav>
+          <MapPeriodFilter
+            range={period.range}
+            from={data?.range === "custom" ? data.from : period.from}
+            to={data?.range === "custom" ? data.to : period.to}
+            trips={data?.trips ?? []}
+            selectedTrip={data?.trip ?? null}
+            onPreset={(range) => changePeriod({ range })}
+            onCustom={(from, to) => changePeriod({ range: "custom", from, to })}
+            onTrip={(trip) => changePeriod({ range: "trip", trip })}
+          />
         </header>
+
+        {/* 가계부와 같은 분류 칩. 이 기간 지도에 찍힌 지출이 있는 분류만 보여 준다. */}
+        {data && data.categories.length > 0 && (
+          <ExpenseCategoryChips
+            label="분류 필터"
+            categories={data.categories}
+            selected={data.category ?? "all"}
+            onSelect={changeCategory}
+          />
+        )}
 
         {data && data.unresolved > 0 && (
           <div
@@ -322,7 +365,9 @@ export const DateMapPage = () => {
           <p className="py-10 text-center text-sm text-muted">{error.message}</p>
         )}
 
-        {data && !places.length && <Empty />}
+        {data &&
+          !places.length &&
+          (data.range === "all" && data.category === null ? <Empty /> : <EmptyPeriod />)}
 
         {places.length > 0 && (
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_340px]">

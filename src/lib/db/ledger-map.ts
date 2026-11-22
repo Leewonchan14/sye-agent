@@ -1,24 +1,80 @@
 import { and, asc, eq, gte, isNotNull, isNull, lte, ne } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
-import { activeEntry, readMapPlace } from "@/lib/db/ledger";
+import {
+  activeEntry,
+  getTripRows,
+  LedgerError,
+  normalizeDate,
+  readMapPlace,
+  toEntryKind,
+} from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
+import type { LedgerCategoryColorKey, LedgerCategoryIconKey } from "@/lib/ledger/icons";
 import { isNaverMapUrl } from "@/lib/ledger/map-url";
 
 import {
   toMapRange,
+  type LedgerMapCategory,
   type LedgerMapPayload,
   type LedgerMapPlace,
+  type LedgerMapQuery,
   type LedgerMapRange,
+  type LedgerMapTrip,
   type LedgerMapVisit,
 } from "@/lib/ledger/map-types";
 
-export type { LedgerMapPayload, LedgerMapPlace, LedgerMapRange, LedgerMapVisit };
+export type {
+  LedgerMapPayload,
+  LedgerMapPlace,
+  LedgerMapQuery,
+  LedgerMapRange,
+  LedgerMapTrip,
+  LedgerMapVisit,
+};
 
-const rangeStart = (range: LedgerMapRange): string | null => {
-  if (range === "year") return kst().startOf("year").format("YYYY-MM-DD");
-  if (range === "month") return kst().startOf("month").format("YYYY-MM-DD");
-  return null;
+type ResolvedRange = {
+  range: LedgerMapRange;
+  from: string | null;
+  to: string;
+  trip: LedgerMapTrip | null;
+};
+
+/** 고른 기간을 실제 날짜 범위(또는 여행)로 바꾼다. 잘못된 값이면 400으로 알린다. */
+const resolveRange = (query: LedgerMapQuery, trips: LedgerMapTrip[]): ResolvedRange => {
+  const range = toMapRange(query.range);
+  const today = kst().format("YYYY-MM-DD");
+  if (range === "year") {
+    return {
+      range,
+      from: kst().startOf("year").format("YYYY-MM-DD"),
+      to: today,
+      trip: null,
+    };
+  }
+  if (range === "month") {
+    return {
+      range,
+      from: kst().startOf("month").format("YYYY-MM-DD"),
+      to: today,
+      trip: null,
+    };
+  }
+  if (range === "custom") {
+    if (!query.from) throw new LedgerError("시작 날짜를 골라 주세요.");
+    const from = normalizeDate(query.from);
+    const to = query.to ? normalizeDate(query.to) : from;
+    // 거꾸로 고르면 앞뒤를 바꿔 준다.
+    return from <= to
+      ? { range, from, to, trip: null }
+      : { range, from: to, to: from, trip: null };
+  }
+  if (range === "trip") {
+    const trip = trips.find((item) => item.id === query.trip);
+    if (!trip) throw new LedgerError("여행을 찾을 수 없어요.");
+    return { range, from: trip.startDate, to: trip.endDate, trip };
+  }
+  return { range, from: null, to: today, trip: null };
 };
 
 const ledgerExpense = and(activeEntry, eq(schema.ledgerEntries.kind, "expense"));
@@ -37,6 +93,24 @@ const listUnresolvedRows = () =>
     .where(unresolvedEntry)
     .orderBy(asc(schema.ledgerEntries.id));
 
+/** 분류 칩에 쓰는 가계부 분류 (가계부와 같은 순서). entryCount는 부르는 쪽에서 채운다. */
+const getExpenseCategories = async (): Promise<LedgerMapCategory[]> =>
+  (
+    await getDb()
+      .select()
+      .from(schema.ledgerCategories)
+      .orderBy(asc(schema.ledgerCategories.sortOrder), asc(schema.ledgerCategories.id))
+  ).map((category) => ({
+    id: category.id,
+    name: category.name,
+    kind: toEntryKind(category.kind),
+    emoji: category.emoji,
+    icon: category.icon as LedgerCategoryIconKey,
+    color: category.color as LedgerCategoryColorKey,
+    sortOrder: category.sortOrder,
+    entryCount: 0,
+  }));
+
 /** 네이버 지도 링크가 아닌 링크(카카오·구글 등)는 좌표를 읽을 수 없으니 세지 않는다. */
 const countUnresolved = async () =>
   (await listUnresolvedRows()).filter((row) => isNaverMapUrl(row.mapUrl)).length;
@@ -46,12 +120,17 @@ const countUnresolved = async () =>
  * 모임통장 가계부라 지출은 모두 둘의 지출이고, 지도 링크는 오프라인 가게에만 붙는다.
  */
 export const getLedgerMapPlaces = async (
-  rangeInput?: unknown
+  query: LedgerMapQuery = { range: "all" }
 ): Promise<LedgerMapPayload> => {
-  const range = toMapRange(rangeInput);
-  const from = rangeStart(range);
-  const to = kst().format("YYYY-MM-DD");
+  const trips: LedgerMapTrip[] = (await getTripRows()).map(
+    ({ id, name, startDate, endDate }) => ({ id, name, startDate, endDate })
+  );
+  const { range, from, to, trip } = resolveRange(query, trips);
   const entries = schema.ledgerEntries;
+  // 여행은 날짜가 아니라 가계부에서 그 여행에 묶은 지출로 고른다.
+  const period = trip
+    ? eq(entries.tripId, trip.id)
+    : and(lte(entries.entryDate, to), from ? gte(entries.entryDate, from) : undefined);
 
   const [rows, unresolved] = await Promise.all([
     getDb()
@@ -69,6 +148,7 @@ export const getLedgerMapPlaces = async (
         mapLng: entries.mapLng,
         mapAddress: entries.mapAddress,
         mapCategory: entries.mapCategory,
+        categoryId: entries.categoryId,
         categoryName: schema.ledgerCategories.name,
       })
       .from(entries)
@@ -77,19 +157,32 @@ export const getLedgerMapPlaces = async (
         eq(entries.categoryId, schema.ledgerCategories.id)
       )
       .where(
-        and(
-          ledgerExpense,
-          isNotNull(entries.mapLat),
-          isNotNull(entries.mapLng),
-          lte(entries.entryDate, to),
-          from ? gte(entries.entryDate, from) : undefined
-        )
+        and(ledgerExpense, isNotNull(entries.mapLat), isNotNull(entries.mapLng), period)
       ),
     countUnresolved(),
   ]);
 
+  // 분류 칩은 고르기 전 이 기간의 지출로 센다. 고른 분류는 지출이 없어도 칩에 남긴다.
+  const category = query.category ?? null;
+  const expenseCategories = (await getExpenseCategories()).filter(
+    (item) => item.kind === "expense"
+  );
+  if (category !== null && !expenseCategories.some((item) => item.id === category)) {
+    throw new LedgerError("분류를 찾을 수 없어요.");
+  }
+  const countByCategory = new Map<number, number>();
+  for (const row of rows) {
+    if (row.categoryId === null) continue;
+    countByCategory.set(row.categoryId, (countByCategory.get(row.categoryId) ?? 0) + 1);
+  }
+  const categories: LedgerMapCategory[] = expenseCategories
+    .map((item) => ({ ...item, entryCount: countByCategory.get(item.id) ?? 0 }))
+    .filter((item) => item.entryCount > 0 || item.id === category);
+  const picked =
+    category === null ? rows : rows.filter((row) => row.categoryId === category);
+
   // 최신 기록이 먼저 오게 정렬해 두면 장소의 이름·사진은 가장 최근에 읽은 값을 쓴다.
-  rows.sort(
+  picked.sort(
     (a, b) =>
       b.entryDate.localeCompare(a.entryDate) ||
       (b.entryTime ?? "").localeCompare(a.entryTime ?? "") ||
@@ -97,7 +190,7 @@ export const getLedgerMapPlaces = async (
   );
 
   const byKey = new Map<string, LedgerMapPlace>();
-  for (const row of rows) {
+  for (const row of picked) {
     if (row.mapLat === null || row.mapLng === null) continue;
     const key = row.mapPlaceId || row.mapUrl;
     const visit: LedgerMapVisit = {
@@ -140,7 +233,7 @@ export const getLedgerMapPlaces = async (
   const places = [...byKey.values()].sort(
     (a, b) => b.visits - a.visits || b.lastDate.localeCompare(a.lastDate)
   );
-  return { range, from, to, places, unresolved };
+  return { range, from, to, trip, trips, category, categories, places, unresolved };
 };
 
 /** 한 번에 다시 읽을 최대 지출 수. 네이버가 요청이 몰리면 막기 때문에 순서대로 읽는다. */
