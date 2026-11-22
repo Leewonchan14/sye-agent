@@ -30,6 +30,7 @@ import {
   EntryIcon,
 } from "@/components/ledger/category-icon";
 import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
+import { MapLinkButton } from "@/components/ledger/map-link-button";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
 import {
   EntryDateList,
@@ -806,6 +807,8 @@ const PeriodEntriesCard = ({
 
   const rows = entries.filter((entry) => kind === "all" || entry.kind === kind).reverse();
   const sortedRows = sortEntries(rows, sortKey, sortDir);
+  const visibleRows = sortedRows.slice(0, visibleCount);
+  const hasMapLinks = visibleRows.some((entry) => entry.mapUrl);
 
   const expenseTotal = rows
     .filter((entry) => entry.kind === "expense")
@@ -898,14 +901,14 @@ const PeriodEntriesCard = ({
 
       {rows.length ? (
         <ul className="mt-2 divide-y divide-hairline-soft">
-          {sortedRows.slice(0, visibleCount).map((entry) => {
+          {visibleRows.map((entry) => {
             const isIncome = entry.kind === "income";
             return (
-              <li key={entry.id}>
+              <li key={entry.id} className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => onEdit(entry)}
-                  className="flex w-full items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left hover:bg-canvas-soft/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   <EntryIcon entry={entry} size={20} />
                   <span className="shrink-0 text-[11px] text-muted-soft tabular-nums">
@@ -923,6 +926,15 @@ const PeriodEntriesCard = ({
                     {formatWon(entry.amount)}
                   </span>
                 </button>
+                {entry.mapUrl ? (
+                  <MapLinkButton
+                    url={entry.mapUrl}
+                    label={entry.memo.trim() || (isIncome ? "입금" : "지출")}
+                    className="size-7"
+                  />
+                ) : (
+                  hasMapLinks && <span aria-hidden className="size-7 shrink-0" />
+                )}
               </li>
             );
           })}

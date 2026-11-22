@@ -46,10 +46,37 @@ test("지출에 지도 공유 문구를 붙이면 링크만 남기고 열 수 �
   );
   expect(rows[0].map_url).toBe("https://naver.me/xAbC12");
 
-  // 목록에서 지도 링크가 있는 내역을 알 수 있고, 수정 화면에서 링크를 열 수 있다.
-  const row = page.getByRole("button", { name: /성수동 파스타/ }).first();
-  await expect(row.getByRole("img", { name: "지도 링크 있음" })).toBeVisible();
-  await row.click();
+  // 내역 목록에서 지도를 바로 연다.
+  const listLink = page.getByRole("link", { name: "성수동 파스타 지도 열기" }).first();
+  await expect(listLink).toHaveAttribute("href", "https://naver.me/xAbC12");
+  await expect(listLink).toHaveAttribute("target", "_blank");
+  // 실제 지도 서비스에 접속하지 않도록 가로챈다.
+  await page
+    .context()
+    .route("https://naver.me/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "<p>map</p>" })
+    );
+  const popupPromise = page.waitForEvent("popup");
+  await listLink.click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState();
+  expect(popup.url()).toContain("naver.me/xAbC12");
+  await popup.close();
+  // 지도 버튼을 눌러도 수정 화면은 열리지 않는다.
+  await expect(dialog).toBeHidden();
+
+  // 통계 탭의 내역 목록에서도 바로 연다.
+  await page.getByRole("tab", { name: "통계" }).click();
+  await expect(
+    page.getByRole("link", { name: "성수동 파스타 지도 열기" }).first()
+  ).toHaveAttribute("href", "https://naver.me/xAbC12");
+  await page.getByRole("tab", { name: "내역" }).click();
+
+  // 수정 화면에서도 링크를 고치고 열 수 있다.
+  await page
+    .getByRole("button", { name: /성수동 파스타/ })
+    .first()
+    .click();
   await expect(dialog.locator("#ledger-map-url")).toHaveValue("https://naver.me/xAbC12");
   await expect(dialog.getByRole("link", { name: "지도 열기" })).toHaveAttribute(
     "target",
