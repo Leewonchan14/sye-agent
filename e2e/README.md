@@ -25,3 +25,6 @@ DATABASE_URL=$E2E_DATABASE_URL npx next start -p 3100 &
 
 MONITOR_INGEST_KEY=e2e-ingest-key E2E_BASE_URL=http://localhost:3100 npx playwright test e2e/date-spots.spec.ts
 ```
+
+가계부 지도 사진 테스트(`ledger-map-photo.spec.ts`)는 가짜 네이버 플레이스 서버(기본 포트 8973)를 띄운다.
+앱을 띄울 때 `NAVER_PLACE_ORIGIN=http://127.0.0.1:8973`을 함께 넣는다.

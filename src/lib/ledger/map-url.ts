@@ -7,6 +7,13 @@ export const MAX_MAP_URL_LENGTH = 1000;
 export const extractMapUrl = (value: string): string =>
   value.match(/https?:\/\/[^\s<>"']+/i)?.[0] ?? value.trim();
 
+export const isNaverHost = (host: string): boolean =>
+  host === "naver.me" || host === "naver.com" || host.endsWith(".naver.com");
+
+/** 네이버 지도 링크인지 본다. 단축 링크(naver.me)도 포함한다. */
+export const isNaverMapUrl = (value: string): boolean =>
+  URL.canParse(value) && isNaverHost(new URL(value).hostname);
+
 /** 화면에서 열어도 되는 http(s) 주소인지 본다. */
 export const isHttpUrl = (value: string): boolean => {
   const raw = extractMapUrl(value);

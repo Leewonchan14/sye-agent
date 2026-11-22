@@ -15,6 +15,7 @@ import {
   type LedgerCategoryIconKey,
 } from "@/lib/ledger/icons";
 import { extractMapUrl, isHttpUrl, MAX_MAP_URL_LENGTH } from "@/lib/ledger/map-url";
+import { fetchNaverPlacePreview } from "@/lib/ledger/naver-place";
 import { suggestLedgerCategoryName } from "@/lib/ledger/notification";
 
 export type LedgerEntryKind = "expense" | "income";
@@ -35,6 +36,10 @@ export type LedgerEntryView = {
   note: string;
   /** 장소 지도 링크. 없으면 빈 문자열 */
   mapUrl: string;
+  /** 네이버 지도 링크에서 읽은 장소 이름. 없으면 빈 문자열 */
+  mapPlaceName: string;
+  /** 네이버 지도 링크에서 읽은 장소 사진 주소들. 앞의 것이 대표 사진 */
+  mapImageUrls: string[];
   tags: string;
   tripId: number | null;
   tripName: string | null;
@@ -432,6 +437,8 @@ export const toLedgerEntryView = (
     memo: entry.memo,
     note: entry.note,
     mapUrl: entry.mapUrl,
+    mapPlaceName: entry.mapPlaceName,
+    mapImageUrls: entry.mapImageUrls,
     tripId: entry.tripId,
     tripName: entry.tripId == null ? null : (tripById.get(entry.tripId)?.name ?? null),
   };
@@ -861,6 +868,12 @@ export const ensureJointAssetId = async (): Promise<number> => {
   return asset.id;
 };
 
+/** 지도 링크로 장소 이름·사진을 채운다. 네이버 지도가 아니거나 읽지 못하면 비운다. */
+const readMapPlace = async (mapUrl: string) => {
+  const place = mapUrl ? await fetchNaverPlacePreview(mapUrl) : null;
+  return { mapPlaceName: place?.placeName ?? "", mapImageUrls: place?.imageUrls ?? [] };
+};
+
 export const createLedgerEntry = async (
   input: LedgerEntryInput,
   source: LedgerEntrySource = "web"
@@ -876,9 +889,10 @@ export const createLedgerEntry = async (
   const assetId = await ensureJointAssetId();
   const note = normalizeEntryNote(input.note);
   const mapUrl = normalizeEntryMapUrl(input.mapUrl);
+  const mapPlace = await readMapPlace(mapUrl);
   const [entry] = await getDb()
     .insert(schema.ledgerEntries)
-    .values({ ...values, note, mapUrl, assetId, member: "joint", tripId })
+    .values({ ...values, note, mapUrl, ...mapPlace, assetId, member: "joint", tripId })
     .returning();
   await logEntryHistory(entry.id, "create", source, null, entry);
   return entry;
@@ -1025,9 +1039,17 @@ export const updateLedgerEntry = async (
   // 메모를 보내지 않는 호출(에이전트 등)이 기존 메모를 지우지 않게 한다.
   const notePatch =
     input.note === undefined ? {} : { note: normalizeEntryNote(input.note) };
-  const mapUrlPatch =
-    input.mapUrl === undefined ? {} : { mapUrl: normalizeEntryMapUrl(input.mapUrl) };
+  const mapUrl =
+    input.mapUrl === undefined ? undefined : normalizeEntryMapUrl(input.mapUrl);
   const before = await findActiveEntry(entryId);
+  // 링크가 바뀌었거나, 예전에 사진을 못 읽은 링크를 다시 저장하면 장소 정보를 새로 읽는다.
+  const needsMapPlace =
+    mapUrl !== undefined &&
+    (mapUrl !== before.mapUrl || (!before.mapPlaceName && !before.mapImageUrls.length));
+  const mapUrlPatch =
+    mapUrl === undefined
+      ? {}
+      : { mapUrl, ...(needsMapPlace ? await readMapPlace(mapUrl) : {}) };
   const [entry] = await getDb()
     .update(schema.ledgerEntries)
     .set({ ...values, ...notePatch, ...mapUrlPatch, ...tripPatch, updatedAt: new Date() })
