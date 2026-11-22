@@ -288,6 +288,8 @@ export const PlacePhotoStrip = ({
                 decoding="async"
                 draggable={false}
                 referrerPolicy="no-referrer"
+                // 못 받으면 그 사진을 빼고, 다음 사진이 "+N" 칸을 채운다.
+                onError={() => fail(photos[WIDE_PHOTO_COUNT])}
                 className="size-full object-cover"
               />
               <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-medium text-white tabular-nums transition-colors hover:bg-black/40">

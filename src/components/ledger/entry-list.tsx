@@ -30,7 +30,7 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
       <button
         type="button"
         onClick={() => onEdit(entry)}
-        className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-canvas-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:bg-canvas-soft"
+        className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <EntryIcon entry={entry} size={36} className="rounded-[10px]" />
         <span className="min-w-0 flex-1">
@@ -58,7 +58,7 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
           mapUrl={entry.mapUrl}
           placeName={entry.mapPlaceName}
           imageUrls={entry.mapImageUrls}
-          className="pr-2 pb-3 pl-14 sm:-mt-1"
+          className="pr-2 pb-3 pl-14"
         />
       )}
     </>
@@ -85,9 +85,10 @@ export const LedgerEntryList = ({ entries, onEdit, emptyText }: ListProps) => {
       {entries.map((entry) => (
         // 둥근 버튼에 테두리를 주면 선 끝이 휘므로, 곧은 선은 바깥 칸에 그린다.
         // left-14는 버튼 여백 + 아이콘 + 간격을 더한 글자 시작점이다.
+        // 줄에 마우스를 올리면 아래 장소 사진까지 내역 한 건 전체를 칠한다.
         <div
           key={entry.id}
-          className="relative not-last:after:absolute not-last:after:right-2 not-last:after:bottom-0 not-last:after:left-14 not-last:after:h-px not-last:after:bg-hairline"
+          className="relative rounded-xl transition-colors not-last:after:absolute not-last:after:right-2 not-last:after:bottom-0 not-last:after:left-14 not-last:after:h-px not-last:after:bg-hairline has-[>button:active]:bg-canvas-soft [@media(hover:hover)]:has-[>button:hover]:bg-canvas-soft"
         >
           <LedgerEntryRow entry={entry} onEdit={onEdit} />
         </div>

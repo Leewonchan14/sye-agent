@@ -173,6 +173,31 @@ test("네이버 지도 링크로 저장하면 장소 사진을 내역에서 같�
   };
   expect(await amountRight("사진 없는 내역")).toBe(await amountRight("성수동 파스타"));
 
+  // 줄에 마우스를 올리면 장소 사진까지 내역 한 건 전체를 칠한다(버튼만 칠하지 않는다).
+  const rowButton = page.getByRole("button", { name: /성수동 파스타/ }).first();
+  const rowCell = rowButton.locator("xpath=..");
+  const canHover = await page.evaluate(() => matchMedia("(hover: hover)").matches);
+  // 데스크톱에서는 반드시 마우스 올림을 확인한다.
+  if (!test.info().project.use.isMobile) expect(canHover).toBe(true);
+  if (canHover) {
+    await rowButton.hover();
+    await expect(rowCell).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(rowButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(
+      rowCell.getByRole("link", { name: "성수동 파스타 지도 열기" })
+    ).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(rowCell).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+  // 터치 화면에서는 탭한 뒤 수정 창을 닫아도 줄 배경이 남지 않는다.
+  if (test.info().project.use.hasTouch) {
+    await rowButton.tap();
+    const editDialog = page.getByRole("dialog", { name: "내역 수정" });
+    await editDialog.getByRole("button", { name: "취소" }).tap();
+    await expect(editDialog).toBeHidden();
+    await expect(rowCell).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+
   // 사진을 누르면 크게 보고 넘긴다. 크게 볼 때는 1200×800 주소를 쓴다.
   await page
     .getByRole("button", { name: "성수 파스타집 사진 2 크게 보기" })

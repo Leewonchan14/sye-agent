@@ -94,12 +94,16 @@ export const EntryDateList = ({
             </>
           );
           return (
-            <li key={entry.id}>
+            // 줄에 마우스를 올리면 아래 장소 사진까지 함께 칠한다.
+            <li
+              key={entry.id}
+              className="rounded-md transition-colors [@media(hover:hover)]:has-[>button:hover]:bg-surface/70"
+            >
               {onEdit ? (
                 <button
                   type="button"
                   onClick={() => onEdit(entry)}
-                  className="flex w-full items-baseline gap-2 rounded-md px-1 py-1 text-left text-[12px] hover:bg-surface/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="flex w-full items-baseline gap-2 rounded-md px-1 py-1 text-left text-[12px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   {body}
                 </button>
