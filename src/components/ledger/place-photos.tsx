@@ -201,10 +201,13 @@ interface StripProps {
   className?: string;
 }
 
+/** 넓은 화면의 md에서 크게 보여 주는 사진 수. 나머지는 "+N" 칸으로 묶는다. */
+const WIDE_PHOTO_COUNT = 3;
+
 /**
- * 내역 줄 아래에 붙는 장소 줄: 📍 장소 이름(누르면 지도) + 사진 띠(누르면 크게 보기).
- * 넘치는 사진은 가로로 밀어 본다. 장소 이름은 밀리지 않는다.
- * 넓은 화면의 md는 이름과 사진을 한 줄에, 좁은 화면과 sm(좁은 목록)은 이름 아래에 사진을 둔다.
+ * 내역 줄 아래에 붙는 장소 줄: 📍 장소 이름(누르면 지도) 아래에 사진(누르면 크게 보기).
+ * - 좁은 화면, sm(좁은 목록): 작은 사진 띠. 넘치는 사진은 가로로 밀어 본다.
+ * - 넓은 화면의 md(내역 탭): 큰 사진 3장 + "+N" 칸. 장소 이름은 테두리 없는 글자 링크.
  */
 export const PlacePhotoStrip = ({
   title,
@@ -217,15 +220,11 @@ export const PlacePhotoStrip = ({
   const { photos, fail } = useWorkingPhotos(imageUrls);
   const [viewing, setViewing] = useState<number | null>(null);
   const name = placeName || title;
+  const wide = size === "md";
+  const more = photos.length - WIDE_PHOTO_COUNT;
 
   return (
-    <div
-      className={cn(
-        "flex flex-col items-start gap-1.5",
-        size === "md" && "sm:flex-row sm:items-center",
-        className
-      )}
-    >
+    <div className={cn("flex flex-col items-start gap-1.5", className)}>
       <a
         href={mapUrl}
         target="_blank"
@@ -234,14 +233,21 @@ export const PlacePhotoStrip = ({
         title="지도 열기"
         className={cn(
           "flex max-w-full shrink-0 items-center gap-1 rounded-md border border-hairline bg-surface px-2 text-[11px] text-muted transition-colors hover:bg-canvas-soft hover:text-ink focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-          size === "md" ? "h-7 sm:max-w-44" : "h-6"
+          wide
+            ? "h-7 sm:h-auto sm:border-0 sm:bg-transparent sm:px-0 sm:hover:bg-transparent sm:hover:underline"
+            : "h-6"
         )}
       >
         <MapPin className="size-3 shrink-0" />
         <span className="truncate">{placeName || "지도"}</span>
       </a>
       {photos.length > 0 && (
-        <div className="flex w-full min-w-0 [scrollbar-width:none] gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+        <div
+          className={cn(
+            "flex w-full min-w-0 [scrollbar-width:none] gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden",
+            wide && "sm:gap-2 sm:overflow-visible"
+          )}
+        >
           {photos.map((photo, index) => (
             <button
               key={photo}
@@ -249,8 +255,9 @@ export const PlacePhotoStrip = ({
               aria-label={`${photoLabel(name, index, photos.length)} 크게 보기`}
               onClick={() => setViewing(index)}
               className={cn(
-                "shrink-0 cursor-zoom-in overflow-hidden rounded-md bg-canvas-soft ring-1 ring-hairline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                size === "md" ? "h-12 w-20" : "h-10 w-16"
+                "shrink-0 cursor-zoom-in overflow-hidden rounded-md bg-canvas-soft ring-1 ring-hairline transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                wide ? "h-12 w-20 sm:h-24 sm:w-40 sm:rounded-lg" : "h-10 w-16",
+                wide && index >= WIDE_PHOTO_COUNT && "sm:hidden"
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -266,6 +273,28 @@ export const PlacePhotoStrip = ({
               />
             </button>
           ))}
+          {wide && more > 0 && (
+            <button
+              type="button"
+              aria-label={`${name} 사진 ${more}장 더 보기`}
+              onClick={() => setViewing(WIDE_PHOTO_COUNT)}
+              className="relative hidden h-24 w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg bg-canvas-soft ring-1 ring-hairline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:block"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photos[WIDE_PHOTO_COUNT]}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                referrerPolicy="no-referrer"
+                className="size-full object-cover"
+              />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-medium text-white tabular-nums transition-colors hover:bg-black/40">
+                +{more}
+              </span>
+            </button>
+          )}
         </div>
       )}
       <PhotoViewer

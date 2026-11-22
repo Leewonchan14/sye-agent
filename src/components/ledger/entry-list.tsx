@@ -58,7 +58,7 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
           mapUrl={entry.mapUrl}
           placeName={entry.mapPlaceName}
           imageUrls={entry.mapImageUrls}
-          className="pr-2 pb-2 pl-14"
+          className="pr-2 pb-3 pl-14 sm:-mt-1"
         />
       )}
     </>
