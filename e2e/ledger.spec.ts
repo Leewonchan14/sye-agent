@@ -184,6 +184,15 @@ test("사용 금액 추이: 일별과 누적을 선 그래프로 보고 지점�
   await expect(page.getByText("사용 금액 추이", { exact: true })).toBeVisible();
   await expect(peakReadout).toBeVisible();
 
+  // 사용 금액 추이가 잔액 추이보다 먼저 보인다.
+  const spendTop = (await page.getByText("사용 금액 추이", { exact: true }).boundingBox())
+    ?.y;
+  const balanceTop = (await page.getByText("잔액 추이", { exact: true }).boundingBox())
+    ?.y;
+  expect(spendTop).toBeDefined();
+  expect(balanceTop).toBeDefined();
+  expect(spendTop!).toBeLessThan(balanceTop!);
+
   const chart = page.getByRole("img", { name: /^사용 금액 추이, 일별/ });
   await chart.scrollIntoViewIfNeeded();
   const box = await chart.boundingBox();
