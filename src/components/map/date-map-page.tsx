@@ -21,6 +21,10 @@ import { useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import {
+  ExpenseCategoryChips,
+  type CategoryFilter,
+} from "@/components/ledger/category-chips";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
 import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -67,6 +71,8 @@ const periodParsers = {
   from: parseAsDayKey,
   to: parseAsDayKey,
   trip: parseAsInteger,
+  /** `?category=<분류 id>`: 어느 기간이든 그 분류 지출만 본다. */
+  category: parseAsInteger,
 };
 /** 고른 장소. 공유·새로고침해도 같은 장소가 열린다. */
 const placeParser = { history: "replace" } as const;
@@ -77,6 +83,10 @@ const periodTitle = (data: LedgerMapPayload) => {
   if (data.range === "custom" && data.from) return formatPeriod(data.from, data.to);
   return null;
 };
+
+/** 헤더 요약 앞에 붙이는 고른 분류 이름 */
+const categoryTitle = (data: LedgerMapPayload) =>
+  data.categories.find((item) => item.id === data.category)?.name ?? null;
 
 const visitDate = (date: string) => {
   const day = kst(date);
@@ -222,8 +232,8 @@ const Empty = () => (
 const EmptyPeriod = () => (
   <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-hairline px-6 py-12 text-center">
     <MapPinned className="size-7 text-muted-soft" />
-    <h2 className="text-lg font-medium text-ink">이 기간에는 지도에 찍힌 곳이 없어요</h2>
-    <p className="max-w-md text-sm text-muted">다른 기간이나 여행을 골라 보세요.</p>
+    <h2 className="text-lg font-medium text-ink">이 조건에는 지도에 찍힌 곳이 없어요</h2>
+    <p className="max-w-md text-sm text-muted">다른 기간·여행·분류를 골라 보세요.</p>
   </div>
 );
 
@@ -243,10 +253,17 @@ export const DateMapPage = () => {
     ...LEDGER_LIVE_QUERY,
   });
 
-  /** 기간을 바꾸면 고른 장소는 닫고, 그 기간에 쓰지 않는 값은 주소에서 지운다. */
+  /**
+   * 기간을 바꾸면 고른 장소는 닫고, 그 기간에 쓰지 않는 값은 주소에서 지운다.
+   * 분류는 기간과 따로 고르므로 그대로 둔다.
+   */
   const changePeriod = (next: Partial<typeof period>) => {
     void setSelectedKey(null);
     void setPeriod({ from: null, to: null, trip: null, ...next });
+  };
+  const changeCategory = (value: CategoryFilter) => {
+    void setSelectedKey(null);
+    void setPeriod({ category: value === "all" ? null : value });
   };
 
   const refresh = useMutation({
@@ -291,6 +308,7 @@ export const DateMapPage = () => {
               {data
                 ? [
                     periodTitle(data),
+                    categoryTitle(data),
                     `다녀온 곳 ${places.length}곳 · ${totalVisits}번 · ${formatWon(totalSpent)}`,
                   ]
                     .filter(Boolean)
@@ -309,6 +327,16 @@ export const DateMapPage = () => {
             onTrip={(trip) => changePeriod({ range: "trip", trip })}
           />
         </header>
+
+        {/* 가계부와 같은 분류 칩. 이 기간 지도에 찍힌 지출이 있는 분류만 보여 준다. */}
+        {data && data.categories.length > 0 && (
+          <ExpenseCategoryChips
+            label="분류 필터"
+            categories={data.categories}
+            selected={data.category ?? "all"}
+            onSelect={changeCategory}
+          />
+        )}
 
         {data && data.unresolved > 0 && (
           <div
@@ -337,7 +365,9 @@ export const DateMapPage = () => {
           <p className="py-10 text-center text-sm text-muted">{error.message}</p>
         )}
 
-        {data && !places.length && (data.range === "all" ? <Empty /> : <EmptyPeriod />)}
+        {data &&
+          !places.length &&
+          (data.range === "all" && data.category === null ? <Empty /> : <EmptyPeriod />)}
 
         {places.length > 0 && (
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_340px]">

@@ -3,7 +3,15 @@ import { createServer, type Server } from "node:http";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { kst } from "../src/lib/kst";
-import { authHeaders, daysAgo, login, pool, resetLedger, today } from "./helpers";
+import {
+  authHeaders,
+  daysAgo,
+  getCategories,
+  login,
+  pool,
+  resetLedger,
+  today,
+} from "./helpers";
 
 /**
  * 데이트 지도(/map). 앱은 NAVER_PLACE_ORIGIN을 이 가짜 플레이스 서버로 두고 띄운다.
@@ -155,7 +163,13 @@ test.beforeEach(async ({ page, request }) => {
 
 const createEntry = async (
   request: APIRequestContext,
-  data: { memo: string; amount: number; mapUrl?: string; entryDate?: string }
+  data: {
+    memo: string;
+    amount: number;
+    mapUrl?: string;
+    entryDate?: string;
+    categoryId?: number;
+  }
 ) => {
   const res = await request.post("/api/ledger/entries", {
     headers: authHeaders(token),
@@ -397,7 +411,75 @@ test("기간 값이 잘못되면 400으로 알린다", async ({ request }) => {
   expect((await get("range=custom")).status()).toBe(400);
   expect((await get("range=custom&from=2026-02-30")).status()).toBe(400);
   expect((await get("range=trip&trip=999")).status()).toBe(400);
+  expect((await get("category=999")).status()).toBe(400);
+  expect((await get("category=abc")).status()).toBe(400);
   // 거꾸로 고른 날짜는 앞뒤를 바꿔 준다.
   const swapped = await get(`range=custom&from=${today()}&to=${daysAgo(3)}`);
   expect(await swapped.json()).toMatchObject({ from: daysAgo(3), to: today() });
+});
+
+test("분류를 골라 그 분류 지출로 간 곳만 보고, 기간을 바꿔도 분류는 그대로 둔다", async ({
+  page,
+  request,
+}) => {
+  const categoryId = await getCategories(request, token);
+  const food = categoryId("식비");
+  const cafe = categoryId("카페");
+  await createEntry(request, {
+    memo: "파스타",
+    amount: 18_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+    categoryId: food,
+  });
+  await createEntry(request, {
+    memo: "중식",
+    amount: 30_000,
+    mapUrl: "https://map.naver.com/p/entry/place/3001",
+    categoryId: food,
+    entryDate: kst().subtract(1, "year").format("YYYY-MM-DD"),
+  });
+  await createEntry(request, {
+    memo: "라떼",
+    amount: 6_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2002",
+    categoryId: cafe,
+  });
+
+  await openMap(page);
+  const chips = page.getByRole("group", { name: "분류 필터" });
+  // 지도에 찍힌 지출이 있는 분류만 칩으로 보여 준다.
+  await expect(chips.getByRole("button")).toHaveText(["전체", "식비", "카페"]);
+  const items = placeList(page).getByRole("button");
+  await expect(items).toHaveCount(3);
+
+  await chips.getByRole("button", { name: "식비" }).click();
+  await expect(page).toHaveURL(new RegExp(`category=${food}`));
+  await expect(items).toHaveCount(2);
+  await expect(page.getByText("식비 · 다녀온 곳 2곳 · 2번 · 48,000원")).toBeVisible();
+
+  // 기간을 바꿔도 분류는 남는다. 올해 식비는 파스타 하나다.
+  await page
+    .getByRole("navigation", { name: "기간" })
+    .getByRole("button", { name: "올해" })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`category=${food}`));
+  await expect(page).toHaveURL(/range=year/);
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText("성수 파스타집");
+  await expect(chips.getByRole("button", { name: "식비" })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+
+  // 뒤로 가면 전체 기간의 식비, 전체 분류를 누르면 분류 값이 빠진다.
+  await page.goBack();
+  await expect(items).toHaveCount(2);
+  await chips.getByRole("button", { name: "전체" }).click();
+  await expect(page).not.toHaveURL(/category=/);
+  await expect(items).toHaveCount(3);
+
+  // 주소로 바로 연 분류도 같다.
+  await openMap(page, `/map?category=${cafe}`);
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText("망원 카페");
 });
