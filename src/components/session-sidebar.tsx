@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileText,
   LogOut,
+  MapPinned,
   MessageCircle,
   Newspaper,
   Palmtree,
@@ -47,6 +48,7 @@ export type SidebarNav =
   | "ledger"
   | "monitor"
   | "dates"
+  | "map"
   | "search"
   | "instructions"
   | "suggestions"
@@ -72,6 +74,7 @@ interface Props {
 const APP_NAV = [
   { key: "ledger", href: "/ledger", label: "가계부", icon: Wallet },
   { key: "dates", href: "/dates", label: "데이트 추천", icon: CalendarHeart },
+  { key: "map", href: "/map", label: "데이트 지도", icon: MapPinned },
   { key: "monitor", href: "/monitor", label: "언론 모니터링", icon: Newspaper },
 ] as const;
 

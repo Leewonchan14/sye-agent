@@ -1,0 +1,297 @@
+import { createServer, type Server } from "node:http";
+
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+
+import { kst } from "../src/lib/kst";
+import { authHeaders, login, pool, resetLedger, today } from "./helpers";
+
+/**
+ * 데이트 지도(/map). 앱은 NAVER_PLACE_ORIGIN을 이 가짜 플레이스 서버로 두고 띄운다.
+ * 장소 페이지의 `__APOLLO_STATE__`에 좌표·주소·업종(PlaceDetailBase)을 넣어 돌려준다.
+ * 지도 타일은 바깥 네트워크 없이 돌도록 빈 스타일로 바꿔 준다.
+ */
+
+const FAKE_PLACE_PORT = Number(process.env.E2E_FAKE_NAVER_PLACE_PORT ?? 8973);
+
+interface FakePlace {
+  title: string;
+  lat: string;
+  lng: string;
+  roadAddress: string;
+  category: string;
+}
+
+const PLACES: Record<string, FakePlace> = {
+  "2001": {
+    title: "성수 파스타집 : 네이버",
+    lat: "37.5446",
+    lng: "127.0557",
+    roadAddress: "서울 성동구 연무장길 1",
+    category: "이탈리아음식",
+  },
+  "2002": {
+    title: "망원 카페 : 네이버",
+    lat: "37.5559",
+    lng: "126.9019",
+    roadAddress: "서울 마포구 포은로 2",
+    category: "카페,디저트",
+  },
+  "3001": {
+    title: "신림 중식당 : 네이버",
+    lat: "37.4876",
+    lng: "126.9283",
+    roadAddress: "서울 관악구 신림동길 4",
+    category: "중식당",
+  },
+  "3002": {
+    title: "샤로수길 사진관 : 네이버",
+    lat: "37.4789",
+    lng: "126.9557",
+    roadAddress: "서울 관악구 관악로14길 3",
+    category: "사진관",
+  },
+};
+
+/** 이 id들은 true인 동안 500을 돌려준다. 네이버가 잠깐 막은 상황이다. */
+const failing = new Set<string>();
+
+/** 성수 파스타집만 사진이 두 장 있다. */
+const PHOTO_ORIGINALS: Record<string, string[]> = {
+  "2001": [
+    "https://naverbooking-phinf.pstatic.net/pasta-1.jpg",
+    "https://pup-review-phinf.pstatic.net/pasta-2.jpg",
+  ],
+};
+// 1x1 PNG
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+
+const placeHtml = (id: string, place: FakePlace) => {
+  const photos = Object.fromEntries(
+    (PHOTO_ORIGINALS[id] ?? []).map((originalUrl, index) => [
+      `PlaceDetailTopPhotoItem:${id}_${index}`,
+      {
+        __typename: "PlaceDetailTopPhotoItem",
+        mediaFormat: "image",
+        video: null,
+        originalUrl,
+      },
+    ])
+  );
+  const state = {
+    ROOT_QUERY: { __typename: "Query" },
+    ...photos,
+    [`PlaceDetailBase:${id}`]: {
+      __typename: "PlaceDetailBase",
+      id,
+      name: place.title.replace(" : 네이버", ""),
+      category: place.category,
+      roadAddress: place.roadAddress,
+      address: "지번 주소",
+      coordinate: {
+        __typename: "Coordinate",
+        x: place.lng,
+        y: place.lat,
+        mapZoomLevel: 12,
+      },
+    },
+  };
+  return `<html><head><meta property="og:title" content="${place.title}"/></head>
+    <body><script>window.__APOLLO_STATE__ = ${JSON.stringify(state)};</script></body></html>`;
+};
+
+let server: Server;
+
+test.beforeAll(
+  () =>
+    new Promise<void>((resolve) => {
+      server = createServer((req, res) => {
+        const id = req.url?.match(/^\/place\/(\d+)\/home/)?.[1];
+        const place = id ? PLACES[id] : undefined;
+        if (!id || !place || failing.has(id)) {
+          res.writeHead(id && failing.has(id) ? 500 : 404).end();
+          return;
+        }
+        res
+          .writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+          .end(placeHtml(id, place));
+      });
+      server.listen(FAKE_PLACE_PORT, "127.0.0.1", resolve);
+    })
+);
+test.afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+/** 글리프·타일 없이 배경만 있는 지도 스타일 */
+const EMPTY_STYLE = {
+  version: 8,
+  sources: {},
+  layers: [
+    { id: "background", type: "background", paint: { "background-color": "#f3f1ee" } },
+  ],
+};
+
+let token = "";
+
+test.beforeEach(async ({ page, request }) => {
+  failing.clear();
+  await resetLedger();
+  token = await login(request);
+  await page
+    .context()
+    .route("https://search.pstatic.net/**", (route) =>
+      route.fulfill({ contentType: "image/png", body: PNG })
+    );
+  await page.context().route("https://tiles.openfreemap.org/**", (route) =>
+    route.request().url().includes("/styles/")
+      ? route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(EMPTY_STYLE),
+        })
+      : route.abort()
+  );
+});
+
+const createEntry = async (
+  request: APIRequestContext,
+  data: { memo: string; amount: number; mapUrl?: string; entryDate?: string }
+) => {
+  const res = await request.post("/api/ledger/entries", {
+    headers: authHeaders(token),
+    data: { entryDate: today(), kind: "expense", ...data },
+  });
+  expect(res.ok()).toBe(true);
+};
+
+const openMap = async (page: Page, path = "/map") => {
+  await page.addInitScript((value) => {
+    localStorage.setItem(
+      "trable-auth",
+      JSON.stringify({ state: { token: value }, version: 0 })
+    );
+  }, token);
+  await page.goto(path);
+  await page.getByRole("heading", { name: "데이트 지도" }).waitFor();
+};
+
+const placeList = (page: Page) => page.getByRole("list", { name: "다녀온 곳" });
+
+test("네이버 지도 링크가 있는 지출을 장소별로 묶어 지도와 목록으로 본다", async ({
+  page,
+  request,
+}) => {
+  const lastYear = kst().subtract(1, "year").format("YYYY-MM-DD");
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  // 같은 장소의 다른 링크 모양도 같은 곳으로 묶는다.
+  await createEntry(request, {
+    memo: "파스타 저녁",
+    amount: 18_000,
+    mapUrl: "https://m.place.naver.com/restaurant/2001/home",
+  });
+  await createEntry(request, {
+    memo: "작년 망원 카페",
+    amount: 5_500,
+    mapUrl: "https://map.naver.com/p/entry/place/2002",
+    entryDate: lastYear,
+  });
+  // 지도 링크가 없는 지출은 지도에 찍지 않는다.
+  await createEntry(request, { memo: "편의점", amount: 3_000 });
+
+  const saved = await pool.query(
+    "select map_place_id, map_lat, map_lng, map_address, map_category from ledger_entries where memo = $1",
+    ["파스타 점심"]
+  );
+  expect(saved.rows[0]).toMatchObject({
+    map_place_id: "2001",
+    map_lat: 37.5446,
+    map_lng: 127.0557,
+    map_address: "서울 성동구 연무장길 1",
+    map_category: "이탈리아음식",
+  });
+
+  await openMap(page);
+  await expect(page.getByText("다녀온 곳 2곳 · 3번 · 35,500원")).toBeVisible();
+  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible();
+  // worker가 떠야 스타일을 다 읽는다. 번들 뒤 worker 주소가 틀리면 지도가 빈 채로 남는다.
+  await expect(page.locator("[data-map-ready]")).toBeVisible();
+
+  const items = placeList(page).getByRole("button");
+  await expect(items).toHaveCount(2);
+  // 많이 간 곳이 먼저
+  await expect(items.first()).toContainText("성수 파스타집");
+  await expect(items.first()).toContainText("2번");
+  await expect(items.first()).toContainText("30,000원");
+  await expect(items.nth(1)).toContainText("망원 카페");
+
+  await items.first().click();
+  const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  await expect(detail).toBeVisible();
+  await expect(detail.getByText("2번 방문 · 30,000원")).toBeVisible();
+  await expect(detail.getByText("이탈리아음식 · 서울 성동구 연무장길 1")).toBeVisible();
+  await expect(detail.getByText("파스타 저녁")).toBeVisible();
+  // 장소 사진은 가계부 수정 화면과 같은 캐러셀로 넘겨 본다.
+  const photos = detail.getByRole("region", { name: "성수 파스타집 사진 2장" });
+  await expect(photos.getByRole("img")).toHaveCount(2);
+  await expect(photos.getByText("1 / 2")).toBeVisible();
+  await expect(
+    detail.getByRole("link", { name: "네이버 지도에서 열기" })
+  ).toHaveAttribute("href", "https://map.naver.com/p/entry/place/2001");
+  await expect(page).toHaveURL(/place=2001/);
+
+  // 기간을 바꾸면 주소에 남고, 뒤로 가기로 돌아온다.
+  await page
+    .getByRole("navigation", { name: "기간" })
+    .getByRole("button", { name: "올해" })
+    .click();
+  await expect(page).toHaveURL(/range=year/);
+  await expect(items).toHaveCount(1);
+  await expect(page.getByText("다녀온 곳 1곳 · 2번 · 30,000원")).toBeVisible();
+  await page.goBack();
+  await expect(page).not.toHaveURL(/range=year/);
+  await expect(items).toHaveCount(2);
+});
+
+test("좌표를 못 읽은 네이버 지도 링크는 다시 찾기로 지도에 찍는다", async ({
+  page,
+  request,
+}) => {
+  failing.add("3001");
+  await createEntry(request, {
+    memo: "중식 데이트",
+    amount: 32_000,
+    mapUrl: "https://map.naver.com/p/entry/place/3001",
+  });
+  // 좌표 열이 생기기 전에 저장한 링크
+  await pool.query(
+    `insert into ledger_entries (entry_date, kind, amount, memo, map_url, map_place_name, member)
+     values ($1, 'expense', 20000, '사진관', 'https://map.naver.com/p/entry/place/3002', '샤로수길 사진관', 'joint')`,
+    [today()]
+  );
+  // 네이버가 아닌 지도 링크는 좌표를 읽을 수 없으니 세지 않는다.
+  await createEntry(request, {
+    memo: "카카오 링크",
+    amount: 9_000,
+    mapUrl: "https://kko.to/AbCdEf",
+  });
+
+  await openMap(page);
+  await expect(
+    page.getByRole("heading", { name: "아직 지도에 찍힌 곳이 없어요" })
+  ).toBeVisible();
+  const banner = page.getByRole("status").filter({ hasText: "지도에 못 찍은 곳" });
+  await expect(banner).toContainText("지도에 못 찍은 곳 2건");
+
+  failing.clear();
+  await banner.getByRole("button", { name: "다시 찾기" }).click();
+  await expect(page.getByText("2곳을 지도에 찍었어요.")).toBeVisible();
+  await expect(banner).toBeHidden();
+  const items = placeList(page).getByRole("button");
+  await expect(items).toHaveCount(2);
+  await expect(placeList(page)).toContainText("신림 중식당");
+  await expect(placeList(page)).toContainText("샤로수길 사진관");
+});

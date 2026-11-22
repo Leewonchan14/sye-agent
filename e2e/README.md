@@ -28,3 +28,5 @@ MONITOR_INGEST_KEY=e2e-ingest-key E2E_BASE_URL=http://localhost:3100 npx playwri
 
 가계부 지도 사진 테스트(`ledger-map-photo.spec.ts`)는 가짜 네이버 플레이스 서버(기본 포트 8973)를 띄운다.
 앱을 띄울 때 `NAVER_PLACE_ORIGIN=http://127.0.0.1:8973`을 함께 넣는다.
+데이트 지도 테스트(`date-map.spec.ts`)도 같은 가짜 플레이스 서버를 띄워 장소 좌표·주소·업종을 돌려준다. 지도 타일(OpenFreeMap)은 테스트 안에서 빈 스타일로 바꿔 바깥 네트워크 없이 돈다.
+포트가 겹치면 두 값을 함께 바꾼다: `E2E_FAKE_NAVER_PLACE_PORT=8983`, `NAVER_PLACE_ORIGIN=http://127.0.0.1:8983`.
