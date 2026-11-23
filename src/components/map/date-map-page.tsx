@@ -147,8 +147,8 @@ const PlaceDetail = ({ place }: { place: LedgerMapPlace }) => (
             <span className="w-20 shrink-0 text-muted tabular-nums">
               {visitDate(visit.date)}
             </span>
-            <span className="min-w-0 flex-1 truncate text-body">
-              {/* 같은 날 여러 번 결제했으면 한 줄로 모아 메모를 이어 붙인다. */}
+            {/* 같은 날 여러 번 결제했으면 한 줄로 모아 메모를 이어 붙인다. 길면 두 줄까지 보인다. */}
+            <span className="line-clamp-2 min-w-0 flex-1 text-body">
               {visit.payments
                 .map((payment) => payment.memo || payment.categoryName || "지출")
                 .join(" · ")}
