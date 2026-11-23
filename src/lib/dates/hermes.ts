@@ -158,7 +158,7 @@ export const buildDateSpotPrompt = (options: {
     "",
     "결과는 채팅으로 길게 답하지 말고 아래 API로 보내. 보낸 뒤 채팅에는 몇 개 보냈는지만 한 줄로 말해.",
     'note에는 오늘 추천을 한두 문장으로 소개하는 하치와레 한마디를 써 (예: "날이 추워져서 실내 위주로 골랐어!").',
-    'spots는 한 배열에 섞어 넣고, 각 원소의 kind로 장소("place")인지 즐길 거리("content")인지만 표시해.',
+    'spots는 한 배열에 섞어 넣고, 각 원소의 kind로 장소("place")인지 즐길 거리("content")인지만 표시해. 숙소("stay")는 넣지 마.',
     SPOT_FORMAT,
     CONTENT_FORMAT,
     "보낼 때는 터미널에서 이렇게 해 (JSON은 파일로 써서 보내):",
@@ -168,6 +168,70 @@ export const buildDateSpotPrompt = (options: {
     "",
     `이미 추천한 것(${history.recommended.length}개) — 다시 추천하지 마:`,
     ...history.recommended.slice(0, 150),
+  ].join("\n");
+};
+
+/** 지역 수첩 숙소 찾기에서 받는 숙소 수 */
+export const STAY_SEARCH_COUNT = 5;
+
+const STAY_FORMAT = `spots 원소 형식 (JSON) — 숙소:
+{
+  "kind": "stay",
+  "name": "숙소 이름 (필수, NOL에 나온 이름)",
+  "area": "동네 (예: 신도림)",
+  "category": "호텔 | 모텔 | 펜션 | 게스트하우스 | 리조트 | 한옥스테이 | 글램핑·캠핑 | 기타 중 하나",
+  "summary": "어떤 숙소인지 2문장 (객실·시설·분위기)",
+  "reason": "우리 둘이 묵기에 왜 좋을지 한 줄",
+  "sourceUrl": "NOL 숙소 페이지 주소 (필수, opencli yanolja가 돌려준 url 그대로 — 날짜가 실려 있어서 손대지 마)",
+  "instagramUrl": null,
+  "address": "도로명 주소",
+  "priceHint": "1박 가격과 기준 날짜 (예: \"1박 12만원대 (11.29~30 기준)\"), 숙박 매진이면 \"숙박 매진, 대실만\"",
+  "tags": ["NOL 평점·후기 수와 특징 2~5개 (예: \"평점 9.2\", \"후기 1,203\", \"스파\", \"주차\")"],
+  "naverPlaceId": "네이버 지도 장소 id, 모르면 null",
+  "lat": 37.5090, "lng": 126.8916 (opencli yanolja item의 lat·lng, 모르면 null)
+}`;
+
+/**
+ * 지역 수첩의 "이 동네 숙소 찾아 줘" — 그 지역 반경 안에서 둘이 묵을 숙소를 NOL로 찾는다.
+ * 가격은 날짜마다 다르므로 체크인 날짜(1박)를 정해서 보낸다.
+ */
+export const buildStayPrompt = (options: {
+  digestId: number;
+  area: AreaView;
+  checkin: string;
+  history: Awaited<ReturnType<typeof getRecommendationHistory>>;
+  rated?: RatedPlace[];
+  callbackUrl: string;
+  token: string;
+}) => {
+  const { area, history, rated = [] } = options;
+  const checkin = kst(options.checkin);
+  const checkout = checkin.add(1, "day");
+  const stayRated = rated.filter((place) => place.kind === "stay");
+  return [
+    `[지역 수첩 숙소 찾기] ${area.name}`,
+    `원찬이랑 예은이가 '${area.name}'에서 묵을 숙소를 ${STAY_SEARCH_COUNT}곳 찾아 줘.`,
+    `체크인 ${checkin.format("YYYY.MM.DD (dd)")} → 체크아웃 ${checkout.format("MM.DD (dd)")}, 1박 2인 기준이야.`,
+    `지역: ${area.name} — 가운데 ${area.address || `${area.lat}, ${area.lng}`} (위도 ${area.lat}, 경도 ${area.lng})에서 반경 ${area.radiusM / 1000}km 안만. 좌표(lat·lng)로 반경 안인지 꼭 확인해.`,
+    ...ratedLines(stayRated),
+    "",
+    "찾는 방법:",
+    `1. yanolja-stays 스킬로 NOL을 찾아: opencli yanolja search "${area.name} 호텔" --checkin ${checkin.format("YYYY-MM-DD")} --checkout ${checkout.format("YYYY-MM-DD")} --sort rating --limit 15 (모텔·펜션·게스트하우스도 "${area.name} 숙소"로 한 번 더 찾아 섞어). 결과에 옆 동네가 섞이니 location·address로 걸러.`,
+    "2. 평점·후기 수가 넉넉하고 둘이 묵기 좋은 곳(깔끔함·분위기·접근성)을 고르고, 광고(ad)는 평점이 좋을 때만 넣어. 숙박 요금이 없는 곳(대실만)은 빼.",
+    "3. 최종 후보는 opencli yanolja item으로 주소·좌표(lat·lng)를 확인해. 네이버 지도 장소 id는 지역 검색이나 place_hours.py로 찾아 넣고, 못 찾으면 null.",
+    "4. 가격은 위 날짜 기준 1박 가격을 priceHint에 날짜와 함께 써. sourceUrl은 NOL이 돌려준 url을 그대로 넣어.",
+    "",
+    "결과는 채팅으로 길게 답하지 말고 아래 API로 보내. 보낸 뒤 채팅에는 몇 개 보냈는지만 한 줄로 말해.",
+    'note에는 고른 숙소를 한두 문장으로 소개하는 하치와레 한마디를 써 (예: "역에서 가까운 깔끔한 곳 위주로 골랐어!").',
+    'spots의 kind는 모두 "stay"야.',
+    STAY_FORMAT,
+    "보낼 때는 터미널에서 이렇게 해 (JSON은 파일로 써서 보내):",
+    `curl -sS -X POST '${options.callbackUrl}' -H 'Content-Type: application/json' -H 'x-monitor-token: ${options.token}' --data @/tmp/date_spots.json`,
+    `파일 본문 예: {"digestId": ${options.digestId}, "note": "...", "spots": [ ... ]}`,
+    "응답이 201이면 성공이야. 400이면 메시지를 보고 고쳐서 다시 보내. 못 찾았어도 빈 spots로 꼭 보내.",
+    "",
+    "이미 추천한 숙소 — 다시 추천하지 마:",
+    ...history.recommended.filter((label) => label.startsWith("[숙소] ")).slice(0, 50),
   ].join("\n");
 };
 
@@ -181,6 +245,8 @@ export const startDateSpotSearch = async (options: {
   extra: boolean;
   /** 지역 수첩의 "이 동네 더 찾아 줘" */
   area?: AreaView | null;
+  /** 지역 수첩의 "이 동네 숙소 찾아 줘" — area와 함께, 체크인 날짜(YYYY-MM-DD) */
+  stayCheckin?: string | null;
 }) => {
   const missing = missingHermesEnv();
   if (missing.length) {
@@ -201,17 +267,29 @@ export const startDateSpotSearch = async (options: {
       getRecommendationHistory(),
       getRatedPlaces(),
     ]);
-    const input = buildDateSpotPrompt({
-      digestId: digest.id,
-      dayKey: digest.dayKey,
-      settings,
-      history,
-      rated,
-      area: options.area ?? null,
-      callbackUrl: `${options.origin}/api/dates/agent/digests`,
-      token,
-      extra: options.extra,
-    });
+    const callbackUrl = `${options.origin}/api/dates/agent/digests`;
+    const input =
+      options.area && options.stayCheckin
+        ? buildStayPrompt({
+            digestId: digest.id,
+            area: options.area,
+            checkin: options.stayCheckin,
+            history,
+            rated,
+            callbackUrl,
+            token,
+          })
+        : buildDateSpotPrompt({
+            digestId: digest.id,
+            dayKey: digest.dayKey,
+            settings,
+            history,
+            rated,
+            area: options.area ?? null,
+            callbackUrl,
+            token,
+            extra: options.extra,
+          });
     const hermesRunId = await startHermesRun(config, {
       sessionId: toHermesSessionId(config, `date-spots-${digest.id}-${Date.now()}`),
       input,

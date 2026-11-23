@@ -175,6 +175,10 @@ export interface PlaceCard {
   reviews: PlaceReview[];
   /** 리뷰를 붙일 수 있는 간 날 — 그날 첫 결제 내역 (최신순) */
   visitEntries: { date: string; entryId: number }[];
+  /** 하치와레 추천의 가격 감 (숙소면 날짜 기준 1박 가격) */
+  priceHint: string | null;
+  /** 하치와레 추천의 근거 페이지 (숙소면 NOL 숙소 페이지) */
+  sourceUrl: string | null;
   /** 하치와레 추천(spot)의 id와 가 보고 싶어·별로·다녀왔어 표시 */
   spotId: number | null;
   reaction: "like" | "pass" | "visited" | null;

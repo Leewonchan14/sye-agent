@@ -536,7 +536,7 @@ export const SpotCard = ({
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               <ExternalLink />
-              자세히
+              {spot.kind === "stay" ? "NOL에서 보기" : "자세히"}
             </a>
           )}
           {/* 집·온라인에서 즐기는 거리는 지도로 찾을 곳이 없다. */}

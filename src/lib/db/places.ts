@@ -8,6 +8,8 @@ import {
   createAreaSchema,
   type CreateReviewInput,
   createReviewSchema,
+  inferPlaceKind,
+  type PlaceKind,
   type PlaceRatingSummary,
   type PlaceReview,
   type ReviewAuthor,
@@ -117,6 +119,8 @@ export interface RatedPlace {
   key: string;
   /** 가장 최근 내역에서 읽은 네이버 장소 이름(없으면 내역 내용) */
   name: string;
+  /** 네이버 업종으로 짐작한 종류 — 숙소 찾기에는 숙소 리뷰만 넣는다. */
+  kind: PlaceKind;
   rating: PlaceRatingSummary;
   /** 최신순 */
   reviews: PlaceReview[];
@@ -127,6 +131,7 @@ export const getRatedPlaces = async (): Promise<RatedPlace[]> => {
     .select({
       ...reviewColumns,
       mapPlaceName: entriesT.mapPlaceName,
+      mapCategory: entriesT.mapCategory,
       memo: entriesT.memo,
     })
     .from(reviewsT)
@@ -134,13 +139,14 @@ export const getRatedPlaces = async (): Promise<RatedPlace[]> => {
     .where(and(activeEntry, ne(entriesT.mapUrl, "")));
   const byKey = new Map<
     string,
-    { name: string; nameDate: string; reviews: PlaceReview[] }
+    { name: string; category: string; nameDate: string; reviews: PlaceReview[] }
   >();
   for (const row of rows) {
     const key = toPlaceKey(row);
-    const place = byKey.get(key) ?? { name: "", nameDate: "", reviews: [] };
+    const place = byKey.get(key) ?? { name: "", category: "", nameDate: "", reviews: [] };
     if (row.entryDate >= place.nameDate) {
       place.name = row.mapPlaceName || row.memo || place.name;
+      place.category = row.mapCategory || place.category;
       place.nameDate = row.entryDate;
     }
     place.reviews.push(toReview(row));
@@ -149,6 +155,7 @@ export const getRatedPlaces = async (): Promise<RatedPlace[]> => {
   return [...byKey].map(([key, place]) => ({
     key,
     name: place.name,
+    kind: inferPlaceKind(place.category),
     rating: summarizeRatings(place.reviews.map((review) => review.rating))!,
     reviews: place.reviews.sort(byNewest),
   }));

@@ -387,7 +387,7 @@ export const getRecommendationHistory = async (days = 120) => {
     .orderBy(desc(spotsT.id))
     .limit(300);
   const label = (r: { name: string; area: string; kind: string }) =>
-    `${r.kind === "content" ? "[즐길거리] " : ""}${r.area ? `${r.name}(${r.area})` : r.name}`;
+    `${r.kind === "content" ? "[즐길거리] " : r.kind === "stay" ? "[숙소] " : ""}${r.area ? `${r.name}(${r.area})` : r.name}`;
   return {
     recommended: rows.map(label),
     liked: rows
