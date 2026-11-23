@@ -31,6 +31,10 @@ import {
   EntryIcon,
 } from "@/components/ledger/category-icon";
 import { DateTimePicker } from "@/components/ledger/date-time-picker";
+import {
+  DayRouteButton,
+  useDayRouteDays,
+} from "@/components/ledger/day-route/day-route-button";
 import { FixedCostCard, UnusualSpendCard } from "@/components/ledger/insight-cards";
 import { MonthPicker, WeekPicker } from "@/components/ledger/period-picker";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
@@ -60,7 +64,14 @@ import type { LedgerStats } from "@/lib/db/ledger-stats";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
 import { comparableMonthRange, compareLedgerPeriods } from "@/lib/ledger/compare";
-import { currentMonthKst, formatWon, shiftMonth, todayKst } from "@/lib/ledger/format";
+import { formatDistance, rankDayRouteDays } from "@/lib/ledger/day-route";
+import {
+  currentMonthKst,
+  formatDayKo,
+  formatWon,
+  shiftMonth,
+  todayKst,
+} from "@/lib/ledger/format";
 import {
   CATEGORY_COLOR_OPTIONS,
   type LedgerCategoryColorKey,
@@ -1117,6 +1128,61 @@ const TopExpensesCard = ({
   );
 };
 
+const DAY_ROUTE_TOP_COUNT = 5;
+
+/**
+ * 기간 안에서 가장 많이 돌아다닌 날. 곳 수·이동 거리 순으로 보여 주고 그날 동선을 바로 연다.
+ * 통계에 나온 날(분류·여행 필터를 따른 날)만 고르고, 동선은 그날 지도에 찍힌 곳을 모두 잇는다.
+ */
+const DayRouteDaysCard = ({ entries }: { entries: LedgerEntryView[] }) => {
+  const dates = useMemo(
+    () =>
+      new Set(
+        entries
+          .filter((entry) => entry.kind === "expense")
+          .map((entry) => entry.entryDate)
+      ),
+    [entries]
+  );
+  const ordered = [...dates].sort();
+  const { data } = useDayRouteDays(ordered[0], ordered.at(-1));
+  const days = rankDayRouteDays(
+    (data?.days ?? []).filter((day) => dates.has(day.date))
+  ).slice(0, DAY_ROUTE_TOP_COUNT);
+
+  if (!days.length) return null;
+
+  return (
+    <StatCard>
+      <p className="text-[12px] font-medium text-muted">많이 돌아다닌 날</p>
+      <ul aria-label="많이 돌아다닌 날" className="mt-2 space-y-1.5">
+        {days.map((day, index) => (
+          <li key={day.date} className="flex items-center gap-2 text-[12px]">
+            <span className="w-4 shrink-0 text-center font-semibold text-muted tabular-nums">
+              {index + 1}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium text-ink tabular-nums">
+                {formatDayKo(day.date)}
+              </span>
+              <span className="block truncate text-[11px] text-muted tabular-nums">
+                {[
+                  `${day.places}곳`,
+                  day.places > 1 && `약 ${formatDistance(day.distanceKm)}`,
+                  formatWon(day.spent),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </span>
+            <DayRouteButton date={day.date} known />
+          </li>
+        ))}
+      </ul>
+    </StatCard>
+  );
+};
+
 const presetRange = (id: ReportRangeId): { from?: string; to?: string } => {
   const today = todayKst();
   const base = kst(today);
@@ -1712,6 +1778,7 @@ export const StatsView = ({
                   onEdit={onEdit}
                 />
               )}
+              <DayRouteDaysCard entries={stats.entries} />
             </>
           )}
           {insights && insights.fixedCost.month === month && (

@@ -25,6 +25,7 @@ import {
   ExpenseCategoryChips,
   type CategoryFilter,
 } from "@/components/ledger/category-chips";
+import { DayRouteButton } from "@/components/ledger/day-route/day-route-button";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
 import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -415,6 +416,11 @@ export const DateMapPage = () => {
             selected={data.category ?? "all"}
             onSelect={changeCategory}
           />
+        )}
+
+        {/* 하루만 골랐으면 그날 다닌 순서대로 잇는 동선을 볼 수 있다. 분류 필터와 상관없이 그날 전체를 잇는다. */}
+        {data?.range === "custom" && data.from && data.from === data.to && (
+          <DayRouteButton date={data.from} className="self-start" />
         )}
 
         {data && data.unresolved > 0 && (
