@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/auth";
-import { getPlaceNote, PlaceError, savePlaceNote } from "@/lib/db/places";
-import { monitorErrorResponse, readJson } from "@/lib/monitor/api";
+import { getPlaceNote, savePlaceNote } from "@/lib/db/places";
+import { readJson } from "@/lib/monitor/api";
+import { placeErrorResponse } from "@/lib/places/api";
 import { placeNoteInputSchema } from "@/lib/places/types";
 
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ export const GET = async (req: Request) => {
   try {
     return Response.json({ note: await getPlaceNote(key) });
   } catch (error) {
-    return monitorErrorResponse(error, "별점을 불러오지 못했어요.");
+    return placeErrorResponse(error, "별점을 불러오지 못했어요.");
   }
 };
 
@@ -32,9 +33,6 @@ export const PUT = async (req: Request) => {
     const input = placeNoteInputSchema.parse((await readJson(req)) ?? {});
     return Response.json(await savePlaceNote(input));
   } catch (error) {
-    if (error instanceof PlaceError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    return monitorErrorResponse(error, "별점을 저장하지 못했어요.");
+    return placeErrorResponse(error, "별점을 저장하지 못했어요.");
   }
 };

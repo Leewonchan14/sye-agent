@@ -30,9 +30,9 @@ export const resetLedger = async () => {
   `);
 };
 
-/** 지역 수첩(우리 별점·리뷰)을 비운다. */
+/** 지역 수첩(우리 별점·리뷰, 지역)을 비운다. */
 export const resetPlaces = async () => {
-  await pool.query("truncate places restart identity cascade");
+  await pool.query("truncate places, place_areas restart identity cascade");
 };
 
 export const login = async (request: APIRequestContext): Promise<string> => {
