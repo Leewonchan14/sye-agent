@@ -14,6 +14,9 @@ export const ledgerKeys = {
   suggestions: ["ledger", "suggestions"] as const,
   recurringCandidates: ["ledger", "recurring-candidates"] as const,
   map: (range: string) => ["ledger", "map", range] as const,
+  dayRoute: (date: string) => ["ledger", "day-route", date] as const,
+  dayRouteDays: (from: string, to: string) =>
+    ["ledger", "day-route-days", from, to] as const,
 };
 
 /** 두 사람이 함께 쓰므로 상대가 입력한 내역이 자동으로 보이게 한다. */
