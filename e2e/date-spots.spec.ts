@@ -6,7 +6,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { parseSpotMedia, spotMediaUrls } from "../src/lib/dates/media";
 import { parseEmbedPhotos, photoExpiresAt } from "../src/lib/dates/photo";
 import { kst } from "../src/lib/kst";
-import { daysAgo, login, pool, today } from "./helpers";
+import { daysAgo, login, pool, resetLedger, resetPlaces, today } from "./helpers";
 
 /**
  * 데이트 추천 매일 조사. 앱을 `HERMES_API_URL=http://127.0.0.1:${FAKE_HERMES_PORT}`로 띄우면
@@ -546,8 +546,9 @@ test("조건을 저장하면 프롬프트와 안내 문구에 반영된다", asy
   nextSpots = () => [];
   await page.getByRole("button", { name: "지금 찾아 줘" }).click();
   await expect(page.getByText("오늘 추천은 아직이에요")).toBeVisible({ timeout: 20_000 });
+  // 안내 문구는 요청 전에도 보이므로, 하치와레가 프롬프트를 받을 때까지 기다린다.
+  await expect.poll(() => runs.get("run_1")?.input ?? "").toContain("지역: 서울, 연남");
   const input = runs.get("run_1")?.input ?? "";
-  expect(input).toContain("지역: 서울, 연남");
   expect(input).toContain("원하는 테마: 전시");
   expect(input).toContain("부탁: 웨이팅 긴 곳은 빼 줘");
 });
@@ -1131,4 +1132,201 @@ test("만료된 사진은 감추고, 만료가 가까우면 새 주소로 바꾼
     "src",
     /MULTI2b-1-640/
   );
+});
+
+/* ───────── 지역 수첩·리뷰와 하치와레 ───────── */
+
+/** 가계부 지도에 찍힌 지출을 바로 넣는다(네이버 장소를 읽지 않는다). */
+const seedPlaceEntry = async (memo: string, placeId: string, name: string) => {
+  const { rows } = await pool.query<{ id: number }>(
+    `insert into ledger_entries (entry_date, kind, amount, memo, map_url, map_place_id, map_place_name, map_lat, map_lng)
+     values ($1, 'expense', 10000, $2, $3, $4, $5, 37.509, 126.8916) returning id`,
+    [today(), memo, `https://map.naver.com/p/entry/place/${placeId}`, placeId, name]
+  );
+  return rows[0].id;
+};
+
+const resetPlaceData = async () => {
+  await resetLedger();
+  await resetPlaces();
+};
+
+test("다녀와서 남긴 리뷰가 하치와레 프롬프트와 추천 카드에 반영되고, 별점이 낮은 곳은 저장하지 않는다", async ({
+  page,
+  request,
+}) => {
+  await resetPlaceData();
+  const token = await login(request);
+  const headers = { "x-auth-token": token };
+  const review = (entryId: number, author: string, rating: number, text = "") =>
+    request.post("/api/places/reviews", {
+      headers,
+      data: { entryId, author, rating, review: text },
+    });
+  const good = await seedPlaceEntry("국수", "5001", "좋은 국수집");
+  await review(good, "yeeun", 5, "국물이 진해");
+  await review(good, "wonchan", 4);
+  const bad = await seedPlaceEntry("파스타", "5002", "별로 파스타");
+  await review(bad, "wonchan", 2, "너무 짜");
+  await review(bad, "yeeun", 1);
+  const soso = await seedPlaceEntry("라테", "5003", "보통 카페");
+  await review(soso, "wonchan", 3);
+
+  nextSpots = () => [
+    spot("PPP111", "새 카페", { naverPlaceId: "5009", lat: 37.5085, lng: 126.8905 }),
+    // 장소 id가 같으면 이름이 달라도 같은 곳이다.
+    spot("PPP222", "다른 이름 파스타", { naverPlaceId: "5002" }),
+    // 장소 id가 없으면 이름으로 본다.
+    spot("PPP333", "별로 파스타"),
+    // 링크를 통째로 보내도 장소 id만 남긴다. 위도만 있으면 좌표는 버린다.
+    spot("PPP444", "좋은 국수집", {
+      naverPlaceId: "https://map.naver.com/p/entry/place/5001",
+      lat: 37.5,
+    }),
+  ];
+  const started = await request.post("/api/dates", { headers });
+  expect(started.status()).toBe(202);
+  await expect
+    .poll(
+      async () => (await pool.query("select count(*)::int n from date_spots")).rows[0].n,
+      {
+        timeout: 20_000,
+      }
+    )
+    .toBe(2);
+
+  const input = runs.get("run_1")?.input ?? "";
+  expect(input).toContain(
+    '우리가 다녀와서 좋았던 곳(리뷰 평균 별 4 이상, 리뷰를 보고 이런 결의 비슷한 곳을 골라): 좋은 국수집(★4.5, 예은 "국물이 진해")'
+  );
+  expect(input).toContain(
+    '우리가 다녀와서 별로였던 곳(리뷰 평균 별 2 이하, 이곳들은 다시 추천하지 마. 보내도 저장되지 않아): 별로 파스타(★1.5, 원찬 "너무 짜")'
+  );
+  expect(input).not.toContain("보통 카페");
+  expect(input).toContain('"naverPlaceId"');
+
+  const { rows } = await pool.query(
+    "select name, naver_place_id, lat, lng from date_spots order by id"
+  );
+  expect(rows).toEqual([
+    { name: "새 카페", naver_place_id: "5009", lat: 37.5085, lng: 126.8905 },
+    { name: "좋은 국수집", naver_place_id: "5001", lat: null, lng: null },
+  ]);
+
+  // 다녀와서 남긴 리뷰가 추천 카드에 붙고, 지도는 그 장소 페이지로 연다.
+  await openDates(page, token);
+  const noodle = page.getByRole("article", { name: "좋은 국수집" });
+  const reviews = noodle.getByRole("region", { name: "다녀와서 남긴 리뷰" });
+  await expect(
+    reviews.getByRole("img", { name: "별점 평균 4.5, 리뷰 2개" })
+  ).toBeVisible();
+  await expect(reviews.getByRole("listitem", { name: "예은 리뷰" })).toContainText(
+    "국물이 진해"
+  );
+  await expect(noodle.getByRole("link", { name: "지도" })).toHaveAttribute(
+    "href",
+    "https://map.naver.com/p/entry/place/5001"
+  );
+  await expect(
+    page.getByRole("article", { name: "새 카페" }).getByRole("region", {
+      name: "다녀와서 남긴 리뷰",
+    })
+  ).toHaveCount(0);
+});
+
+test("지역 수첩의 '이 동네 더 찾아 줘'는 그 동네만 찾고, 새 추천을 가 보고 싶은 곳으로 옮긴다", async ({
+  page,
+  request,
+}) => {
+  await resetPlaceData();
+  const token = await login(request);
+  const headers = { "x-auth-token": token };
+  const areaRes = await request.post("/api/places/areas", {
+    headers,
+    data: {
+      name: "신도림",
+      lat: 37.509,
+      lng: 126.8916,
+      address: "서울 구로구 새말로 117",
+    },
+  });
+  const area = (await areaRes.json()) as { id: number };
+  expect((await request.post("/api/places/areas/999/search", { headers })).status()).toBe(
+    404
+  );
+
+  nextSpots = () => [
+    spot("QQQ111", "신도림 베이커리", { area: "구로", lat: 37.5085, lng: 126.8905 }),
+    // 좌표가 반경 밖이면 동네 이름이 맞아도 빠진다.
+    spot("QQQ222", "멀리 있는 신도림 카페", {
+      area: "신도림",
+      lat: 37.5446,
+      lng: 127.0557,
+    }),
+    // 좌표가 없으면 동네 이름으로 묶는다.
+    spot("QQQ333", "신도림 국밥", { area: "신도림" }),
+  ];
+
+  await page.context().route("https://tiles.openfreemap.org/**", (route) =>
+    route.request().url().includes("/styles/")
+      ? route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
+        })
+      : route.abort()
+  );
+  await page.addInitScript((value) => {
+    localStorage.setItem(
+      "trable-auth",
+      JSON.stringify({ state: { token: value }, version: 0 })
+    );
+  }, token);
+  await page.goto(`/places?area=${area.id}`);
+  await page.getByRole("heading", { name: "지역 수첩" }).waitFor();
+  await expect(page.getByRole("region", { name: "하치와레 새 추천" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "이 동네 더 찾아 줘" }).click();
+  const fresh = page.getByRole("region", { name: "하치와레 새 추천" });
+  await expect(fresh.getByRole("article")).toHaveCount(2, { timeout: 20_000 });
+  await expect(fresh).toContainText("신도림 베이커리");
+  await expect(fresh).toContainText("신도림 국밥");
+  await expect(fresh).not.toContainText("멀리 있는 신도림 카페");
+  await expect(page.getByRole("button", { name: "이 동네 더 찾아 줘" })).toBeEnabled();
+
+  const input = runs.get("run_1")?.input ?? "";
+  expect(input).toContain("지역 수첩에서 '신도림' 동네만 골라서 더 찾아 달라는 요청이야");
+  expect(input).toContain(
+    "지역: 신도림 한 곳만 — 가운데 서울 구로구 새말로 117 (위도 37.509, 경도 126.8916)에서 반경 1.5km 안"
+  );
+  // 결과는 오늘 데이트 추천에도 쌓인다.
+  const { rows } = await pool.query(
+    "select s.name from date_spots s join date_spot_digests d on d.id = s.digest_id where d.day_key = $1",
+    [today()]
+  );
+  expect(rows).toHaveLength(3);
+
+  await fresh
+    .getByRole("article", { name: "신도림 베이커리" })
+    .getByRole("button", { name: "가 보고 싶어" })
+    .click();
+  const want = page.getByRole("region", { name: "가 보고 싶은 곳" });
+  await expect(want.getByRole("article", { name: "신도림 베이커리" })).toBeVisible();
+  await expect(want).toContainText(/가운데서 \d+m/);
+  await expect(fresh.getByRole("article")).toHaveCount(1);
+
+  await fresh
+    .getByRole("article", { name: "신도림 국밥" })
+    .getByRole("button", { name: "별로" })
+    .click();
+  await expect(page.getByRole("region", { name: "하치와레 새 추천" })).toHaveCount(0);
+  expect(
+    (
+      await pool.query(
+        "select name, reaction from date_spots where reaction is not null order by name"
+      )
+    ).rows
+  ).toEqual([
+    { name: "신도림 국밥", reaction: "pass" },
+    { name: "신도림 베이커리", reaction: "like" },
+  ]);
 });

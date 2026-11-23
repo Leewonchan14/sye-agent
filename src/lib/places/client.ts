@@ -55,7 +55,40 @@ export const usePlaces = (areaId: number | null) => {
     enabled: Boolean(token),
     placeholderData: keepPreviousData,
     ...LEDGER_LIVE_QUERY,
+    // 하치와레가 찾는 동안에는 결과가 오는 대로 보이게 자주 읽는다.
+    refetchInterval: (query) =>
+      query.state.data?.searching ? SEARCHING_POLL_MS : LEDGER_LIVE_QUERY.refetchInterval,
   });
+};
+
+const SEARCHING_POLL_MS = 5_000;
+
+/** "이 동네 더 찾아 줘", 하치와레 추천에 가 보고 싶어·별로 표시 */
+export const useAreaSpotMutations = () => {
+  const token = useToken();
+  const queryClient = useQueryClient();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: placeKeys.all });
+  return {
+    search: useMutation({
+      mutationFn: (areaId: number) =>
+        ledgerRequest(token, `/api/places/areas/${areaId}/search`, { method: "POST" }),
+      onSuccess: refresh,
+    }),
+    react: useMutation({
+      mutationFn: ({
+        spotId,
+        reaction,
+      }: {
+        spotId: number;
+        reaction: "like" | "pass" | "visited" | null;
+      }) =>
+        ledgerRequest(token, `/api/dates/spots/${spotId}`, {
+          method: "PATCH",
+          body: { reaction },
+        }),
+      onSuccess: refresh,
+    }),
+  };
 };
 
 /** 지역 이름으로 중심 후보 찾기. 찾기를 누른 검색어(q)가 있을 때만 읽는다. */

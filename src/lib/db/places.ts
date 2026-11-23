@@ -8,8 +8,10 @@ import {
   createAreaSchema,
   type CreateReviewInput,
   createReviewSchema,
+  type PlaceRatingSummary,
   type PlaceReview,
   type ReviewAuthor,
+  summarizeRatings,
   toPlaceKey,
   type UpdateReviewInput,
   updateReviewSchema,
@@ -108,6 +110,48 @@ export const listReviewsByPlace = async (): Promise<Map<string, PlaceReview[]>> 
   }
   for (const list of byPlace.values()) list.sort(byNewest);
   return byPlace;
+};
+
+/** 리뷰가 있는 장소 — 하치와레 추천에 붙이고, 다음 조사의 취향 힌트로 쓴다. */
+export interface RatedPlace {
+  key: string;
+  /** 가장 최근 내역에서 읽은 네이버 장소 이름(없으면 내역 내용) */
+  name: string;
+  rating: PlaceRatingSummary;
+  /** 최신순 */
+  reviews: PlaceReview[];
+}
+
+export const getRatedPlaces = async (): Promise<RatedPlace[]> => {
+  const rows = await getDb()
+    .select({
+      ...reviewColumns,
+      mapPlaceName: entriesT.mapPlaceName,
+      memo: entriesT.memo,
+    })
+    .from(reviewsT)
+    .innerJoin(entriesT, eq(entriesT.id, reviewsT.entryId))
+    .where(and(activeEntry, ne(entriesT.mapUrl, "")));
+  const byKey = new Map<
+    string,
+    { name: string; nameDate: string; reviews: PlaceReview[] }
+  >();
+  for (const row of rows) {
+    const key = toPlaceKey(row);
+    const place = byKey.get(key) ?? { name: "", nameDate: "", reviews: [] };
+    if (row.entryDate >= place.nameDate) {
+      place.name = row.mapPlaceName || row.memo || place.name;
+      place.nameDate = row.entryDate;
+    }
+    place.reviews.push(toReview(row));
+    byKey.set(key, place);
+  }
+  return [...byKey].map(([key, place]) => ({
+    key,
+    name: place.name,
+    rating: summarizeRatings(place.reviews.map((review) => review.rating))!,
+    reviews: place.reviews.sort(byNewest),
+  }));
 };
 
 /** 리뷰는 지도 링크가 있는 지출 내역에만 남긴다. */
