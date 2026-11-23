@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ExternalLink, MapPin, MapPinned, RefreshCw } from "lucide-react";
+import { ExternalLink, MapPin, MapPinned, RefreshCw, X } from "lucide-react";
 import {
   createParser,
   parseAsInteger,
@@ -16,7 +16,7 @@ import {
 } from "nuqs";
 import { toast } from "sonner";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -121,7 +121,13 @@ const PlacePhoto = ({ src, className }: { src: string | null; className?: string
   </div>
 );
 
-const PlaceDetail = ({ place }: { place: LedgerMapPlace }) => (
+const PlaceDetail = ({
+  place,
+  onClose,
+}: {
+  place: LedgerMapPlace;
+  onClose: () => void;
+}) => (
   <section
     aria-label={`${place.name} 방문 기록`}
     className="overflow-hidden rounded-2xl bg-surface ring-1 ring-hairline"
@@ -135,7 +141,19 @@ const PlaceDetail = ({ place }: { place: LedgerMapPlace }) => (
     />
     <div className="flex flex-col gap-3 p-4">
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-base font-semibold text-ink">{place.name}</h2>
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="min-w-0 text-base font-semibold text-ink">{place.name}</h2>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="선택 해제"
+            title="선택 해제 (Esc)"
+            className="-mt-1 -mr-1.5 shrink-0 text-muted"
+            onClick={onClose}
+          >
+            <X />
+          </Button>
+        </div>
         {(place.category || place.address) && (
           <p className="text-[12px] text-muted">
             {[place.category, place.address].filter(Boolean).join(" · ")}
@@ -314,15 +332,32 @@ export const DateMapPage = () => {
     onError: (err) => toast.error(err.message),
   });
 
+  // Esc로 고른 장소를 닫는다. 사진 확대 창 같은 대화상자가 열려 있으면 그쪽이 먼저 닫힌다.
+  const hasSelection = Boolean(selectedKey);
+  useEffect(() => {
+    if (!hasSelection) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector("[role=dialog]")) return;
+      void setSelectedKey(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hasSelection, setSelectedKey]);
+
   const places = data?.places ?? [];
   const selected = places.find((place) => place.key === selectedKey) ?? null;
   const totalVisits = places.reduce((sum, place) => sum + place.visits, 0);
   const totalSpent = places.reduce((sum, place) => sum + place.total, 0);
   const mapBoxRef = useRef<HTMLDivElement>(null);
-  const selectPlace = (key: string) => void setSelectedKey(key);
+  const clearPlace = () => void setSelectedKey(null);
+  // 이미 고른 장소를 다시 누르면 선택을 푼다.
+  const selectPlace = (key: string) =>
+    void setSelectedKey(key === selectedKey ? null : key);
   // 좁은 화면에서는 목록이 지도 아래에 있으므로, 목록에서 고르면 지도가 보이게 올린다.
   const selectFromList = (key: string) => {
     selectPlace(key);
+    if (key === selectedKey) return;
     const box = mapBoxRef.current;
     if (box && box.getBoundingClientRect().top < 0) {
       box.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -407,7 +442,7 @@ export const DateMapPage = () => {
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_340px]">
             <div
               ref={mapBoxRef}
-              className="h-[58vh] min-h-[320px] scroll-mt-4 overflow-hidden rounded-2xl ring-1 ring-hairline md:sticky md:top-6 md:h-[calc(100dvh-180px)]"
+              className="h-[58vh] min-h-[320px] scroll-mt-4 overflow-hidden rounded-2xl ring-1 ring-hairline md:sticky md:top-4 md:h-[calc(100dvh-180px)]"
             >
               <PlaceMap
                 places={places}
@@ -416,7 +451,17 @@ export const DateMapPage = () => {
               />
             </div>
             <div className="flex flex-col gap-4">
-              {selected && <PlaceDetail place={selected} />}
+              {/*
+                넓은 화면에서는 목록을 내려도 고른 장소가 위에 붙어 있다. 위쪽 여백(그리드 위 gap-4)만큼
+                배경을 깔아, 붙어 있을 때 그 틈으로 목록이 비치지 않게 한다.
+                카드가 화면을 다 덮으면 목록 끝이 카드 밑에 가려 못 고르므로, 아래에 목록이 한 줄 이상 보이게
+                높이를 줄이고 카드 안에서 스크롤한다.
+              */}
+              {selected && (
+                <div className="md:sticky md:top-0 md:z-10 md:-mt-4 md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto md:overscroll-contain md:bg-canvas md:pt-4">
+                  <PlaceDetail place={selected} onClose={clearPlace} />
+                </div>
+              )}
               <PlaceList
                 places={places}
                 selectedKey={selectedKey}
