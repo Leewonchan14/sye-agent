@@ -658,8 +658,8 @@ export const pickOptions = pgTable(
 );
 
 /**
- * 돌리기 전에 적고 있는 고민과 후보. 둘이 같이 쓰는 한 장짜리(id=1)라서
- * 다른 폰에서 열어도 이어서 쓸 수 있다.
+ * 골라 줘 화면 상태. 둘이 같이 쓰는 한 장짜리(id=1)라서 어느 브라우저에서 열어도 같은 화면이다.
+ * 돌리기 전에 적고 있는 고민·후보와, 지금 보고 있는 뽑기 결과를 담는다.
  */
 export const pickDraft = pgTable("pick_draft", {
   id: integer("id").primaryKey(),
@@ -668,5 +668,9 @@ export const pickDraft = pgTable("pick_draft", {
     .array()
     .notNull()
     .default(sql`ARRAY[]::text[]`),
+  /** 지금 화면에 띄운 뽑기. 없으면 후보를 적는 화면이다. 기록을 지우면 비운다. */
+  activePickId: integer("active_pick_id").references(() => picks.id, {
+    onDelete: "set null",
+  }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

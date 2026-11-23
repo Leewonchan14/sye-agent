@@ -186,52 +186,105 @@ test.describe("골라 줘 API", () => {
   });
 });
 
-test.describe("골라 줘 쓰던 후보 API", () => {
+test.describe("골라 줘 화면 상태 API", () => {
   test.beforeEach(resetPicks);
 
-  test("로그인하지 않으면 쓰던 후보를 읽거나 저장할 수 없다", async ({ request }) => {
-    expect((await request.get("/api/picks/draft")).status()).toBe(401);
+  const getBoard = async (request: APIRequestContext, token: string) =>
+    (await (
+      await request.get("/api/picks/board", { headers: authHeaders(token) })
+    ).json()) as { title: string; labels: string[]; activePick: PickView | null };
+
+  test("로그인하지 않으면 화면 상태를 읽거나 바꿀 수 없다", async ({ request }) => {
+    expect((await request.get("/api/picks/board")).status()).toBe(401);
     expect(
-      (await request.put("/api/picks/draft", { data: { labels: ["a"] } })).status()
+      (await request.patch("/api/picks/board", { data: { labels: ["a"] } })).status()
     ).toBe(401);
   });
 
-  test("쓰던 후보를 DB에 저장하고 다시 읽는다", async ({ request }) => {
+  test("쓰던 후보를 DB에 저장하고, 보낸 값만 바꾼다", async ({ request }) => {
     const token = await login(request);
     const headers = authHeaders(token);
-    expect(await (await request.get("/api/picks/draft", { headers })).json()).toEqual({
+    expect(await getBoard(request, token)).toEqual({
       title: "",
       labels: [],
+      activePick: null,
     });
 
     // 쓰는 중이라 고민 끝 공백은 남기고, 후보는 다듬고 겹치는 건 뺀다. 1개여도 저장한다.
-    const res = await request.put("/api/picks/draft", {
+    const res = await request.patch("/api/picks/board", {
       headers,
       data: { title: "오늘 ", labels: [" 피자 ", "피자", "치킨"] },
     });
     expect(res.status()).toBe(200);
-    const expected = { title: "오늘 ", labels: ["피자", "치킨"] };
+    const expected = { title: "오늘 ", labels: ["피자", "치킨"], activePick: null };
     expect(await res.json()).toEqual(expected);
-    expect(await (await request.get("/api/picks/draft", { headers })).json()).toEqual(
-      expected
-    );
+    expect(await getBoard(request, token)).toEqual(expected);
     const { rows } = await pool.query("select id, title, labels from pick_draft");
-    expect(rows).toEqual([{ id: 1, ...expected }]);
+    expect(rows).toEqual([{ id: 1, title: "오늘 ", labels: ["피자", "치킨"] }]);
 
-    await request.put("/api/picks/draft", { headers, data: { labels: ["국밥"] } });
-    expect(await (await request.get("/api/picks/draft", { headers })).json()).toEqual({
-      title: "",
+    await request.patch("/api/picks/board", { headers, data: { labels: ["국밥"] } });
+    expect(await getBoard(request, token)).toEqual({
+      title: "오늘 ",
       labels: ["국밥"],
+      activePick: null,
     });
   });
 
-  test("후보가 12개를 넘으면 저장하지 않는다", async ({ request }) => {
+  test("후보가 12개를 넘거나 없는 뽑기를 띄우려 하면 거절한다", async ({ request }) => {
     const token = await login(request);
-    const res = await request.put("/api/picks/draft", {
-      headers: authHeaders(token),
+    const headers = authHeaders(token);
+    const tooMany = await request.patch("/api/picks/board", {
+      headers,
       data: { labels: Array.from({ length: 13 }, (_, i) => `후보${i}`) },
     });
-    expect(res.status()).toBe(400);
+    expect(tooMany.status()).toBe(400);
+    const missing = await request.patch("/api/picks/board", {
+      headers,
+      data: { activePickId: 9999 },
+    });
+    expect(missing.status()).toBe(404);
+  });
+
+  test("뽑으면 그 결과를 화면에 띄우고, 닫거나 기록을 지우면 내린다", async ({
+    request,
+  }) => {
+    const token = await login(request);
+    const headers = authHeaders(token);
+    await request.patch("/api/picks/board", {
+      headers,
+      data: { title: "점심", labels: ["국밥", "돈까스"] },
+    });
+    const first = (await (
+      await request.post("/api/picks", {
+        headers,
+        data: { title: "점심", options: ["국밥", "돈까스"] },
+      })
+    ).json()) as PickView;
+    // 쓰던 후보는 남겨 둔 채 결과를 띄운다.
+    const board = await getBoard(request, token);
+    expect(board.activePick?.id).toBe(first.id);
+    expect(board.activePick?.resultOptionId).toBe(first.resultOptionId);
+    expect(board.labels).toEqual(["국밥", "돈까스"]);
+
+    // 결정·다시 돌리기도 띄운 결과에 바로 보인다.
+    await request.patch(`/api/picks/${first.id}`, {
+      headers,
+      data: { status: "decided" },
+    });
+    expect((await getBoard(request, token)).activePick?.status).toBe("decided");
+
+    // 닫기(null)
+    await request.patch("/api/picks/board", { headers, data: { activePickId: null } });
+    expect((await getBoard(request, token)).activePick).toBeNull();
+
+    // 지난 뽑기를 다시 띄우고, 그 기록을 지우면 화면도 비운다.
+    await request.patch("/api/picks/board", {
+      headers,
+      data: { activePickId: first.id },
+    });
+    expect((await getBoard(request, token)).activePick?.id).toBe(first.id);
+    await request.delete(`/api/picks/${first.id}`, { headers });
+    expect((await getBoard(request, token)).activePick).toBeNull();
   });
 });
 
@@ -265,7 +318,6 @@ test.describe("골라 줘 화면", () => {
     await expect(page.getByRole("img", { name: "룰렛: 후보 3개" })).toBeVisible();
 
     await spin.click();
-    await expect(page).toHaveURL(/\?pick=\d+/);
     const result = page.getByTestId("pick-result");
     await expect(result).toBeVisible();
     const shown = await result.textContent();
@@ -279,6 +331,8 @@ test.describe("골라 줘 화면", () => {
     expect(shown).toBe(rows[0].label);
     expect(rows[0].title).toBe("주말 데이트");
 
+    // 주소에 뽑기 번호가 없어도 새로고침하면 같은 결과 화면이다.
+    await expect(page).not.toHaveURL(/pick=/);
     await page.reload();
     await expect(page.getByTestId("pick-result")).toHaveText(rows[0].label);
     expect(await labelUnderPointer(page)).toBe(rows[0].label);
@@ -431,5 +485,93 @@ test.describe("골라 줘 화면", () => {
     await expect
       .poll(async () => (await pool.query("select labels from pick_draft")).rows[0])
       .toEqual({ labels: ["떡볶이"] });
+  });
+
+  test("다른 브라우저에서도 같은 화면을 보고, 돌리고 결정한 게 따라온다", async ({
+    page,
+    request,
+    browser,
+  }) => {
+    const token = await login(request);
+    await openPick(page, token);
+    const other = await openInOtherPhone(browser, token);
+
+    const input = page.getByRole("textbox", { name: "후보 입력" });
+    await input.fill("영화, 보드게임, 산책,");
+    await expect(
+      other.getByRole("list", { name: "넣은 후보" }).getByRole("listitem")
+    ).toHaveText(["영화", "보드게임", "산책"]);
+
+    // 한쪽에서 돌리면 다른 쪽도 돌림판이 돌고 같은 결과에 멈춘다.
+    await page.getByRole("button", { name: "돌리기" }).click();
+    const shown = await page.getByTestId("pick-result").textContent();
+    await expect(other.getByTestId("pick-result")).toHaveText(shown!);
+    expect(await labelUnderPointer(other)).toBe(shown);
+
+    // 다른 쪽에서 다시 돌리면 처음 쪽도 바뀐 결과로 돈다.
+    await other.getByRole("button", { name: "다시 돌리기 (1번 남음)" }).click();
+    await expect(other.getByTestId("pick-result")).not.toHaveText(shown!);
+    const rerolled = await other.getByTestId("pick-result").textContent();
+    await expect(page.getByTestId("pick-result")).toHaveText(rerolled!);
+    await expect(page.getByRole("button", { name: "다시 돌리기 끝" })).toBeDisabled();
+    expect(await labelUnderPointer(page)).toBe(rerolled);
+
+    // 결정도 따라온다.
+    await page.getByRole("button", { name: "이걸로 결정" }).click();
+    await expect(other.getByText("이걸로 정했어요")).toBeVisible();
+
+    // 나중에 연 브라우저도 같은 결과 화면이다(돌리지 않고 바로 보여 준다).
+    const late = await openInOtherPhone(browser, token);
+    await expect(late.getByTestId("pick-result")).toHaveText(rerolled!);
+    await expect(late.getByText("이걸로 정했어요")).toBeVisible();
+    await late.context().close();
+
+    // 새 고민을 누르면 다른 쪽도 빈 입력 화면으로 돌아간다.
+    await other.getByRole("button", { name: "새 고민" }).click();
+    await expect(page.getByRole("textbox", { name: "후보 입력" })).toBeVisible();
+    await expect(page.getByTestId("pick-result")).toHaveCount(0);
+    await expect(page.getByRole("list", { name: "넣은 후보" })).toHaveCount(0);
+    await other.context().close();
+  });
+
+  test("지난 뽑기를 열면 다른 브라우저도 그 결과를 돌리지 않고 바로 보여 준다", async ({
+    page,
+    request,
+    browser,
+  }) => {
+    const token = await login(request);
+    const headers = authHeaders(token);
+    const old = (await (
+      await request.post("/api/picks", {
+        headers,
+        data: { title: "지난 고민", options: ["가", "나"] },
+      })
+    ).json()) as PickView;
+    // 오래전에 뽑은 것처럼 만들고 화면은 닫아 둔다.
+    await pool.query("update picks set created_at = now() - interval '1 day'");
+    await request.patch("/api/picks/board", { headers, data: { activePickId: null } });
+
+    await openPick(page, token);
+    const other = await openInOtherPhone(browser, token);
+    // 다른 브라우저에서 돌림판이 한 번이라도 돌았는지 기록한다.
+    await other.evaluate(() => {
+      const w = window as unknown as { spun: boolean };
+      w.spun = false;
+      new MutationObserver(() => {
+        if (document.body.textContent?.includes("두구두구")) w.spun = true;
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    await page
+      .locator("section")
+      .filter({ hasText: "지난 뽑기" })
+      .getByRole("button", { name: /지난 고민/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("pick-result")).toHaveText(resultLabel(old)!);
+    await expect(other.getByTestId("pick-result")).toHaveText(resultLabel(old)!);
+    expect(
+      await other.evaluate(() => (window as unknown as { spun: boolean }).spun)
+    ).toBe(false);
+    await other.context().close();
   });
 });

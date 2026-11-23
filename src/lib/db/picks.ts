@@ -6,19 +6,18 @@ import { getDb, schema } from "@/lib/db/db";
 import {
   type CreatePickInput,
   createPickSchema,
-  EMPTY_PICK_DRAFT,
   MAX_PICK_REROLLS,
-  type PickDraft,
-  type PickDraftInput,
-  pickDraftSchema,
+  type PickBoard,
+  type PickBoardPatch,
+  pickBoardPatchSchema,
   type PickStatus,
   type PickView,
 } from "@/lib/picks/types";
 
 const { picks: picksT, pickOptions: optionsT, pickDraft: draftT } = schema;
 
-/** 둘이 같이 쓰는 한 장짜리 임시 저장 */
-const DRAFT_ID = 1;
+/** 둘이 같이 보는 한 장짜리 화면 상태 */
+const BOARD_ID = 1;
 
 /** 기록 목록에 보여 줄 최근 뽑기 수 */
 const HISTORY_LIMIT = 30;
@@ -105,6 +104,8 @@ export const createPick = async (input: CreatePickInput): Promise<PickView> => {
     .set({ resultOptionId: result.id })
     .where(eq(picksT.id, pick.id))
     .returning();
+  // 뽑은 결과를 둘이 같이 보는 화면에 띄운다.
+  await saveBoard({ activePickId: pick.id });
   return toView(updated, options);
 };
 
@@ -146,24 +147,41 @@ export const decidePick = async (pickId: number): Promise<PickView> => {
   return getPick(pick.id);
 };
 
-/** 돌리기 전에 적고 있던 고민과 후보 */
-export const getPickDraft = async (): Promise<PickDraft> => {
+type BoardValues = Partial<
+  Pick<typeof draftT.$inferInsert, "title" | "labels" | "activePickId">
+>;
+
+const saveBoard = async (patch: BoardValues) => {
+  const values = { ...patch, updatedAt: new Date() };
+  await getDb()
+    .insert(draftT)
+    .values({ id: BOARD_ID, ...values })
+    .onConflictDoUpdate({ target: draftT.id, set: values });
+};
+
+/** 둘이 같이 보는 골라 줘 화면 — 적고 있는 후보와, 띄워 둔 뽑기 결과 */
+export const getPickBoard = async (): Promise<PickBoard> => {
   const [row] = await getDb()
     .select()
     .from(draftT)
-    .where(eq(draftT.id, DRAFT_ID))
+    .where(eq(draftT.id, BOARD_ID))
     .limit(1);
-  return row ? { title: row.title, labels: row.labels } : EMPTY_PICK_DRAFT;
+  const activePick = row?.activePickId
+    ? await getPick(row.activePickId).catch(() => null)
+    : null;
+  return { title: row?.title ?? "", labels: row?.labels ?? [], activePick };
 };
 
-export const savePickDraft = async (input: PickDraftInput): Promise<PickDraft> => {
-  const draft = pickDraftSchema.parse(input);
-  const values = { ...draft, updatedAt: new Date() };
-  await getDb()
-    .insert(draftT)
-    .values({ id: DRAFT_ID, ...values })
-    .onConflictDoUpdate({ target: draftT.id, set: values });
-  return draft;
+/** 보낸 값만 바꾼다. 띄울 뽑기가 없으면 404. */
+export const updatePickBoard = async (input: PickBoardPatch): Promise<PickBoard> => {
+  const { title, labels, activePickId } = pickBoardPatchSchema.parse(input);
+  if (activePickId) await findPick(activePickId);
+  const patch: BoardValues = {};
+  if (title !== undefined) patch.title = title;
+  if (labels !== undefined) patch.labels = labels;
+  if (activePickId !== undefined) patch.activePickId = activePickId;
+  await saveBoard(patch);
+  return getPickBoard();
 };
 
 export const deletePick = async (pickId: number) => {

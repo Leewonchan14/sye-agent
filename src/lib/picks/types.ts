@@ -41,21 +41,24 @@ export const createPickSchema = z.object({
 export type CreatePickInput = z.input<typeof createPickSchema>;
 
 /**
- * 돌리기 전에 적고 있는 고민과 후보. 쓰는 중에 저장하므로 고민 끝 공백은 다듬지 않는다
- * ("오늘 " 다음에 "저녁"을 이어 쓸 수 있게).
+ * 골라 줘 화면을 바꾼다. 보낸 값만 바꾼다.
+ * - `title`·`labels`: 돌리기 전에 적고 있는 고민과 후보. 쓰는 중에 저장하므로 고민 끝 공백은
+ *   다듬지 않는다("오늘 " 다음에 "저녁"을 이어 쓸 수 있게).
+ * - `activePickId`: 화면에 띄울 뽑기. null이면 후보를 적는 화면으로 돌아간다.
  */
-export const pickDraftSchema = z.object({
+export const pickBoardPatchSchema = z.object({
   title: z
     .string()
-    .default("")
-    .transform((v) => v.slice(0, MAX_PICK_TITLE)),
+    .transform((v) => v.slice(0, MAX_PICK_TITLE))
+    .optional(),
   labels: z
     .array(z.string())
     .max(MAX_PICK_OPTIONS, `후보는 ${MAX_PICK_OPTIONS}개까지 넣을 수 있어요.`)
-    .default([])
-    .transform(uniqueLabels),
+    .transform(uniqueLabels)
+    .optional(),
+  activePickId: z.number().int().positive().nullable().optional(),
 });
-export type PickDraftInput = z.input<typeof pickDraftSchema>;
+export type PickBoardPatch = z.input<typeof pickBoardPatchSchema>;
 
 export interface PickDraft {
   title: string;
@@ -78,4 +81,9 @@ export interface PickView {
   status: PickStatus;
   createdAt: string;
   decidedAt: string | null;
+}
+
+/** 둘이 같이 보는 골라 줘 화면 — 적고 있는 후보와, 띄워 둔 뽑기 결과 */
+export interface PickBoard extends PickDraft {
+  activePick: PickView | null;
 }

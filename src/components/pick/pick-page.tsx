@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { parseAsInteger, useQueryState } from "nuqs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/confirm-dialog";
@@ -27,12 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
-import {
-  usePick,
-  usePickDraft,
-  usePickHistory,
-  usePickMutations,
-} from "@/lib/picks/queries";
+import { usePickBoard, usePickHistory, usePickMutations } from "@/lib/picks/queries";
 import {
   EMPTY_PICK_DRAFT,
   MAX_PICK_LABEL,
@@ -45,7 +40,7 @@ import {
 } from "@/lib/picks/types";
 import { cn } from "@/lib/utils";
 
-/** 지금 화면에서 돌린 결과. 다른 폰에서 바뀐 결과는 애니메이션 없이 바로 보여 준다. */
+/** 이 화면에서 돌림판을 돌린 결과 */
 interface Spin {
   pickId: number;
   resultOptionId: number;
@@ -53,11 +48,20 @@ interface Spin {
   spinning: boolean;
 }
 
-/**
- * 보고 있는 뽑기는 `?pick=`으로 주소에 남긴다. 새로고침하거나 링크를 다른 폰에서 열어도
- * 서버에 저장된 같은 결과가 보인다.
- */
-const parseAsPickId = parseAsInteger.withOptions({ history: "push" });
+/** 이보다 오래전에 뽑은 걸 띄우면 돌리지 않고 바로 보여 준다(지난 뽑기를 연 경우). */
+const FRESH_DRAW_MS = 15_000;
+
+const isFreshDraw = (pick: PickView) =>
+  Date.now() - new Date(pick.createdAt).getTime() < FRESH_DRAW_MS;
+
+/** 띄운 뽑기가 이전 화면에서 바뀐 게 방금 돌린 결과인지 — 새로 뽑았거나, 같은 뽑기를 다시 돌렸거나 */
+const isNewDraw = (prev: PickView | null, next: PickView) =>
+  prev?.id === next.id
+    ? prev.resultOptionId !== next.resultOptionId
+    : next.status === "drawn" && isFreshDraw(next);
+
+const drawKey = (pick: PickView | null) =>
+  pick ? `${pick.id}:${pick.resultOptionId}` : "none";
 
 const resultIndex = (pick: PickView) =>
   Math.max(
@@ -356,15 +360,29 @@ const HistoryList = ({
 );
 
 export const PickPage = () => {
-  const [pickId, setPickId] = useQueryState("pick", parseAsPickId);
-  const { draft, setDraft, flush, ready, saving } = usePickDraft();
+  // 예전 링크(?pick=번호)로 열면 그 뽑기를 화면에 띄우고 주소에서는 뺀다.
+  const [linkedPickId, setLinkedPickId] = useQueryState("pick", parseAsInteger);
+  const {
+    draft,
+    setDraft,
+    flush,
+    show,
+    activePick: showingPick,
+    ready,
+    saving,
+  } = usePickBoard();
   const [spin, setSpin] = useState<Spin | null>(null);
-  const { data: pick, isLoading: pickLoading, error: pickError } = usePick(pickId);
+  const [seen, setSeen] = useState<{ key: string; pick: PickView | null } | null>(null);
   const { data: history } = usePickHistory();
   const { create, reroll, decide, remove } = usePickMutations();
   const { confirm, dialog } = useConfirmDialog();
 
-  const showingPick = pickId !== null && pick?.id === pickId ? pick : null;
+  useEffect(() => {
+    if (linkedPickId === null || !ready) return;
+    show(linkedPickId);
+    void setLinkedPickId(null);
+  }, [linkedPickId, ready, show, setLinkedPickId]);
+
   const spinMatches =
     showingPick !== null &&
     spin?.pickId === showingPick.id &&
@@ -375,31 +393,41 @@ export const PickPage = () => {
       ? spin.rotation
       : restingRotation(resultIndex(showingPick), showingPick.options.length)
     : (spin?.rotation ?? 0);
+
+  /*
+   * 둘이 같은 화면을 본다. 이 브라우저든 다른 브라우저든 방금 돌렸으면 돌림판을 돌리고,
+   * 처음 열었을 때나 지난 뽑기를 띄웠을 때는 결과를 바로 보여 준다.
+   */
+  const shownKey = drawKey(showingPick);
+  if (ready && shownKey !== seen?.key) {
+    setSeen({ key: shownKey, pick: showingPick });
+    if (
+      seen !== null &&
+      showingPick &&
+      !spinMatches &&
+      isNewDraw(seen.pick, showingPick)
+    ) {
+      setSpin({
+        pickId: showingPick.id,
+        resultOptionId: showingPick.resultOptionId,
+        rotation: spinRotation(
+          rotation,
+          resultIndex(showingPick),
+          showingPick.options.length
+        ),
+        spinning: true,
+      });
+    }
+  }
+
   const wheelLabels = showingPick
     ? showingPick.options.map((o) => o.label)
     : uniqueLabels(draft.labels);
-  const canSpin = wheelLabels.length >= MIN_PICK_OPTIONS && !create.isPending;
-
-  const startSpin = (result: PickView) => {
-    setSpin({
-      pickId: result.id,
-      resultOptionId: result.resultOptionId,
-      rotation: spinRotation(rotation, resultIndex(result), result.options.length),
-      spinning: true,
-    });
-  };
+  const canSpin = ready && wheelLabels.length >= MIN_PICK_OPTIONS && !create.isPending;
 
   const onSpin = () => {
     flush();
-    create.mutate(
-      { title: draft.title, options: draft.labels },
-      {
-        onSuccess: (result) => {
-          startSpin(result);
-          void setPickId(result.id);
-        },
-      }
-    );
+    create.mutate({ title: draft.title, options: draft.labels });
   };
 
   const onDelete = async (target: PickView) => {
@@ -409,12 +437,7 @@ export const PickPage = () => {
       confirmLabel: "지우기",
       destructive: true,
     });
-    if (!ok) return;
-    remove.mutate(target.id, {
-      onSuccess: () => {
-        if (target.id === pickId) void setPickId(null);
-      },
-    });
+    if (ok) remove.mutate(target.id);
   };
 
   return (
@@ -427,7 +450,7 @@ export const PickPage = () => {
           </h1>
           <p className="text-[13px] text-muted">
             후보를 넣고 돌리면 하나를 무작위로 골라 줘요. 결과가 마음에 안 들면 한 번만
-            다시 돌릴 수 있어요.
+            다시 돌릴 수 있어요. 둘이 같은 화면을 봐요.
           </p>
         </header>
 
@@ -444,7 +467,7 @@ export const PickPage = () => {
               <Button
                 size="lg"
                 className="w-full max-w-[320px]"
-                disabled={!canSpin || pickId !== null}
+                disabled={!canSpin}
                 onClick={onSpin}
               >
                 {create.isPending ? <Spinner /> : <Dices />}
@@ -454,43 +477,30 @@ export const PickPage = () => {
           </div>
 
           <div className="md:order-1">
-            {pickId !== null && !showingPick ? (
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-hairline px-4 py-10 text-center text-[13px] text-muted">
-                {pickLoading ? (
-                  <Spinner />
-                ) : (
-                  <>
-                    <p>{pickError?.message ?? "뽑기를 찾지 못했어요."}</p>
-                    <Button variant="outline" size="sm" onClick={() => setPickId(null)}>
-                      새로 뽑기
-                    </Button>
-                  </>
-                )}
+            {!ready ? (
+              <div className="flex justify-center rounded-2xl border border-hairline px-4 py-10">
+                <Spinner />
               </div>
             ) : showingPick ? (
               <ResultCard
                 pick={showingPick}
                 spinning={spinning}
                 busy={reroll.isPending || decide.isPending}
-                onReroll={() => reroll.mutate(showingPick.id, { onSuccess: startSpin })}
+                onReroll={() => reroll.mutate(showingPick.id)}
                 onDecide={() => decide.mutate(showingPick.id)}
-                onEdit={() => {
-                  setDraft({
+                onEdit={() =>
+                  show(null, {
                     title: showingPick.title,
                     labels: showingPick.options.map((o) => o.label),
-                  });
-                  void setPickId(null);
-                }}
-                onNew={() => {
-                  setDraft(EMPTY_PICK_DRAFT);
-                  void setPickId(null);
-                }}
+                  })
+                }
+                onNew={() => show(null, EMPTY_PICK_DRAFT)}
               />
             ) : (
               <OptionEditor
                 draft={draft}
                 setDraft={setDraft}
-                disabled={!ready || create.isPending}
+                disabled={create.isPending}
                 saving={saving}
               />
             )}
@@ -499,11 +509,11 @@ export const PickPage = () => {
 
         <HistoryList
           picks={history ?? []}
-          activeId={pickId}
-          hiddenId={spinning ? pickId : null}
+          activeId={showingPick?.id ?? null}
+          hiddenId={spinning ? (showingPick?.id ?? null) : null}
           onOpen={(id) => {
             setSpin(null);
-            void setPickId(id);
+            show(id);
           }}
           onDelete={onDelete}
         />
