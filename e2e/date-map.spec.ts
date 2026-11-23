@@ -533,3 +533,43 @@ test("분류를 골라 그 분류 지출로 간 곳만 보고, 기간을 바꿔�
   await expect(items).toHaveCount(1);
   await expect(items.first()).toContainText("망원 카페");
 });
+
+test("간 날이 많으면 장소 카드 안의 간 날 목록만 스크롤한다", async ({
+  page,
+  request,
+}) => {
+  for (let day = 1; day <= 16; day += 1) {
+    await createEntry(request, {
+      memo: `파스타 ${day}`,
+      amount: 10_000 + day,
+      mapUrl: "https://map.naver.com/p/entry/place/2001",
+      entryDate: daysAgo(day),
+    });
+  }
+
+  await openMap(page);
+  await placeList(page).getByRole("button").first().click();
+  const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  await expect(detail.getByText("16번 방문")).toBeVisible();
+  // 흰 바탕 사진도 카드 본문과 구분되게 사진 아래에 경계선이 있다.
+  const photoFrame = detail.getByRole("region", { name: /사진 \d+장/ }).locator("..");
+  await expect(photoFrame).toHaveCSS("border-bottom-style", "solid");
+  const days = detail.getByRole("list", { name: "간 날" });
+  const { scrollHeight, clientHeight } = await days.evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  expect(scrollHeight).toBeGreaterThan(clientHeight);
+  // 목록을 끝까지 내리면 가장 오래된 날이 보이고, 지도 링크는 카드 안에 그대로 있다.
+  await days.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await expect
+    .poll(async () => {
+      const box = await days.boundingBox();
+      const last = await days.getByText("파스타 16").boundingBox();
+      return Boolean(
+        box && last && last.y >= box.y && last.y + last.height <= box.y + box.height + 1
+      );
+    })
+    .toBe(true);
+  await expect(detail.getByRole("link", { name: "네이버 지도에서 열기" })).toBeVisible();
+});

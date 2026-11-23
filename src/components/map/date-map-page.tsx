@@ -100,7 +100,8 @@ const paymentLabel = (payment: LedgerMapPayment) =>
 const PlacePhoto = ({ src, className }: { src: string | null; className?: string }) => (
   <div
     className={cn(
-      "flex shrink-0 items-center justify-center overflow-hidden bg-canvas-soft",
+      // 흰 바탕 사진도 테두리가 보이게 한다.
+      "flex shrink-0 items-center justify-center overflow-hidden border border-hairline bg-canvas-soft",
       className
     )}
   >
@@ -132,13 +133,18 @@ const PlaceDetail = ({
     aria-label={`${place.name} 방문 기록`}
     className="overflow-hidden rounded-2xl bg-surface ring-1 ring-hairline"
   >
-    {/* 고른 장소가 바뀌면 사진 위치(몇 번째 사진)를 처음으로 돌린다. */}
-    <PlacePhotoCarousel
-      key={place.key}
-      name={place.name}
-      mapUrl={place.mapUrl}
-      imageUrls={place.imageUrls}
-    />
+    {/*
+      고른 장소가 바뀌면 사진 위치(몇 번째 사진)를 처음으로 돌린다.
+      흰 바탕 사진(로고 등)도 카드 본문과 구분되게 아래에 경계선을 둔다. 사진이 없으면 숨긴다.
+    */}
+    <div className="border-b border-hairline empty:hidden">
+      <PlacePhotoCarousel
+        key={place.key}
+        name={place.name}
+        mapUrl={place.mapUrl}
+        imageUrls={place.imageUrls}
+      />
+    </div>
     <div className="flex flex-col gap-3 p-4">
       <div className="flex flex-col gap-0.5">
         <div className="flex items-start justify-between gap-2">
@@ -163,7 +169,11 @@ const PlaceDetail = ({
           {place.visits}번 방문 · {formatWon(place.total)}
         </p>
       </div>
-      <ul aria-label="간 날" className="flex flex-col divide-y divide-hairline-soft">
+      {/* 간 날이 많으면 이 목록만 스크롤한다. 장소 이름과 지도 링크는 늘 보인다. */}
+      <ul
+        aria-label="간 날"
+        className="-mr-2 flex max-h-72 flex-col divide-y divide-hairline-soft overflow-y-auto overscroll-contain pr-2"
+      >
         {place.entries.map((visit) => {
           const several = visit.payments.length > 1;
           return (
