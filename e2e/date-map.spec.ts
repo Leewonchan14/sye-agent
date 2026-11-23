@@ -10,6 +10,7 @@ import {
   login,
   pool,
   resetLedger,
+  resetPlaces,
   today,
 } from "./helpers";
 
@@ -145,6 +146,7 @@ let token = "";
 test.beforeEach(async ({ page, request }) => {
   failing.clear();
   await resetLedger();
+  await resetPlaces();
   token = await login(request);
   await page
     .context()
@@ -617,4 +619,130 @@ test("좁은 모바일 화면에서도 데이트 지도가 좌우로 넘치지 �
     page.getByRole("region", { name: "성수 파스타집 방문 기록" })
   ).toBeVisible();
   await expect.poll(overflowX).toBe(0);
+});
+
+test("다녀온 곳에 우리 별점과 한 줄 리뷰를 남기고, 고치고, 지운다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  await createEntry(request, {
+    memo: "라테",
+    amount: 5_500,
+    mapUrl: "https://map.naver.com/p/entry/place/2002",
+  });
+
+  await openMap(page, "/map?place=2001");
+  const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  await expect(detail.getByText("아직 우리 별점이 없어요.")).toBeVisible();
+
+  await detail.getByRole("button", { name: "별점 남기기" }).click();
+  const form = detail.getByRole("form", { name: "별점 남기기" });
+  // 별을 고르기 전에는 저장할 수 없다.
+  await expect(form.getByRole("button", { name: "저장" })).toBeDisabled();
+  await form.getByRole("button", { name: "별 4개" }).click();
+  await form.getByRole("textbox", { name: "한 줄 리뷰" }).fill("면이 쫄깃, 또 오자");
+  await form.getByRole("button", { name: "저장" }).click();
+
+  const rating = detail.getByLabel("우리 별점");
+  await expect(rating.getByRole("img", { name: "별 4개" })).toBeVisible();
+  await expect(rating.getByText("“면이 쫄깃, 또 오자”")).toBeVisible();
+  // 목록 줄에도 별이 붙는다.
+  await expect(
+    placeList(page)
+      .getByRole("button", { name: /성수 파스타집/ })
+      .getByRole("img", { name: "별 4개" })
+  ).toBeVisible();
+
+  // 장소 정보는 가계부 지도에서 읽어 수첩에 남긴다.
+  const saved = await pool.query(
+    "select key, name, kind, category, address, lat, lng, map_url, rating, review, rated_at from places"
+  );
+  expect(saved.rows).toHaveLength(1);
+  expect(saved.rows[0]).toMatchObject({
+    key: "2001",
+    name: "성수 파스타집",
+    kind: "eat",
+    category: "이탈리아음식",
+    address: "서울 성동구 연무장길 1",
+    lat: 37.5446,
+    lng: 127.0557,
+    map_url: "https://map.naver.com/p/entry/place/2001",
+    rating: 4,
+    review: "면이 쫄깃, 또 오자",
+  });
+  expect(saved.rows[0].rated_at).not.toBeNull();
+
+  // 새로고침해도 남아 있고, 고치면 바뀐다.
+  await page.reload();
+  await detail.getByRole("button", { name: "고치기" }).click();
+  await expect(form.getByRole("textbox", { name: "한 줄 리뷰" })).toHaveValue(
+    "면이 쫄깃, 또 오자"
+  );
+  await form.getByRole("button", { name: "별 2개" }).click();
+  await form.getByRole("textbox", { name: "한 줄 리뷰" }).fill("");
+  await form.getByRole("button", { name: "저장" }).click();
+  await expect(rating.getByRole("img", { name: "별 2개" })).toBeVisible();
+  await expect(rating.getByText(/“/)).toHaveCount(0);
+
+  // 다른 장소를 고르면 그 장소의 별점(없음)을 보여 준다.
+  await placeList(page)
+    .getByRole("button", { name: /망원 카페/ })
+    .click();
+  const cafe = page.getByRole("region", { name: "망원 카페 방문 기록" });
+  await expect(cafe.getByText("아직 우리 별점이 없어요.")).toBeVisible();
+
+  // 지우면 별점이 없는 상태로 돌아간다.
+  await placeList(page)
+    .getByRole("button", { name: /성수 파스타집/ })
+    .click();
+  await detail.getByRole("button", { name: "고치기" }).click();
+  await form.getByRole("button", { name: "별점 지우기" }).click();
+  await expect(detail.getByText("아직 우리 별점이 없어요.")).toBeVisible();
+  const cleared = await pool.query("select rating, review, rated_at from places");
+  expect(cleared.rows[0]).toEqual({ rating: null, review: "", rated_at: null });
+});
+
+test("별점 API는 잘못된 값과 모르는 장소를 막는다", async ({ request }) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  const put = (data: unknown) =>
+    request.put("/api/places/notes", { headers: authHeaders(token), data });
+
+  expect((await put({ key: "2001", rating: 6 })).status()).toBe(400);
+  expect((await put({ key: "2001", rating: 0 })).status()).toBe(400);
+  expect((await put({ key: "2001", rating: 3.5 })).status()).toBe(400);
+  expect((await put({ key: "2001", rating: 5, review: "가".repeat(101) })).status()).toBe(
+    400
+  );
+  // 별점 없이 리뷰만 남길 수는 없다.
+  expect((await put({ key: "2001", rating: null, review: "좋았어" })).status()).toBe(400);
+  // 가계부 지도에 없는 장소
+  expect((await put({ key: "9999", rating: 5 })).status()).toBe(404);
+  // 로그인 없이
+  expect(
+    (
+      await request.put("/api/places/notes", { data: { key: "2001", rating: 5 } })
+    ).status()
+  ).toBe(401);
+
+  const ok = await put({ key: "2001", rating: 5, review: "  최고  " });
+  expect(ok.status()).toBe(200);
+  expect(await ok.json()).toMatchObject({ rating: 5, review: "최고" });
+  // 지도 응답에도 별점이 실린다.
+  const map = await request.get("/api/ledger/map", { headers: authHeaders(token) });
+  const { places } = (await map.json()) as {
+    places: { key: string; note: { rating: number; review: string } | null }[];
+  };
+  expect(places.find((place) => place.key === "2001")?.note).toMatchObject({
+    rating: 5,
+    review: "최고",
+  });
 });

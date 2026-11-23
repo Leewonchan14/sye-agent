@@ -1,6 +1,7 @@
 /** 데이트 지도(/map) 응답 모양. 브라우저와 서버가 함께 쓴다. */
 
 import type { LedgerMonthPayload } from "@/lib/db/ledger";
+import type { PlaceNote } from "@/lib/places/types";
 
 /** 가계부 분류 칩(ExpenseCategoryChips)에 그대로 넘기는 분류. entryCount는 이 기간 지도에 찍힌 지출 수 */
 export type LedgerMapCategory = LedgerMonthPayload["categories"][number];
@@ -87,6 +88,8 @@ export type LedgerMapPlace = {
   lastDate: string;
   /** 간 날별 기록. 최신순 */
   entries: LedgerMapVisit[];
+  /** 우리가 남긴 별점·한 줄 리뷰. 아직 없으면 null */
+  note: PlaceNote | null;
 };
 
 export type LedgerMapPayload = {

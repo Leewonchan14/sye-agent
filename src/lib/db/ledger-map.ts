@@ -9,6 +9,7 @@ import {
   readMapPlace,
   toEntryKind,
 } from "@/lib/db/ledger";
+import { getPlaceNotes } from "@/lib/db/places";
 import { kst } from "@/lib/kst";
 import type { LedgerCategoryColorKey, LedgerCategoryIconKey } from "@/lib/ledger/icons";
 import { isNaverMapUrl } from "@/lib/ledger/map-url";
@@ -240,8 +241,12 @@ export const getLedgerMapPlaces = async (
       firstDate: row.entryDate,
       lastDate: row.entryDate,
       entries: [visit],
+      note: null,
     });
   }
+
+  const notes = await getPlaceNotes([...byKey.keys()]);
+  for (const place of byKey.values()) place.note = notes.get(place.key) ?? null;
 
   const places = [...byKey.values()].sort(
     (a, b) => b.visits - a.visits || b.lastDate.localeCompare(a.lastDate)

@@ -674,3 +674,37 @@ export const pickDraft = pgTable("pick_draft", {
   }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ───────────────────────── 지역 수첩 (우리 별점·리뷰) ───────────────────────── */
+
+/**
+ * 우리 수첩에 오른 장소. 한 장소 = 한 행이고, 별점·한 줄 리뷰는 둘이 같이 매기는 하나만 둔다.
+ * 가계부 지도(/map)와 데이트 추천(/dates)이 같은 행을 읽어서 어디서 매겨도 같은 별점이 보인다.
+ */
+export const places = pgTable(
+  "places",
+  {
+    id: serial("id").primaryKey(),
+    /** 장소를 가리키는 열쇠 — 네이버 장소 id, 없으면 지도 링크. 데이트 지도의 장소 key와 같다. */
+    key: text("key").notNull(),
+    name: text("name").notNull(),
+    /** eat(맛집·카페·술집) | stay(숙소) | play(전시·체험 등) */
+    kind: text("kind").notNull().default("eat"),
+    category: text("category").notNull().default(""),
+    address: text("address").notNull().default(""),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    mapUrl: text("map_url").notNull().default(""),
+    imageUrl: text("image_url"),
+    /** 1~5. 아직 안 매겼으면 null */
+    rating: integer("rating"),
+    /** 한 줄 리뷰 */
+    review: text("review").notNull().default(""),
+    ratedAt: timestamp("rated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    keyUniq: uniqueIndex("places_key_uniq").on(t.key),
+  })
+);
