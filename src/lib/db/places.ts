@@ -3,6 +3,9 @@ import { and, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db/db";
 import { activeEntry } from "@/lib/db/ledger";
 import {
+  type AreaView,
+  type CreateAreaInput,
+  createAreaSchema,
   inferPlaceKind,
   type PlaceNote,
   type PlaceNoteInput,
@@ -129,4 +132,62 @@ export const savePlaceNote = async (input: PlaceNoteInput): Promise<PlaceNote> =
     .onConflictDoUpdate({ target: placesT.key, set: note })
     .returning();
   return toNote(row);
+};
+
+/* ───────── 지역 ───────── */
+
+const { placeAreas: areasT } = schema;
+
+const toAreaView = (row: typeof areasT.$inferSelect): AreaView => ({
+  id: row.id,
+  name: row.name,
+  lat: row.lat,
+  lng: row.lng,
+  address: row.address,
+  radiusM: row.radiusM,
+});
+
+/** 저장한 지역. 최근에 연 지역이 먼저 */
+export const listAreas = async (): Promise<AreaView[]> =>
+  (
+    await getDb().select().from(areasT).orderBy(desc(areasT.lastUsedAt), desc(areasT.id))
+  ).map(toAreaView);
+
+export const createArea = async (input: CreateAreaInput): Promise<AreaView> => {
+  const values = createAreaSchema.parse(input);
+  const [row] = await getDb()
+    .insert(areasT)
+    .values(values)
+    .onConflictDoNothing({ target: areasT.name })
+    .returning();
+  if (!row) throw new PlaceError(`'${values.name}'은 이미 있는 지역이에요.`, 409);
+  return toAreaView(row);
+};
+
+export const updateAreaRadius = async (
+  id: number,
+  radiusM: number
+): Promise<AreaView> => {
+  const [row] = await getDb()
+    .update(areasT)
+    .set({ radiusM })
+    .where(eq(areasT.id, id))
+    .returning();
+  if (!row) throw new PlaceError("지역을 찾을 수 없어요.", 404);
+  return toAreaView(row);
+};
+
+export const deleteArea = async (id: number) => {
+  const rows = await getDb().delete(areasT).where(eq(areasT.id, id)).returning();
+  if (!rows.length) throw new PlaceError("지역을 찾을 수 없어요.", 404);
+};
+
+/** 지역을 열면 칩 맨 앞으로 옮긴다. */
+export const touchArea = async (id: number): Promise<AreaView | null> => {
+  const [row] = await getDb()
+    .update(areasT)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(areasT.id, id))
+    .returning();
+  return row ? toAreaView(row) : null;
 };

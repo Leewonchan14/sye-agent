@@ -116,7 +116,7 @@ const isHttps = (url: unknown): url is string =>
   typeof url === "string" && /^https:\/\//.test(url);
 
 /** `window.__APOLLO_STATE__ = {...}`의 객체를 문자열 안의 괄호까지 따져 잘라 읽는다. */
-const readApolloState = (html: string): Record<string, unknown> | null => {
+export const readApolloState = (html: string): Record<string, unknown> | null => {
   const marker = html.indexOf("__APOLLO_STATE__");
   const start = marker < 0 ? -1 : html.indexOf("{", marker);
   if (start < 0) return null;
@@ -172,10 +172,10 @@ interface PlaceDetailBase {
   category?: unknown;
 }
 
-const toText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+export const toText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 /** 좌표는 "126.9283111" 같은 문자열로 온다. 범위를 벗어나면 버린다. */
-const toCoordinate = (value: unknown, limit: number): number | null => {
+export const toCoordinate = (value: unknown, limit: number): number | null => {
   const num = typeof value === "number" ? value : Number.parseFloat(toText(value));
   return Number.isFinite(num) && Math.abs(num) <= limit && num !== 0 ? num : null;
 };

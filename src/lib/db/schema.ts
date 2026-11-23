@@ -708,3 +708,26 @@ export const places = pgTable(
     keyUniq: uniqueIndex("places_key_uniq").on(t.key),
   })
 );
+
+/**
+ * 지역 수첩의 지역(예: 신도림). 이름으로 네이버 검색해 고른 곳을 중심으로 삼고,
+ * 반경 안의 다녀온 곳·가 보고 싶은 곳을 한 화면에 모은다.
+ */
+export const placeAreas = pgTable(
+  "place_areas",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    /** 중심으로 고른 곳의 주소 (확인용) */
+    address: text("address").notNull().default(""),
+    radiusM: integer("radius_m").notNull().default(1500),
+    /** 마지막으로 연 시각 — 지역 칩을 최근 순으로 놓는다. */
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    nameUniq: uniqueIndex("place_areas_name_uniq").on(t.name),
+  })
+);

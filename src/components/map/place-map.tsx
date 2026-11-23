@@ -17,7 +17,17 @@ import {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { LedgerMapPlace } from "@/lib/ledger/map-types";
+/** 지도에 찍는 핀 하나. 데이트 지도의 장소(LedgerMapPlace)도 그대로 넘길 수 있다. */
+export interface MapPin {
+  key: string;
+  name: string;
+  lat: number;
+  lng: number;
+  /** 간 날 수 — 많을수록 핀이 커진다. */
+  visits: number;
+  /** 핀 색. 없으면 기본 장미색 */
+  color?: string;
+}
 
 /**
  * 데이트 지도. 배경은 키·한도 없이 쓰는 OpenFreeMap 벡터 지도이고, 핀은 MapLibre 내장
@@ -37,6 +47,8 @@ const PIN = "#d96c75";
 const PIN_DARK = "#b9505a";
 const SEOUL = { longitude: 126.978, latitude: 37.5665, zoom: 11 };
 const FOCUS_ZOOM = 15;
+/** 지역 가운데만 보여 줄 때의 확대 정도 — 동네 하나가 화면에 들어온다. */
+const CENTER_ZOOM = 14;
 
 /** 지도 컨트롤의 접근성 이름을 한국어로 */
 const MAP_LOCALE = {
@@ -70,12 +82,14 @@ const applyKoreanLabels = (map: MapLibreMap) => {
 };
 
 interface Props {
-  places: LedgerMapPlace[];
+  places: MapPin[];
+  /** 핀이 없을 때 보여 줄 가운데(지역 수첩의 지역 중심). 없으면 서울 */
+  center?: { lat: number; lng: number };
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }
 
-export const PlaceMap = ({ places, selectedKey, onSelect }: Props) => {
+export const PlaceMap = ({ places, center, selectedKey, onSelect }: Props) => {
   const mapRef = useRef<MapRef>(null);
   const [loaded, setLoaded] = useState(false);
   const [hovering, setHovering] = useState(false);
@@ -86,7 +100,12 @@ export const PlaceMap = ({ places, selectedKey, onSelect }: Props) => {
       features: places.map((place) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [place.lng, place.lat] },
-        properties: { key: place.key, name: place.name, visits: place.visits },
+        properties: {
+          key: place.key,
+          name: place.name,
+          visits: place.visits,
+          color: place.color ?? PIN,
+        },
       })),
     }),
     [places]
@@ -150,7 +169,11 @@ export const PlaceMap = ({ places, selectedKey, onSelect }: Props) => {
     <div className="size-full" data-map-ready={loaded || undefined}>
       <Map
         ref={mapRef}
-        initialViewState={SEOUL}
+        initialViewState={
+          center
+            ? { longitude: center.lng, latitude: center.lat, zoom: CENTER_ZOOM }
+            : SEOUL
+        }
         mapStyle={MAP_STYLE_URL}
         style={{ width: "100%", height: "100%" }}
         interactiveLayerIds={[CLUSTER_LAYER, POINT_LAYER]}
@@ -209,7 +232,7 @@ export const PlaceMap = ({ places, selectedKey, onSelect }: Props) => {
                 "case",
                 ["==", ["get", "key"], selectedKey ?? ""],
                 PIN_DARK,
-                PIN,
+                ["get", "color"],
               ],
               "circle-radius": [
                 "+",
