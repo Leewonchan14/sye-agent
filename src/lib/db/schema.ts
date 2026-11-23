@@ -615,3 +615,44 @@ export const dateSpots = pgTable(
     digestIdx: index("date_spots_digest_idx").on(t.digestId),
   })
 );
+
+/* ───────────────────────── 골라 줘 (랜덤 뽑기) ───────────────────────── */
+
+/** 한 번의 뽑기. 결과는 서버가 정해서 저장하므로 어느 폰에서 열어도 같다. */
+export const picks = pgTable(
+  "picks",
+  {
+    id: serial("id").primaryKey(),
+    /** 고민 (예: "오늘 저녁 뭐 먹지?") — 비워도 된다. */
+    title: text("title").notNull().default(""),
+    /** 뽑힌 후보(pick_options.id) */
+    resultOptionId: integer("result_option_id"),
+    /** 다시 돌린 횟수 — 한 번까지만 */
+    rerollsUsed: integer("rerolls_used").notNull().default(0),
+    /** drawn(뽑기만 함) | decided(이걸로 결정) */
+    status: text("status").notNull().default("drawn"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => ({
+    createdIdx: index("picks_created_idx").on(t.createdAt),
+  })
+);
+
+export const pickOptions = pgTable(
+  "pick_options",
+  {
+    id: serial("id").primaryKey(),
+    pickId: integer("pick_id")
+      .notNull()
+      .references(() => picks.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    /** manual(직접 입력) — 나중에 가 보고 싶은 곳·지도 장소에서 가져온 후보도 구분한다. */
+    source: text("source").notNull().default("manual"),
+    sourceId: integer("source_id"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => ({
+    pickIdx: index("pick_options_pick_idx").on(t.pickId),
+  })
+);

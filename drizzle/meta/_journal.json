@@ -267,6 +267,13 @@
       "when": 1795337120466,
       "tag": "0038_whole_the_initiative",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795426990995,
+      "tag": "0039_conscious_thunderbolt",
+      "breakpoints": true
     }
   ]
 }
