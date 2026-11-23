@@ -449,7 +449,8 @@ export const DateMapPage = () => {
           (data.range === "all" && data.category === null ? <Empty /> : <EmptyPeriod />)}
 
         {places.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_340px]">
+          // 열을 minmax(0, 1fr)로 둬, 지도 캔버스가 처음 그린 너비보다 화면이 좁아져도 따라 줄어든다.
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_340px]">
             <div
               ref={mapBoxRef}
               className="h-[58vh] min-h-[320px] scroll-mt-4 overflow-hidden rounded-2xl ring-1 ring-hairline md:sticky md:top-4 md:h-[calc(100dvh-180px)]"
