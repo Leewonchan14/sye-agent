@@ -17,6 +17,7 @@ import {
   toMapRange,
   type LedgerMapCategory,
   type LedgerMapPayload,
+  type LedgerMapPayment,
   type LedgerMapPlace,
   type LedgerMapQuery,
   type LedgerMapRange,
@@ -26,6 +27,7 @@ import {
 
 export type {
   LedgerMapPayload,
+  LedgerMapPayment,
   LedgerMapPlace,
   LedgerMapQuery,
   LedgerMapRange,
@@ -193,19 +195,30 @@ export const getLedgerMapPlaces = async (
   for (const row of picked) {
     if (row.mapLat === null || row.mapLng === null) continue;
     const key = row.mapPlaceId || row.mapUrl;
-    const visit: LedgerMapVisit = {
+    const payment: LedgerMapPayment = {
       id: row.id,
-      date: row.entryDate,
       time: row.entryTime,
       amount: row.amount,
       memo: row.memo,
       categoryName: row.categoryName,
     };
+    const visit: LedgerMapVisit = {
+      date: row.entryDate,
+      amount: row.amount,
+      payments: [payment],
+    };
     const place = byKey.get(key);
     if (place) {
-      place.visits += 1;
       place.total += row.amount;
       place.firstDate = row.entryDate;
+      // 날짜순으로 읽으므로 같은 날 결제는 바로 앞 방문에 붙는다. 하루에 여러 번 결제해도 한 번 간 것이다.
+      const last = place.entries.at(-1);
+      if (last?.date === row.entryDate) {
+        last.amount += row.amount;
+        last.payments.unshift(payment);
+        continue;
+      }
+      place.visits += 1;
       place.entries.push(visit);
       continue;
     }

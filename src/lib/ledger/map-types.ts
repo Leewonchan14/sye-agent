@@ -50,13 +50,22 @@ export const toMapSearchParams = (query: LedgerMapQuery): string => {
 export const toMapRange = (value: unknown): LedgerMapRange =>
   MAP_RANGES.includes(value as LedgerMapRange) ? (value as LedgerMapRange) : "all";
 
-export type LedgerMapVisit = {
+/** 한 장소에서 한 결제 */
+export type LedgerMapPayment = {
   id: number;
-  date: string;
   time: string | null;
   amount: number;
   memo: string;
   categoryName: string | null;
+};
+
+/** 한 장소에 간 하루. 같은 날 여러 번 결제해도 한 번 간 것으로 센다. */
+export type LedgerMapVisit = {
+  date: string;
+  /** 그날 이 장소에서 쓴 돈 */
+  amount: number;
+  /** 그날 먼저 한 결제부터 */
+  payments: LedgerMapPayment[];
 };
 
 export type LedgerMapPlace = {
@@ -71,11 +80,12 @@ export type LedgerMapPlace = {
   /** 대표 사진. 없으면 null */
   imageUrl: string | null;
   imageUrls: string[];
+  /** 간 날 수. 결제 건수가 아니다. */
   visits: number;
   total: number;
   firstDate: string;
   lastDate: string;
-  /** 최신순 */
+  /** 간 날별 기록. 최신순 */
   entries: LedgerMapVisit[];
 };
 
