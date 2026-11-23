@@ -280,6 +280,33 @@ test("네이버 지도 링크가 있는 지출을 장소별로 묶어 지도와 
   ).toHaveAttribute("href", "https://map.naver.com/p/entry/place/2001");
   await expect(page).toHaveURL(/place=2001/);
 
+  // 넓은 화면에서는 목록을 내려도 고른 장소가 위에 붙어 있고, 목록 끝도 카드에 가리지 않는다.
+  if (test.info().project.name === "desktop") {
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 1280, height: 480 });
+    await items.nth(1).scrollIntoViewIfNeeded();
+    await items.nth(1).click({ trial: true });
+    const stuck = await detail.boundingBox();
+    expect(stuck!.y).toBeGreaterThanOrEqual(0);
+    expect(stuck!.y).toBeLessThanOrEqual(24);
+    if (viewport) await page.setViewportSize(viewport);
+  }
+
+  // 고른 장소는 닫기 버튼, 같은 장소 다시 누르기, Esc로 선택을 푼다.
+  await detail.getByRole("button", { name: "선택 해제" }).click();
+  await expect(detail).toBeHidden();
+  await expect(page).not.toHaveURL(/place=/);
+  await items.first().click();
+  await expect(detail).toBeVisible();
+  await items.first().click();
+  await expect(detail).toBeHidden();
+  await expect(items.first()).not.toHaveAttribute("aria-current");
+  await items.first().click();
+  await expect(detail).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(detail).toBeHidden();
+  await expect(page).not.toHaveURL(/place=/);
+
   // 기간을 바꾸면 주소에 남고, 뒤로 가기로 돌아온다.
   await page
     .getByRole("navigation", { name: "기간" })
