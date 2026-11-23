@@ -267,6 +267,27 @@
       "when": 1795337120466,
       "tag": "0038_whole_the_initiative",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795426990995,
+      "tag": "0039_conscious_thunderbolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795440230530,
+      "tag": "0040_worried_ezekiel",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795440593855,
+      "tag": "0041_peaceful_secret_warriors",
+      "breakpoints": true
     }
   ]
 }

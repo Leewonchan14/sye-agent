@@ -1,0 +1,2 @@
+ALTER TABLE "pick_draft" ADD COLUMN IF NOT EXISTS "active_pick_id" integer;--> statement-breakpoint
+ALTER TABLE "pick_draft" ADD CONSTRAINT "pick_draft_active_pick_id_picks_id_fk" FOREIGN KEY ("active_pick_id") REFERENCES "public"."picks"("id") ON DELETE set null ON UPDATE no action;

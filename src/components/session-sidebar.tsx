@@ -7,6 +7,7 @@ import {
   Activity,
   CalendarHeart,
   ChevronUp,
+  Dices,
   ExternalLink,
   FileText,
   LogOut,
@@ -49,6 +50,7 @@ export type SidebarNav =
   | "monitor"
   | "dates"
   | "map"
+  | "pick"
   | "search"
   | "instructions"
   | "suggestions"
@@ -75,6 +77,7 @@ const APP_NAV = [
   { key: "ledger", href: "/ledger", label: "가계부", icon: Wallet },
   { key: "dates", href: "/dates", label: "데이트 추천", icon: CalendarHeart },
   { key: "map", href: "/map", label: "데이트 지도", icon: MapPinned },
+  { key: "pick", href: "/pick", label: "골라 줘", icon: Dices },
   { key: "monitor", href: "/monitor", label: "언론 모니터링", icon: Newspaper },
 ] as const;
 
