@@ -141,15 +141,23 @@ const PlaceDetail = ({ place }: { place: LedgerMapPlace }) => (
           {place.visits}번 방문 · {formatWon(place.total)}
         </p>
       </div>
-      <ul className="flex flex-col divide-y divide-hairline-soft">
+      <ul aria-label="간 날" className="flex flex-col divide-y divide-hairline-soft">
         {place.entries.map((visit) => (
-          <li key={visit.id} className="flex items-baseline gap-3 py-1.5 text-[13px]">
+          <li key={visit.date} className="flex items-baseline gap-3 py-1.5 text-[13px]">
             <span className="w-20 shrink-0 text-muted tabular-nums">
               {visitDate(visit.date)}
             </span>
             <span className="min-w-0 flex-1 truncate text-body">
-              {visit.memo || visit.categoryName || "지출"}
+              {/* 같은 날 여러 번 결제했으면 한 줄로 모아 메모를 이어 붙인다. */}
+              {visit.payments
+                .map((payment) => payment.memo || payment.categoryName || "지출")
+                .join(" · ")}
             </span>
+            {visit.payments.length > 1 && (
+              <span className="shrink-0 text-[11px] text-muted tabular-nums">
+                결제 {visit.payments.length}건
+              </span>
+            )}
             <span className="shrink-0 text-ink tabular-nums">
               {formatWon(visit.amount)}
             </span>
