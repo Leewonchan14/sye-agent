@@ -1,0 +1,137 @@
+import { and, desc, eq, inArray, or } from "drizzle-orm";
+
+import { getDb, schema } from "@/lib/db/db";
+import { activeEntry } from "@/lib/db/ledger";
+import {
+  inferPlaceKind,
+  type PlaceNote,
+  type PlaceNoteInput,
+  placeNoteInputSchema,
+} from "@/lib/places/types";
+
+const { places: placesT, ledgerEntries: entriesT } = schema;
+
+/** 사용자에게 그대로 보여 줄 수 있는 오류 */
+export class PlaceError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400
+  ) {
+    super(message);
+  }
+}
+
+type PlaceRow = typeof placesT.$inferSelect;
+
+const toNote = (row: Pick<PlaceRow, "rating" | "review" | "ratedAt">): PlaceNote => ({
+  rating: row.rating,
+  review: row.review,
+  ratedAt: row.ratedAt?.toISOString() ?? null,
+});
+
+/** 한 장소의 별점·리뷰. 매긴 게 없으면 null */
+export const getPlaceNote = async (key: string): Promise<PlaceNote | null> =>
+  (await getPlaceNotes([key])).get(key) ?? null;
+
+/** 매긴 별점·리뷰가 있는 장소만 key → 별점으로 돌려준다. */
+export const getPlaceNotes = async (keys: string[]): Promise<Map<string, PlaceNote>> => {
+  const unique = [...new Set(keys.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const rows = await getDb()
+    .select({
+      key: placesT.key,
+      rating: placesT.rating,
+      review: placesT.review,
+      ratedAt: placesT.ratedAt,
+    })
+    .from(placesT)
+    .where(inArray(placesT.key, unique));
+  return new Map(
+    rows
+      .filter((row) => row.rating !== null || row.review)
+      .map((row) => [row.key, toNote(row)])
+  );
+};
+
+/**
+ * 가계부 지출의 지도 링크가 가리키는 장소 정보를 key(네이버 장소 id, 없으면 지도 링크)로 찾는다.
+ * 좌표를 아직 못 읽은 링크도 별점은 남길 수 있다. 같은 장소를 여러 번 갔으면 가장 최근 지출에서 읽은 이름·사진을 쓴다.
+ */
+const findLedgerPlace = async (key: string) => {
+  const [row] = await getDb()
+    .select({
+      mapUrl: entriesT.mapUrl,
+      mapPlaceId: entriesT.mapPlaceId,
+      mapPlaceName: entriesT.mapPlaceName,
+      memo: entriesT.memo,
+      mapImageUrls: entriesT.mapImageUrls,
+      mapLat: entriesT.mapLat,
+      mapLng: entriesT.mapLng,
+      mapAddress: entriesT.mapAddress,
+      mapCategory: entriesT.mapCategory,
+    })
+    .from(entriesT)
+    .where(
+      and(
+        activeEntry,
+        eq(entriesT.kind, "expense"),
+        or(
+          eq(entriesT.mapPlaceId, key),
+          and(eq(entriesT.mapPlaceId, ""), eq(entriesT.mapUrl, key))
+        )
+      )
+    )
+    .orderBy(desc(entriesT.entryDate), desc(entriesT.id))
+    .limit(1);
+  if (!row) return null;
+  return {
+    name: row.mapPlaceName || row.memo || "이름 없는 장소",
+    kind: inferPlaceKind(row.mapCategory),
+    category: row.mapCategory,
+    address: row.mapAddress,
+    lat: row.mapLat,
+    lng: row.mapLng,
+    mapUrl: row.mapPlaceId
+      ? `https://map.naver.com/p/entry/place/${row.mapPlaceId}`
+      : row.mapUrl,
+    imageUrl: row.mapImageUrls[0] ?? null,
+  };
+};
+
+/**
+ * 장소에 별점·한 줄 리뷰를 남긴다. 수첩에 아직 없는 장소면 가계부 지도에서 정보를 읽어 만든다.
+ * 별점을 비우고 리뷰도 비우면 매긴 기록을 지운다(장소 행은 남긴다).
+ */
+export const savePlaceNote = async (input: PlaceNoteInput): Promise<PlaceNote> => {
+  const { key, rating, review } = placeNoteInputSchema.parse(input);
+  if (rating === null && review) {
+    throw new PlaceError("리뷰를 남기려면 별점도 골라 주세요.");
+  }
+  const now = new Date();
+  const note = { rating, review, ratedAt: rating === null ? null : now, updatedAt: now };
+
+  const [existing] = await getDb()
+    .select({ id: placesT.id })
+    .from(placesT)
+    .where(eq(placesT.key, key))
+    .limit(1);
+  if (existing) {
+    const [row] = await getDb()
+      .update(placesT)
+      .set(note)
+      .where(eq(placesT.id, existing.id))
+      .returning();
+    return toNote(row);
+  }
+
+  const place = await findLedgerPlace(key);
+  if (!place)
+    throw new PlaceError("지도 링크가 있는 지출에만 별점을 남길 수 있어요.", 404);
+  const [row] = await getDb()
+    .insert(placesT)
+    .values({ key, ...place, ...note })
+    // 둘이 동시에 처음 매기면 나중 것이 이긴다.
+    .onConflictDoUpdate({ target: placesT.key, set: note })
+    .returning();
+  return toNote(row);
+};

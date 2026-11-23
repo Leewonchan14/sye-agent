@@ -1,0 +1,40 @@
+import { requireAuth } from "@/lib/auth";
+import { getPlaceNote, PlaceError, savePlaceNote } from "@/lib/db/places";
+import { monitorErrorResponse, readJson } from "@/lib/monitor/api";
+import { placeNoteInputSchema } from "@/lib/places/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/** 한 장소의 우리 별점: ?key=<장소 key>. 매긴 게 없으면 { note: null } */
+export const GET = async (req: Request) => {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+  const key = (new URL(req.url).searchParams.get("key") ?? "").trim();
+  if (!key || key.length > 500) {
+    return Response.json({ error: "key가 올바르지 않아요." }, { status: 400 });
+  }
+  try {
+    return Response.json({ note: await getPlaceNote(key) });
+  } catch (error) {
+    return monitorErrorResponse(error, "별점을 불러오지 못했어요.");
+  }
+};
+
+/**
+ * 장소에 우리 별점(1~5)과 한 줄 리뷰를 남긴다.
+ * body: { key: 장소 key(네이버 장소 id, 없으면 지도 링크), rating: 1~5 | null, review?: string }
+ */
+export const PUT = async (req: Request) => {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+  try {
+    const input = placeNoteInputSchema.parse((await readJson(req)) ?? {});
+    return Response.json(await savePlaceNote(input));
+  } catch (error) {
+    if (error instanceof PlaceError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    return monitorErrorResponse(error, "별점을 저장하지 못했어요.");
+  }
+};

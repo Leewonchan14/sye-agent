@@ -28,6 +28,7 @@ import {
 import { DayRouteButton } from "@/components/ledger/day-route/day-route-button";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
 import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
+import { PlaceRating, RatingStars } from "@/components/places/place-rating";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -170,6 +171,13 @@ const PlaceDetail = ({
           {place.visits}번 방문 · {formatWon(place.total)}
         </p>
       </div>
+      {/* 고른 장소가 바뀌면 쓰던 별점 입력을 닫는다. */}
+      <PlaceRating
+        key={place.key}
+        placeKey={place.key}
+        note={place.note}
+        className="rounded-xl bg-canvas-soft p-3"
+      />
       {/* 간 날이 많으면 이 목록만 스크롤한다. 장소 이름과 지도 링크는 늘 보인다. */}
       <ul
         aria-label="간 날"
@@ -261,8 +269,11 @@ const PlaceList = ({
             <span className="truncate text-[14px] font-medium text-ink">
               {place.name}
             </span>
-            <span className="truncate text-[12px] text-muted">
-              {place.category || place.address || "장소"}
+            <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+              {place.note?.rating && <RatingStars rating={place.note.rating} />}
+              <span className="truncate">
+                {place.category || place.address || "장소"}
+              </span>
             </span>
           </span>
           <span className="flex shrink-0 flex-col items-end">
