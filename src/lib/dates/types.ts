@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { PlaceRatingSummary, PlaceReview } from "@/lib/places/types";
+
 export const DATE_REACTIONS = ["like", "pass", "visited"] as const;
 export type DateReaction = (typeof DATE_REACTIONS)[number];
 
@@ -111,7 +113,19 @@ export const agentSpotSchema = z
     address: optionalText(160),
     priceHint: optionalText(60),
     tags: z.array(z.string().trim().min(1).max(20)).max(8).default([]),
+    /** 네이버 지도 장소 id(숫자). 링크를 통째로 보내도 숫자만 남긴다. */
+    naverPlaceId: blankAsNull(
+      z
+        .union([z.string(), z.number()])
+        .transform((v) => String(v).match(/(?:place\/)?(\d{4,})/)?.[1] ?? null)
+    ),
+    /** 위도·경도. 둘 중 하나라도 없거나 범위를 벗어나면 둘 다 버린다. */
+    lat: z.number().min(-90).max(90).nullish().catch(null),
+    lng: z.number().min(-180).max(180).nullish().catch(null),
   })
+  .transform((spot) =>
+    spot.lat == null || spot.lng == null ? { ...spot, lat: null, lng: null } : spot
+  )
   .superRefine((spot, ctx) => {
     if (spot.kind === "place" && !spot.instagramUrl) {
       ctx.addIssue({
@@ -170,6 +184,13 @@ export interface DateSpotView {
   reaction: DateReaction | null;
   /** 게시물 사진들(인스타그램 CDN, 게시물 순서). 못 읽었거나 만료됐으면 빈 배열 */
   photos: string[];
+  naverPlaceId: string | null;
+  lat: number | null;
+  lng: number | null;
+  /** 다녀와서 가계부 내역에 남긴 리뷰의 별점 평균. 없으면 null */
+  placeRating: PlaceRatingSummary | null;
+  /** 다녀와서 남긴 리뷰 (최신순) */
+  placeReviews: PlaceReview[];
 }
 
 export interface DateDigestView {

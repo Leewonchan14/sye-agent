@@ -175,6 +175,9 @@ export interface PlaceCard {
   reviews: PlaceReview[];
   /** 리뷰를 붙일 수 있는 간 날 — 그날 첫 결제 내역 (최신순) */
   visitEntries: { date: string; entryId: number }[];
+  /** 하치와레 추천(spot)의 id와 가 보고 싶어·별로·다녀왔어 표시 */
+  spotId: number | null;
+  reaction: "like" | "pass" | "visited" | null;
 }
 
 export interface PlacesPayload {
@@ -185,6 +188,10 @@ export interface PlacesPayload {
   want: PlaceCard[];
   visited: PlaceCard[];
   stays: PlaceCard[];
+  /** 아직 표시하지 않은 이 동네의 최근 하치와레 추천 */
+  fresh: PlaceCard[];
+  /** 하치와레가 지금 찾고 있는지 */
+  searching: boolean;
 }
 
 /** 지역 이름 비교용: 띄어쓰기와 끝의 "역"을 뗀다. "신도림역" → "신도림" */

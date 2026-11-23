@@ -26,7 +26,9 @@ import {
   DEFAULT_DATE_SETTINGS,
 } from "@/lib/dates/types";
 import { getDb, schema } from "@/lib/db/db";
+import { getRatedPlaces, type RatedPlace } from "@/lib/db/places";
 import { kst } from "@/lib/kst";
+import { findRatedPlace, isDislikedPlace } from "@/lib/places/match";
 
 const {
   dateSpotSettings: settingsT,
@@ -192,23 +194,33 @@ export const ingestDigest = async (input: AgentDigestInput) => {
   const digest = await getDigestRow(input.digestId);
   if (!digest) throw new DateSpotError("조사 기록을 찾을 수 없어요.", 404);
 
-  const rows = input.spots.map((spot) => ({
-    digestId: digest.id,
-    kind: spot.kind,
-    name: spot.name,
-    area: spot.area,
-    category: spot.category,
-    summary: spot.summary,
-    reason: spot.reason,
-    instagramUrl: spot.instagramUrl,
-    instagramAuthor: spot.instagramAuthor,
-    sourceUrl: spot.sourceUrl,
-    period: spot.period,
-    postedAt: parsePostedAt(spot.postedAt),
-    address: spot.address,
-    priceHint: spot.priceHint,
-    tags: [...new Set(spot.tags)],
-  }));
+  // 다녀와서 리뷰 별점이 낮았던 곳은 하치와레가 보내도 저장하지 않는다.
+  const rated = await getRatedPlaces();
+  const blocked = input.spots.filter((spot) =>
+    isDislikedPlace(findRatedPlace(spot, rated))
+  );
+  const rows = input.spots
+    .filter((spot) => !blocked.includes(spot))
+    .map((spot) => ({
+      digestId: digest.id,
+      kind: spot.kind,
+      name: spot.name,
+      area: spot.area,
+      category: spot.category,
+      summary: spot.summary,
+      reason: spot.reason,
+      instagramUrl: spot.instagramUrl,
+      instagramAuthor: spot.instagramAuthor,
+      sourceUrl: spot.sourceUrl,
+      period: spot.period,
+      postedAt: parsePostedAt(spot.postedAt),
+      address: spot.address,
+      priceHint: spot.priceHint,
+      tags: [...new Set(spot.tags)],
+      naverPlaceId: spot.naverPlaceId,
+      lat: spot.lat,
+      lng: spot.lng,
+    }));
   const inserted = rows.length
     ? await db
         .insert(spotsT)
@@ -228,6 +240,8 @@ export const ingestDigest = async (input: AgentDigestInput) => {
     inserted: inserted.length,
     skipped: rows.length - inserted.length,
     insertedIds: inserted.map((row) => row.id),
+    /** 리뷰 별점이 낮아 버린 곳 */
+    blocked: blocked.map((spot) => spot.name),
   };
 };
 
@@ -269,7 +283,23 @@ const toSpotView = (row: SpotRow, dayKey: string): DateSpotView => ({
   reaction: (DATE_REACTIONS as readonly string[]).includes(row.reaction ?? "")
     ? (row.reaction as DateReaction)
     : null,
+  naverPlaceId: row.naverPlaceId,
+  lat: row.lat,
+  lng: row.lng,
+  // 다녀와서 남긴 리뷰는 화면을 만들 때 붙인다(attachPlaceReviews).
+  placeRating: null,
+  placeReviews: [],
 });
+
+/** 다녀와서 가계부 내역에 남긴 리뷰를 추천 카드에 붙인다. */
+export const attachPlaceReviews = (spots: DateSpotView[], rated: RatedPlace[]) => {
+  for (const spot of spots) {
+    const place = findRatedPlace(spot, rated);
+    spot.placeRating = place?.rating ?? null;
+    spot.placeReviews = place?.reviews ?? [];
+  }
+  return spots;
+};
 
 export const getDigestView = async (digest: DigestRow): Promise<DateDigestView> => {
   const spots = await getDb()
@@ -308,6 +338,26 @@ export const listSpotsByReaction = async (
     .from(spotsT)
     .innerJoin(digestsT, eq(digestsT.id, spotsT.digestId))
     .where(eq(spotsT.reaction, reaction))
+    .orderBy(desc(spotsT.id))
+    .limit(limit);
+  return rows.map((r) => toSpotView(r.spot, r.dayKey));
+};
+
+/** 최근 며칠 동안 받은 추천 중 아직 아무 표시도 안 한 것 (최신순) */
+export const listRecentUnreactedSpots = async (
+  days: number,
+  limit = 300
+): Promise<DateSpotView[]> => {
+  const rows = await getDb()
+    .select({ spot: spotsT, dayKey: digestsT.dayKey })
+    .from(spotsT)
+    .innerJoin(digestsT, eq(digestsT.id, spotsT.digestId))
+    .where(
+      and(
+        isNull(spotsT.reaction),
+        gte(spotsT.createdAt, kst().subtract(days, "day").toDate())
+      )
+    )
     .orderBy(desc(spotsT.id))
     .limit(limit);
   return rows.map((r) => toSpotView(r.spot, r.dayKey));

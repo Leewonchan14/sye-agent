@@ -609,6 +609,14 @@ export const dateSpots = pgTable(
     photoCheckedAt: timestamp("photo_checked_at", { withTimezone: true }),
     /** like(가 보고 싶어) | pass(별로) | visited(다녀왔어) — 다음 조사의 취향 힌트가 된다. */
     reaction: text("reaction"),
+    /**
+     * 네이버 지도 장소 id. 가계부 지도 링크의 장소 key와 같아서, 다녀와서 남긴 리뷰를 이 추천에 붙이고
+     * 리뷰 별점이 낮은 곳은 다시 추천하지 않는다.
+     */
+    naverPlaceId: text("naver_place_id"),
+    /** 좌표 — 지역 수첩에서 반경 안인지 본다. */
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (t) => ({

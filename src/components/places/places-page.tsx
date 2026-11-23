@@ -9,6 +9,8 @@ import {
   MapPin,
   Plus,
   Search,
+  Sparkles,
+  ThumbsDown,
   Trash2,
   Utensils,
 } from "lucide-react";
@@ -20,7 +22,11 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 
 import type { MapPin as MapPinData } from "@/components/map/place-map";
-import { PlaceReviews } from "@/components/places/place-reviews";
+import {
+  PlaceReviews,
+  RatingSummary,
+  ReviewList,
+} from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import {
   AlertDialog,
@@ -50,7 +56,12 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { formatWon } from "@/lib/ledger/format";
-import { useAreaMutations, useAreaSearch, usePlaces } from "@/lib/places/client";
+import {
+  useAreaMutations,
+  useAreaSearch,
+  useAreaSpotMutations,
+  usePlaces,
+} from "@/lib/places/client";
 import {
   AREA_RADII,
   type AreaCandidate,
@@ -75,6 +86,9 @@ const PlaceMap = dynamic(
 /** 핀 색 — 캔버스에 그려 CSS 변수를 못 쓴다. 다녀온 곳은 장미색, 숙소는 따뜻한 호박색 */
 const VISITED_PIN = "#d96c75";
 const STAY_PIN = "#c9893f";
+/** 가 보고 싶은 곳은 연한 장미색, 하치와레 새 추천은 흐린 장미색 */
+const WANT_PIN = "#ec9aa6";
+const FRESH_PIN = "#c4a3a6";
 
 const KIND_FILTERS = ["all", "eat", "play", "stay"] as const;
 type KindFilter = (typeof KIND_FILTERS)[number];
@@ -289,13 +303,59 @@ const PlaceItem = ({ card, selected }: { card: PlaceCard; selected: boolean }) =
             visits={card.visitEntries}
           />
         )}
-        {card.source === "spot" && (
+        {card.source === "spot" && card.rating && (
+          <div
+            aria-label="다녀와서 남긴 리뷰"
+            className="flex flex-col gap-1.5 rounded-xl bg-canvas-soft p-3"
+          >
+            <RatingSummary rating={card.rating} />
+            <ReviewList reviews={card.reviews.slice(0, 3)} showDate />
+          </div>
+        )}
+        {card.source === "spot" && card.spotId !== null && card.reaction === null && (
+          <SpotReactions spotId={card.spotId} />
+        )}
+        {card.source === "spot" && card.reaction !== null && !card.rating && (
           <p className="text-[12px] text-muted">
             하치와레 추천 · 다녀와서 가계부에 지도 링크를 남기면 리뷰를 쓸 수 있어요.
           </p>
         )}
       </article>
     </li>
+  );
+};
+
+/** 하치와레 새 추천에 가 보고 싶어·별로 표시 */
+const SpotReactions = ({ spotId }: { spotId: number }) => {
+  const { react } = useAreaSpotMutations();
+  const mark = (reaction: "like" | "pass") =>
+    react.mutate(
+      { spotId, reaction },
+      {
+        onSuccess: () =>
+          toast.success(
+            reaction === "like"
+              ? "가 보고 싶은 곳에 넣었어요."
+              : "다음부터 이런 곳은 빼 볼게요."
+          ),
+        onError: (err) => toast.error(err.message),
+      }
+    );
+  return (
+    <div className="flex gap-2">
+      <Button size="sm" disabled={react.isPending} onClick={() => mark("like")}>
+        <Heart />가 보고 싶어
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={react.isPending}
+        onClick={() => mark("pass")}
+      >
+        <ThumbsDown />
+        별로
+      </Button>
+    </div>
   );
 };
 
@@ -373,16 +433,21 @@ export const PlacesPage = () => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const { data, isLoading, error } = usePlaces(areaId);
   const { setRadius, remove } = useAreaMutations();
+  const { search } = useAreaSpotMutations();
+  const searching = Boolean(data?.searching) || search.isPending;
 
   const area = data?.area ?? null;
   // 숙소 탭은 숙소 구역만, 맛집·카페·놀거리 탭은 숙소 구역을 빼고 보여 준다.
   const showStays = kind === "all" || kind === "stay";
   const showOthers = kind !== "stay";
   const want = showOthers ? byKind(data?.want ?? [], kind) : [];
+  const fresh = showOthers ? byKind(data?.fresh ?? [], kind) : [];
   const visited = showOthers ? byKind(data?.visited ?? [], kind) : [];
   const stays = showStays ? (data?.stays ?? []) : [];
 
   const pins: MapPinData[] = [
+    ...fresh.map((card) => ({ card, color: FRESH_PIN })),
+    ...want.map((card) => ({ card, color: WANT_PIN })),
     ...visited.map((card) => ({ card, color: VISITED_PIN })),
     ...stays.map((card) => ({ card, color: STAY_PIN })),
   ].flatMap(({ card, color }) =>
@@ -495,21 +560,38 @@ export const PlacesPage = () => {
               </div>
             </div>
 
-            <div role="group" aria-label="종류" className="flex gap-1.5">
-              {KIND_FILTERS.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={kind === value}
-                  onClick={() => void setKind(value === "all" ? null : value)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-[13px] text-body ring-1 ring-hairline transition-colors hover:bg-canvas-soft",
-                    kind === value && "bg-ink text-canvas ring-ink hover:bg-ink"
-                  )}
-                >
-                  {KIND_LABEL[value]}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div role="group" aria-label="종류" className="flex gap-1.5">
+                {KIND_FILTERS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={kind === value}
+                    onClick={() => void setKind(value === "all" ? null : value)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-[13px] text-body ring-1 ring-hairline transition-colors hover:bg-canvas-soft",
+                      kind === value && "bg-ink text-canvas ring-ink hover:bg-ink"
+                    )}
+                  >
+                    {KIND_LABEL[value]}
+                  </button>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={searching}
+                onClick={() =>
+                  search.mutate(area.id, {
+                    onSuccess: () =>
+                      toast.success(`하치와레가 ${area.name}에서 찾기 시작했어요.`),
+                    onError: (err) => toast.error(err.message),
+                  })
+                }
+              >
+                {searching ? <Spinner /> : <Sparkles />}
+                {searching ? "하치와레가 찾는 중" : "이 동네 더 찾아 줘"}
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_400px]">
@@ -523,6 +605,15 @@ export const PlacesPage = () => {
                 />
               </div>
               <div className="flex flex-col gap-6">
+                {showOthers && (fresh.length > 0 || searching) && (
+                  <Section
+                    title="하치와레 새 추천"
+                    icon={Sparkles}
+                    cards={fresh}
+                    selectedKey={selectedKey}
+                    empty="하치와레가 이 동네를 찾고 있어요. 다 찾으면 여기에 보여요."
+                  />
+                )}
                 {showOthers && (
                   <>
                     <Section

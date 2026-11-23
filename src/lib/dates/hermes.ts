@@ -11,6 +11,7 @@ import {
   releaseDigestPending,
   setDigestHermesRun,
 } from "@/lib/db/dates";
+import { getRatedPlaces, type RatedPlace } from "@/lib/db/places";
 import {
   getHermesConfig,
   missingHermesEnv,
@@ -19,6 +20,12 @@ import {
 import { getHermesRunStatus, startHermesRun } from "@/lib/hermes/run-client";
 import { kst } from "@/lib/kst";
 import { hashCallbackToken } from "@/lib/monitor/hermes";
+import {
+  DISLIKED_RATING,
+  LIKED_RATING,
+  REVIEW_AUTHOR_LABEL,
+  type AreaView,
+} from "@/lib/places/types";
 
 /**
  * 하치와레(Hermes hachi 프로필)에게 데이트 추천(인스타그램 장소 + 같이 즐길 거리) 조사를 맡긴다.
@@ -43,7 +50,9 @@ const SPOT_FORMAT = `spots 원소 형식 (JSON) — 장소일 때:
   "postedAt": "게시 시각 2026-11-05T16:23:00+09:00 형식, 모르면 null",
   "address": "도로명 주소 (네이버 지역 검색으로 확인한 것)",
   "priceHint": "1인 2만원대 같은 가격 감, 모르면 null",
-  "tags": ["분위기·특징 키워드 2~5개"]
+  "tags": ["분위기·특징 키워드 2~5개"],
+  "naverPlaceId": "네이버 지도 장소 id — map.naver.com/p/entry/place/<숫자>의 숫자. 네이버 지도에서 찾은 장소면 꼭 넣고, 모르면 null",
+  "lat": 37.5090, "lng": 126.8916 (위도·경도 숫자. 지역 검색 결과의 mapy·mapx를 10000000으로 나눈 값, 모르면 null)
 }`;
 
 const CONTENT_FORMAT = `spots 원소 형식 (JSON) — 즐길 거리일 때:
@@ -61,29 +70,75 @@ const CONTENT_FORMAT = `spots 원소 형식 (JSON) — 즐길 거리일 때:
   "postedAt": "인스타 게시 시각, 모르면 null",
   "address": "열리는 장소의 도로명 주소 (집·온라인이면 null)",
   "priceHint": "1인 2만원, 게임 2인 3만원대 같은 가격 감, 모르면 null",
-  "tags": ["특징 키워드 2~5개 (예: 협동, 공포, 2인, 한정판)"]
+  "tags": ["특징 키워드 2~5개 (예: 협동, 공포, 2인, 한정판)"],
+  "naverPlaceId": "열리는 장소의 네이버 지도 장소 id, 없거나 모르면 null",
+  "lat": null, "lng": null (열리는 장소의 위도·경도, 집·온라인이면 null)
 }`;
+
+/** 리뷰 한 줄을 프롬프트에 넣을 꼴로 — 원찬 "국물이 진해" */
+const reviewQuote = (place: RatedPlace) =>
+  place.reviews
+    .filter((review) => review.review)
+    .slice(0, 3)
+    .map((review) => `${REVIEW_AUTHOR_LABEL[review.author]} "${review.review}"`)
+    .join(", ");
+
+const ratedLabel = (place: RatedPlace) => {
+  const quote = reviewQuote(place);
+  return `${place.name}(★${place.rating.average}${quote ? `, ${quote}` : ""})`;
+};
+
+/** 다녀와서 남긴 리뷰 별점으로 좋았던 곳·별로였던 곳을 알려 준다. 별 3점대는 넣지 않는다. */
+const ratedLines = (rated: RatedPlace[]) => {
+  const liked = rated
+    .filter((place) => place.rating.average >= LIKED_RATING)
+    .sort((a, b) => b.rating.average - a.rating.average)
+    .slice(0, 15);
+  const disliked = rated
+    .filter((place) => place.rating.average <= DISLIKED_RATING)
+    .slice(0, 30);
+  return [
+    ...(liked.length
+      ? [
+          `우리가 다녀와서 좋았던 곳(리뷰 평균 별 ${LIKED_RATING} 이상, 리뷰를 보고 이런 결의 비슷한 곳을 골라): ${liked.map(ratedLabel).join(", ")}`,
+        ]
+      : []),
+    ...(disliked.length
+      ? [
+          `우리가 다녀와서 별로였던 곳(리뷰 평균 별 ${DISLIKED_RATING} 이하, 이곳들은 다시 추천하지 마. 보내도 저장되지 않아): ${disliked.map(ratedLabel).join(", ")}`,
+        ]
+      : []),
+  ];
+};
 
 export const buildDateSpotPrompt = (options: {
   digestId: number;
   dayKey: string;
   settings: DateSettings;
   history: Awaited<ReturnType<typeof getRecommendationHistory>>;
+  /** 다녀와서 가계부 내역에 리뷰를 남긴 곳 */
+  rated?: RatedPlace[];
+  /** 지역 수첩의 "이 동네 더 찾아 줘" — 이 지역 반경 안에서만 찾는다. */
+  area?: AreaView | null;
   callbackUrl: string;
   token: string;
   extra: boolean;
 }) => {
-  const { settings, history } = options;
+  const { settings, history, rated = [], area = null } = options;
   const day = kst(options.dayKey);
   return [
     `[데이트 추천 조사 요청] ${day.format("YYYY.MM.DD (dd)")}`,
     `원찬이랑 예은이가 같이 할 데이트 추천을 ${settings.count}개 찾아 줘.`,
     "가 볼 장소(카페·맛집·술집·전시·공방·산책·야경)와 같이 즐길 거리(팝업스토어, 인스타그램에서 소개된 둘이서 하는 협동·공포 게임, 공연·영화, 축제·시즌 이벤트, 원데이 클래스, 집데이트 거리)를 따로 나누지 말고 한 목록으로 섞어서 골라. 몇 개씩 나눌지는 정하지 말고, 오늘 둘에게 가장 좋은 것부터 골라.",
-    options.extra
-      ? "오늘 이미 추천한 것이 있어서 더 찾아 달라는 요청이야. 오늘 고른 것과 겹치지 않게 다른 분위기로 골라."
-      : "매일 아침 받아 보는 오늘의 추천이야.",
+    area
+      ? `지역 수첩에서 '${area.name}' 동네만 골라서 더 찾아 달라는 요청이야. 이 동네 밖은 빼.`
+      : options.extra
+        ? "오늘 이미 추천한 것이 있어서 더 찾아 달라는 요청이야. 오늘 고른 것과 겹치지 않게 다른 분위기로 골라."
+        : "매일 아침 받아 보는 오늘의 추천이야.",
     "",
-    `지역: ${settings.areas.join(", ")}`,
+    area
+      ? `지역: ${area.name} 한 곳만 — 가운데 ${area.address || `${area.lat}, ${area.lng}`} (위도 ${area.lat}, 경도 ${area.lng})에서 반경 ${area.radiusM / 1000}km 안. 장소는 좌표(lat·lng)로 반경 안인지 확인하고, 집·온라인 즐길 거리는 빼.`
+      : `지역: ${settings.areas.join(", ")}`,
     `원하는 테마: ${settings.themes.join(", ") || "자유 (카페·맛집이나 한 종류만 몰리지 않게 섞어 줘)"}`,
     ...(settings.memo ? [`부탁: ${settings.memo}`] : []),
     ...(history.liked.length
@@ -92,6 +147,7 @@ export const buildDateSpotPrompt = (options: {
     ...(history.passed.length
       ? [`별로라고 한 것(이런 결은 피해): ${history.passed.slice(0, 20).join(", ")}`]
       : []),
+    ...ratedLines(rated),
     "",
     "찾는 방법:",
     '1. web_search로 후보를 넓게 모아. 장소와 게임은 인스타그램 게시물로("site:instagram.com 성수 데이트", "#성수카페", "성수 팝업 이번주", "site:instagram.com 커플 게임 추천", "#커플게임", "#2인협동게임", "#스팀게임추천") 찾고, 나머지 즐길 거리는 공식 소식으로("이번주 팝업스토어 서울", "캐릭터 팝업 용산", "이번달 커플 공연", "연말 서울 축제") 찾아. 최근 3개월 안의 것을 우선해.',
@@ -123,6 +179,8 @@ export const startDateSpotSearch = async (options: {
   origin: string;
   digestId: number;
   extra: boolean;
+  /** 지역 수첩의 "이 동네 더 찾아 줘" */
+  area?: AreaView | null;
 }) => {
   const missing = missingHermesEnv();
   if (missing.length) {
@@ -138,15 +196,18 @@ export const startDateSpotSearch = async (options: {
   }
 
   try {
-    const [settings, history] = await Promise.all([
+    const [settings, history, rated] = await Promise.all([
       getDateSettings(),
       getRecommendationHistory(),
+      getRatedPlaces(),
     ]);
     const input = buildDateSpotPrompt({
       digestId: digest.id,
       dayKey: digest.dayKey,
       settings,
       history,
+      rated,
+      area: options.area ?? null,
       callbackUrl: `${options.origin}/api/dates/agent/digests`,
       token,
       extra: options.extra,

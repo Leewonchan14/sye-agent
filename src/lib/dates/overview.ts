@@ -2,6 +2,7 @@ import { reconcileDigestPending } from "@/lib/dates/hermes";
 import { nextDateCollectAt } from "@/lib/dates/tick";
 import type { DateOverview } from "@/lib/dates/types";
 import {
+  attachPlaceReviews,
   getDateSettings,
   getDigestByDay,
   getDigestView,
@@ -9,6 +10,7 @@ import {
   listSpotsByReaction,
   refreshSpotPhotos,
 } from "@/lib/db/dates";
+import { getRatedPlaces } from "@/lib/db/places";
 import { kst } from "@/lib/kst";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,14 +35,20 @@ export const getDateOverview = async (day: string | null): Promise<DateOverview>
   await refreshSpotPhotos({ digestId: digest?.id ?? null }).catch((error) =>
     console.error("[date-spots] photo", error)
   );
-  const [liked, visited] = await Promise.all([
+  const [liked, visited, rated, digestView] = await Promise.all([
     listSpotsByReaction("like"),
     listSpotsByReaction("visited"),
+    getRatedPlaces(),
+    digest ? getDigestView(digest) : null,
   ]);
+  // 다녀와서 가계부 내역에 남긴 리뷰를 카드에 붙인다.
+  for (const spots of [liked, visited, digestView?.spots ?? []]) {
+    attachPlaceReviews(spots, rated);
+  }
 
   return {
     settings,
-    digest: digest ? await getDigestView(digest) : null,
+    digest: digestView,
     dayKey,
     days,
     liked,

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { RatingSummary, ReviewList } from "@/components/places/place-reviews";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Carousel,
@@ -52,10 +53,15 @@ const REACTIONS: {
 ];
 
 /** 네이버 지도 검색 — 주소가 있으면 같이 넣어 동명 가게를 피한다. */
+/** 네이버 장소 id가 있으면 그 장소 페이지, 없으면 이름·주소로 검색한다. */
 const mapUrl = (spot: DateSpotView) =>
-  `https://map.naver.com/p/search/${encodeURIComponent(
-    [spot.name, spot.address?.split(" ").slice(0, 3).join(" ")].filter(Boolean).join(" ")
-  )}`;
+  spot.naverPlaceId
+    ? `https://map.naver.com/p/entry/place/${spot.naverPlaceId}`
+    : `https://map.naver.com/p/search/${encodeURIComponent(
+        [spot.name, spot.address?.split(" ").slice(0, 3).join(" ")]
+          .filter(Boolean)
+          .join(" ")
+      )}`;
 
 const usePrefersReducedMotion = () =>
   useState(
@@ -455,6 +461,17 @@ export const SpotCard = ({
           <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
           {spot.reason}
         </p>
+      )}
+
+      {/* 다녀와서 가계부 내역에 남긴 리뷰 */}
+      {spot.placeRating && (
+        <section
+          aria-label="다녀와서 남긴 리뷰"
+          className="flex flex-col gap-1.5 rounded-xl bg-canvas-soft px-3 py-2"
+        >
+          <RatingSummary rating={spot.placeRating} />
+          <ReviewList reviews={spot.placeReviews.slice(0, 3)} showDate />
+        </section>
       )}
 
       {(spot.period || spot.address || spot.priceHint) && (
