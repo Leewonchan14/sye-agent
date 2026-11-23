@@ -8,7 +8,12 @@ import { toast } from "sonner";
 import { CategoryIcon } from "@/components/ledger/category-icon";
 import type { LedgerEntryView } from "@/components/ledger/entry-list";
 import { MapPlaceCard } from "@/components/ledger/place-photos";
-import { StarPicker } from "@/components/places/place-rating";
+import {
+  EntryReviews,
+  newReviewDraft,
+  type ReviewDraft,
+  ReviewFields,
+} from "@/components/places/place-reviews";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,8 +35,7 @@ import {
   isNaverMapUrl,
   MAX_MAP_URL_LENGTH,
 } from "@/lib/ledger/map-url";
-import { usePlaceNote, useSavePlaceNote } from "@/lib/places/client";
-import { MAX_REVIEW_LENGTH, toPlaceKey } from "@/lib/places/types";
+import { useEntryReviews, useReviewMutations } from "@/lib/places/client";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -95,23 +99,13 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
     extractMapUrl(mapUrl) === entry.mapUrl &&
     Boolean(entry.mapImageUrls.length || entry.mapPlaceName);
   /**
-   * 우리 별점·한 줄 리뷰는 장소(네이버 장소 id, 없으면 지도 링크)에 하나만 둔다.
-   * 저장된 링크 그대로면 그 장소의 별점을 불러와 고치고, 새 링크면 내역을 저장한 뒤 그 장소에 남긴다.
+   * 리뷰는 내역마다 원찬·예은이 각자 여러 개 남긴다.
+   * 지도 링크가 저장된 내역이면 리뷰를 바로 쓰고 고치고, 새 내역이면 하나를 적어 두었다가 내역을 저장한 뒤 남긴다.
    */
-  const savedPlaceKey =
-    entry != null && entry.placeKey !== "" && extractMapUrl(mapUrl) === entry.mapUrl
-      ? entry.placeKey
-      : "";
-  const { data: savedNote = null, isLoading: noteLoading } = usePlaceNote(savedPlaceKey);
-  const [noteDraft, setNoteDraft] = useState<{
-    rating: number | null;
-    review: string;
-  } | null>(null);
-  const shownNote = noteDraft ?? {
-    rating: savedNote?.rating ?? null,
-    review: savedNote?.review ?? "",
-  };
-  const savePlaceNote = useSavePlaceNote();
+  const reviewEntryId = entry?.placeKey ? entry.id : null;
+  const { data: entryReviews = entry?.reviews ?? [] } = useEntryReviews(reviewEntryId);
+  const [reviewDraft, setReviewDraft] = useState<ReviewDraft>(newReviewDraft);
+  const { create: createReview } = useReviewMutations();
   const [tags, setTags] = useState(entry?.tags ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   // undefined면 아직 고르지 않은 상태라 날짜로 여행을 추천한다.
@@ -190,7 +184,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         tripId: kind === "expense" ? selectedTripId : (entry?.tripId ?? null),
       };
       return ledgerRequest<{
-        entry: { kind: string; mapUrl: string; mapPlaceId: string };
+        entry: { id: number; kind: string; mapUrl: string };
       }>(token, "/api/ledger/entries", {
         method: entry ? "PATCH" : "POST",
         body: entry ? { id: entry.id, ...payload } : payload,
@@ -200,18 +194,18 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
       toast.success(entry ? "기록을 수정했어요." : "기록을 저장했어요.");
       invalidate();
       onOpenChange(false);
-      // 별점을 고쳤으면 내역이 가리키는 장소에 남긴다. 처음부터 비어 있던 별점은 건드리지 않는다.
-      const key = saved.kind === "expense" ? toPlaceKey(saved) : "";
-      const cleared = noteDraft?.rating === null && !savedNote?.rating;
-      if (!key || !noteDraft || cleared) return;
+      // 새로 적어 둔 리뷰는 지도 링크가 있는 지출로 저장됐을 때 남긴다.
+      if (reviewEntryId || reviewDraft.rating === null) return;
+      if (saved.kind !== "expense" || !saved.mapUrl) return;
       try {
-        await savePlaceNote.mutateAsync({
-          key,
-          rating: noteDraft.rating,
-          review: noteDraft.rating === null ? "" : noteDraft.review.trim(),
+        await createReview.mutateAsync({
+          entryId: saved.id,
+          author: reviewDraft.author,
+          rating: reviewDraft.rating,
+          review: reviewDraft.review.trim(),
         });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "별점을 저장하지 못했어요.");
+        toast.error(error instanceof Error ? error.message : "리뷰를 남기지 못했어요.");
       }
     },
     onError: (error: Error) => toast.error(error.message),
@@ -263,7 +257,7 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
       toast.error("날짜를 선택해 주세요.");
       return;
     }
-    if (noteDraft && noteDraft.rating === null && noteDraft.review.trim()) {
+    if (!reviewEntryId && reviewDraft.rating === null && reviewDraft.review.trim()) {
       toast.error("리뷰를 남기려면 별점도 골라 주세요.");
       return;
     }
@@ -514,43 +508,28 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
                 </p>
               )
             )}
-            {isHttpUrl(extractMapUrl(mapUrl)) && (
-              <fieldset
-                aria-label="우리 별점"
-                disabled={Boolean(savedPlaceKey) && noteLoading}
+            {reviewEntryId ? (
+              <section
+                aria-label="리뷰"
                 className="mt-2 flex flex-col gap-1.5 rounded-xl bg-canvas-soft p-3"
               >
-                <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-medium text-muted">
+                  리뷰 · 쓰거나 고치면 바로 저장돼요
+                </span>
+                <EntryReviews entryId={reviewEntryId} reviews={entryReviews} />
+              </section>
+            ) : (
+              isHttpUrl(extractMapUrl(mapUrl)) && (
+                <fieldset
+                  aria-label="리뷰"
+                  className="mt-2 flex flex-col gap-1.5 rounded-xl bg-canvas-soft p-3"
+                >
                   <span className="text-[12px] font-medium text-muted">
-                    우리 별점 · 한 줄 리뷰
+                    리뷰 (안 남겨도 돼요)
                   </span>
-                  {shownNote.rating !== null && (
-                    <button
-                      type="button"
-                      onClick={() => setNoteDraft({ rating: null, review: "" })}
-                      className="text-[11px] text-muted underline-offset-2 hover:underline"
-                    >
-                      별점 지우기
-                    </button>
-                  )}
-                </div>
-                <StarPicker
-                  value={shownNote.rating}
-                  onChange={(rating) => setNoteDraft({ ...shownNote, rating })}
-                />
-                <Input
-                  aria-label="한 줄 리뷰"
-                  placeholder="한 줄 리뷰 (안 써도 돼요)"
-                  maxLength={MAX_REVIEW_LENGTH}
-                  value={shownNote.review}
-                  onChange={(event) =>
-                    setNoteDraft({ ...shownNote, review: event.target.value })
-                  }
-                />
-                <p className="text-[11px] text-muted">
-                  같은 가게의 다른 내역과 데이트 지도에도 같은 별점이 보여요.
-                </p>
-              </fieldset>
+                  <ReviewFields draft={reviewDraft} onChange={setReviewDraft} />
+                </fieldset>
+              )
             )}
           </div>
         )}

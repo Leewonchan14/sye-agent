@@ -26,30 +26,76 @@ export const inferPlaceKind = (category: string): PlaceKind => {
 
 /**
  * 가계부 지출이 가리키는 장소 key — 네이버 장소 id, 없으면 지도 링크. 지도 링크가 없으면 빈 문자열.
- * 데이트 지도의 장소 key와 같아서, 같은 가게의 내역들은 별점 하나를 같이 쓴다.
+ * 데이트 지도의 장소 key와 같아서, 같은 가게의 내역들에 남긴 리뷰가 한 장소로 모인다.
  */
 export const toPlaceKey = (entry: { mapPlaceId: string; mapUrl: string }) =>
   entry.mapPlaceId || entry.mapUrl;
 
-/** 별점·리뷰 저장. 별점을 null로 보내고 리뷰도 비우면 지운다. */
-export const placeNoteInputSchema = z.object({
-  key: z.string().trim().min(1).max(500),
-  rating: z.number().int().min(MIN_RATING).max(MAX_RATING).nullable(),
-  review: z
-    .string()
-    .trim()
-    .max(MAX_REVIEW_LENGTH, `리뷰는 ${MAX_REVIEW_LENGTH}자까지 쓸 수 있어요.`)
-    .default(""),
-});
-export type PlaceNoteInput = z.input<typeof placeNoteInputSchema>;
+/* ───────── 리뷰 ───────── */
 
-/** 우리가 남긴 별점·한 줄 리뷰 */
-export interface PlaceNote {
-  rating: number | null;
+/** 리뷰를 쓴 사람 */
+export const REVIEW_AUTHORS = ["wonchan", "yeeun"] as const;
+export type ReviewAuthor = (typeof REVIEW_AUTHORS)[number];
+export const REVIEW_AUTHOR_LABEL: Record<ReviewAuthor, string> = {
+  wonchan: "원찬",
+  yeeun: "예은",
+};
+
+const ratingField = z.number().int().min(MIN_RATING).max(MAX_RATING);
+const reviewField = z
+  .string()
+  .trim()
+  .max(MAX_REVIEW_LENGTH, `리뷰는 ${MAX_REVIEW_LENGTH}자까지 쓸 수 있어요.`);
+
+/** 내역에 리뷰 남기기 */
+export const createReviewSchema = z.object({
+  entryId: z.number().int().positive(),
+  author: z.enum(REVIEW_AUTHORS),
+  rating: ratingField,
+  review: reviewField.default(""),
+});
+export type CreateReviewInput = z.input<typeof createReviewSchema>;
+
+/** 리뷰 고치기 — 보낸 값만 바꾼다. */
+export const updateReviewSchema = z
+  .object({
+    author: z.enum(REVIEW_AUTHORS),
+    rating: ratingField,
+    review: reviewField,
+  })
+  .partial();
+export type UpdateReviewInput = z.input<typeof updateReviewSchema>;
+
+/** 내역 하나에 남긴 리뷰 */
+export interface PlaceReview {
+  id: number;
+  entryId: number;
+  /** 그 내역의 날짜 (YYYY-MM-DD) */
+  entryDate: string;
+  author: ReviewAuthor;
+  rating: number;
   review: string;
-  /** 마지막으로 매긴 시각 (ISO) */
-  ratedAt: string | null;
+  createdAt: string;
 }
+
+/** 한 장소의 리뷰 별점 평균 */
+export interface PlaceRatingSummary {
+  /** 소수 첫째 자리까지 */
+  average: number;
+  count: number;
+}
+
+/** 리뷰 별점 평균을 소수 첫째 자리로. 리뷰가 없으면 null */
+export const summarizeRatings = (ratings: number[]): PlaceRatingSummary | null =>
+  ratings.length
+    ? {
+        average:
+          Math.round(
+            (ratings.reduce((sum, value) => sum + value, 0) / ratings.length) * 10
+          ) / 10,
+        count: ratings.length,
+      }
+    : null;
 
 /* ───────── 지역 ───────── */
 
@@ -123,7 +169,12 @@ export interface PlaceCard {
   visits: number;
   total: number;
   lastDate: string | null;
-  note: PlaceNote | null;
+  /** 리뷰 별점 평균 (ledger). 리뷰가 없으면 null */
+  rating: PlaceRatingSummary | null;
+  /** 이 장소에 남긴 리뷰 (최신순) */
+  reviews: PlaceReview[];
+  /** 리뷰를 붙일 수 있는 간 날 — 그날 첫 결제 내역 (최신순) */
+  visitEntries: { date: string; entryId: number }[];
 }
 
 export interface PlacesPayload {

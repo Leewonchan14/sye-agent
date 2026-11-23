@@ -9,11 +9,11 @@ import {
   readMapPlace,
   toEntryKind,
 } from "@/lib/db/ledger";
-import { getPlaceNotes } from "@/lib/db/places";
+import { listReviewsByPlace } from "@/lib/db/places";
 import { kst } from "@/lib/kst";
 import type { LedgerCategoryColorKey, LedgerCategoryIconKey } from "@/lib/ledger/icons";
 import { isNaverMapUrl } from "@/lib/ledger/map-url";
-import { toPlaceKey } from "@/lib/places/types";
+import { summarizeRatings, toPlaceKey, type PlaceReview } from "@/lib/places/types";
 
 import {
   toMapRange,
@@ -208,6 +208,7 @@ export const getLedgerMapPlaces = async (
       date: row.entryDate,
       amount: row.amount,
       payments: [payment],
+      reviews: [],
     };
     const place = byKey.get(key);
     if (place) {
@@ -242,12 +243,24 @@ export const getLedgerMapPlaces = async (
       firstDate: row.entryDate,
       lastDate: row.entryDate,
       entries: [visit],
-      note: null,
+      rating: null,
     });
   }
 
-  const notes = await getPlaceNotes([...byKey.keys()]);
-  for (const place of byKey.values()) place.note = notes.get(place.key) ?? null;
+  // 장소 별점은 기간과 상관없이 그 장소 리뷰 전체로, 간 날 리뷰는 그날 결제 내역에 남긴 것으로 붙인다.
+  const reviewsByPlace = byKey.size
+    ? await listReviewsByPlace()
+    : new Map<string, PlaceReview[]>();
+  for (const place of byKey.values()) {
+    const reviews = reviewsByPlace.get(place.key) ?? [];
+    place.rating = summarizeRatings(reviews.map((review) => review.rating));
+    for (const visit of place.entries) {
+      const ids = new Set(visit.payments.map((payment) => payment.id));
+      visit.reviews = reviews
+        .filter((review) => ids.has(review.entryId))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+  }
 
   const places = [...byKey.values()].sort(
     (a, b) => b.visits - a.visits || b.lastDate.localeCompare(a.lastDate)

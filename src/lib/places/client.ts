@@ -11,33 +11,34 @@ import type {
   AreaCandidate,
   AreaView,
   CreateAreaInput,
-  PlaceNote,
-  PlaceNoteInput,
+  CreateReviewInput,
+  PlaceReview,
   PlacesPayload,
+  UpdateReviewInput,
 } from "@/lib/places/types";
 
 export const placeKeys = {
   all: ["places"] as const,
   list: (areaId: number | null) => ["places", "list", areaId ?? "recent"] as const,
   areaSearch: (q: string) => ["places", "area-search", q] as const,
-  note: (key: string) => ["places", "note", key] as const,
+  entryReviews: (entryId: number) => ["places", "entry-reviews", entryId] as const,
 };
 
 const useToken = () => useAuthStore((s) => s.token) ?? "";
 
-/** 한 장소의 우리 별점·리뷰. key가 비어 있으면 읽지 않는다. */
-export const usePlaceNote = (key: string) => {
+/** 한 내역의 리뷰. entryId가 없으면 읽지 않는다. */
+export const useEntryReviews = (entryId: number | null) => {
   const token = useToken();
   return useQuery({
-    queryKey: placeKeys.note(key),
+    queryKey: placeKeys.entryReviews(entryId ?? 0),
     queryFn: async () =>
       (
-        await ledgerRequest<{ note: PlaceNote | null }>(
+        await ledgerRequest<{ reviews: PlaceReview[] }>(
           token,
-          `/api/places/notes?key=${encodeURIComponent(key)}`
+          `/api/places/reviews?entryId=${entryId}`
         )
-      ).note,
-    enabled: Boolean(token && key),
+      ).reviews,
+    enabled: Boolean(token && entryId),
   });
 };
 
@@ -105,20 +106,36 @@ export const useAreaMutations = () => {
   };
 };
 
-/** 별점·리뷰를 저장하고, 별점을 보여 주는 화면(데이트 지도·지역 수첩)을 다시 읽는다. */
-export const useSavePlaceNote = () => {
+/** 리뷰 쓰기·고치기·지우기. 리뷰를 보여 주는 화면(가계부·데이트 지도·지역 수첩)을 다시 읽는다. */
+export const useReviewMutations = () => {
   const token = useToken();
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: PlaceNoteInput) =>
-      ledgerRequest<PlaceNote>(token, "/api/places/notes", {
-        method: "PUT",
-        body: input,
-      }),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ledgerKeys.all }),
-        queryClient.invalidateQueries({ queryKey: placeKeys.all }),
-      ]),
-  });
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ledgerKeys.all }),
+      queryClient.invalidateQueries({ queryKey: placeKeys.all }),
+    ]);
+  return {
+    create: useMutation({
+      mutationFn: (input: CreateReviewInput) =>
+        ledgerRequest<PlaceReview>(token, "/api/places/reviews", {
+          method: "POST",
+          body: input,
+        }),
+      onSuccess: refresh,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, ...patch }: UpdateReviewInput & { id: number }) =>
+        ledgerRequest<PlaceReview>(token, `/api/places/reviews/${id}`, {
+          method: "PATCH",
+          body: patch,
+        }),
+      onSuccess: refresh,
+    }),
+    remove: useMutation({
+      mutationFn: (id: number) =>
+        ledgerRequest(token, `/api/places/reviews/${id}`, { method: "DELETE" }),
+      onSuccess: refresh,
+    }),
+  };
 };

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { activeEntry } from "@/lib/db/ledger";
@@ -6,13 +6,16 @@ import {
   type AreaView,
   type CreateAreaInput,
   createAreaSchema,
-  inferPlaceKind,
-  type PlaceNote,
-  type PlaceNoteInput,
-  placeNoteInputSchema,
+  type CreateReviewInput,
+  createReviewSchema,
+  type PlaceReview,
+  type ReviewAuthor,
+  toPlaceKey,
+  type UpdateReviewInput,
+  updateReviewSchema,
 } from "@/lib/places/types";
 
-const { places: placesT, ledgerEntries: entriesT } = schema;
+const { placeReviews: reviewsT, ledgerEntries: entriesT } = schema;
 
 /** 사용자에게 그대로 보여 줄 수 있는 오류 */
 export class PlaceError extends Error {
@@ -24,119 +27,132 @@ export class PlaceError extends Error {
   }
 }
 
-type PlaceRow = typeof placesT.$inferSelect;
+/* ───────── 리뷰 ───────── */
 
-const toNote = (row: Pick<PlaceRow, "rating" | "review" | "ratedAt">): PlaceNote => ({
+const reviewColumns = {
+  id: reviewsT.id,
+  entryId: reviewsT.entryId,
+  entryDate: entriesT.entryDate,
+  author: reviewsT.author,
+  rating: reviewsT.rating,
+  review: reviewsT.review,
+  createdAt: reviewsT.createdAt,
+  mapPlaceId: entriesT.mapPlaceId,
+  mapUrl: entriesT.mapUrl,
+};
+
+type ReviewRow = {
+  id: number;
+  entryId: number;
+  entryDate: string;
+  author: string;
+  rating: number;
+  review: string;
+  createdAt: Date;
+  mapPlaceId: string;
+  mapUrl: string;
+};
+
+const toReview = (row: ReviewRow): PlaceReview => ({
+  id: row.id,
+  entryId: row.entryId,
+  entryDate: row.entryDate,
+  author: row.author as ReviewAuthor,
   rating: row.rating,
   review: row.review,
-  ratedAt: row.ratedAt?.toISOString() ?? null,
+  createdAt: row.createdAt.toISOString(),
 });
 
-/** 한 장소의 별점·리뷰. 매긴 게 없으면 null */
-export const getPlaceNote = async (key: string): Promise<PlaceNote | null> =>
-  (await getPlaceNotes([key])).get(key) ?? null;
+/** 최신순: 내역 날짜, 남긴 시각 */
+const byNewest = (a: PlaceReview, b: PlaceReview) =>
+  b.entryDate.localeCompare(a.entryDate) || b.createdAt.localeCompare(a.createdAt);
 
-/** 매긴 별점·리뷰가 있는 장소만 key → 별점으로 돌려준다. */
-export const getPlaceNotes = async (keys: string[]): Promise<Map<string, PlaceNote>> => {
-  const unique = [...new Set(keys.filter(Boolean))];
-  if (!unique.length) return new Map();
-  const rows = await getDb()
-    .select({
-      key: placesT.key,
-      rating: placesT.rating,
-      review: placesT.review,
-      ratedAt: placesT.ratedAt,
-    })
-    .from(placesT)
-    .where(inArray(placesT.key, unique));
-  return new Map(
-    rows
-      .filter((row) => row.rating !== null || row.review)
-      .map((row) => [row.key, toNote(row)])
-  );
+/** 지운(휴지통) 내역의 리뷰는 보이지 않는다. 되돌리면 다시 보인다. */
+const reviewQuery = () =>
+  getDb()
+    .select(reviewColumns)
+    .from(reviewsT)
+    .innerJoin(entriesT, eq(entriesT.id, reviewsT.entryId))
+    .$dynamic();
+
+/** 내역별 리뷰 (남긴 순서대로) */
+export const listReviewsByEntryIds = async (
+  entryIds: number[]
+): Promise<Map<number, PlaceReview[]>> => {
+  const ids = [...new Set(entryIds)];
+  const byEntry = new Map<number, PlaceReview[]>();
+  if (!ids.length) return byEntry;
+  const rows = await reviewQuery()
+    .where(and(activeEntry, inArray(reviewsT.entryId, ids)))
+    .orderBy(asc(reviewsT.createdAt), asc(reviewsT.id));
+  for (const row of rows) {
+    const list = byEntry.get(row.entryId) ?? [];
+    list.push(toReview(row));
+    byEntry.set(row.entryId, list);
+  }
+  return byEntry;
 };
 
 /**
- * 가계부 지출의 지도 링크가 가리키는 장소 정보를 key(네이버 장소 id, 없으면 지도 링크)로 찾는다.
- * 좌표를 아직 못 읽은 링크도 별점은 남길 수 있다. 같은 장소를 여러 번 갔으면 가장 최근 지출에서 읽은 이름·사진을 쓴다.
+ * 장소 key별 리뷰 (최신순). 장소 key는 리뷰를 남긴 내역의 지도 링크에서 읽으므로,
+ * 링크 모양이 달라도 같은 네이버 장소면 한 곳으로 모인다.
  */
-const findLedgerPlace = async (key: string) => {
-  const [row] = await getDb()
-    .select({
-      mapUrl: entriesT.mapUrl,
-      mapPlaceId: entriesT.mapPlaceId,
-      mapPlaceName: entriesT.mapPlaceName,
-      memo: entriesT.memo,
-      mapImageUrls: entriesT.mapImageUrls,
-      mapLat: entriesT.mapLat,
-      mapLng: entriesT.mapLng,
-      mapAddress: entriesT.mapAddress,
-      mapCategory: entriesT.mapCategory,
-    })
+export const listReviewsByPlace = async (): Promise<Map<string, PlaceReview[]>> => {
+  const rows = await reviewQuery().where(and(activeEntry, ne(entriesT.mapUrl, "")));
+  const byPlace = new Map<string, PlaceReview[]>();
+  for (const row of rows) {
+    const key = toPlaceKey(row);
+    const list = byPlace.get(key) ?? [];
+    list.push(toReview(row));
+    byPlace.set(key, list);
+  }
+  for (const list of byPlace.values()) list.sort(byNewest);
+  return byPlace;
+};
+
+/** 리뷰는 지도 링크가 있는 지출 내역에만 남긴다. */
+const assertReviewableEntry = async (entryId: number) => {
+  const [entry] = await getDb()
+    .select({ kind: entriesT.kind, mapUrl: entriesT.mapUrl })
     .from(entriesT)
-    .where(
-      and(
-        activeEntry,
-        eq(entriesT.kind, "expense"),
-        or(
-          eq(entriesT.mapPlaceId, key),
-          and(eq(entriesT.mapPlaceId, ""), eq(entriesT.mapUrl, key))
-        )
-      )
-    )
-    .orderBy(desc(entriesT.entryDate), desc(entriesT.id))
+    .where(and(activeEntry, eq(entriesT.id, entryId)))
     .limit(1);
-  if (!row) return null;
-  return {
-    name: row.mapPlaceName || row.memo || "이름 없는 장소",
-    kind: inferPlaceKind(row.mapCategory),
-    category: row.mapCategory,
-    address: row.mapAddress,
-    lat: row.mapLat,
-    lng: row.mapLng,
-    mapUrl: row.mapPlaceId
-      ? `https://map.naver.com/p/entry/place/${row.mapPlaceId}`
-      : row.mapUrl,
-    imageUrl: row.mapImageUrls[0] ?? null,
-  };
+  if (!entry) throw new PlaceError("내역을 찾을 수 없어요.", 404);
+  if (entry.kind !== "expense" || !entry.mapUrl) {
+    throw new PlaceError("지도 링크가 있는 지출에만 리뷰를 남길 수 있어요.");
+  }
 };
 
-/**
- * 장소에 별점·한 줄 리뷰를 남긴다. 수첩에 아직 없는 장소면 가계부 지도에서 정보를 읽어 만든다.
- * 별점을 비우고 리뷰도 비우면 매긴 기록을 지운다(장소 행은 남긴다).
- */
-export const savePlaceNote = async (input: PlaceNoteInput): Promise<PlaceNote> => {
-  const { key, rating, review } = placeNoteInputSchema.parse(input);
-  if (rating === null && review) {
-    throw new PlaceError("리뷰를 남기려면 별점도 골라 주세요.");
-  }
-  const now = new Date();
-  const note = { rating, review, ratedAt: rating === null ? null : now, updatedAt: now };
+const getReview = async (id: number): Promise<PlaceReview> => {
+  const [row] = await reviewQuery().where(eq(reviewsT.id, id)).limit(1);
+  if (!row) throw new PlaceError("리뷰를 찾을 수 없어요.", 404);
+  return toReview(row);
+};
 
-  const [existing] = await getDb()
-    .select({ id: placesT.id })
-    .from(placesT)
-    .where(eq(placesT.key, key))
-    .limit(1);
-  if (existing) {
-    const [row] = await getDb()
-      .update(placesT)
-      .set(note)
-      .where(eq(placesT.id, existing.id))
-      .returning();
-    return toNote(row);
-  }
+export const createReview = async (input: CreateReviewInput): Promise<PlaceReview> => {
+  const values = createReviewSchema.parse(input);
+  await assertReviewableEntry(values.entryId);
+  const [row] = await getDb().insert(reviewsT).values(values).returning();
+  return getReview(row.id);
+};
 
-  const place = await findLedgerPlace(key);
-  if (!place)
-    throw new PlaceError("지도 링크가 있는 지출에만 별점을 남길 수 있어요.", 404);
-  const [row] = await getDb()
-    .insert(placesT)
-    .values({ key, ...place, ...note })
-    // 둘이 동시에 처음 매기면 나중 것이 이긴다.
-    .onConflictDoUpdate({ target: placesT.key, set: note })
+export const updateReview = async (
+  id: number,
+  input: UpdateReviewInput
+): Promise<PlaceReview> => {
+  const patch = updateReviewSchema.parse(input);
+  const rows = await getDb()
+    .update(reviewsT)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(reviewsT.id, id))
     .returning();
-  return toNote(row);
+  if (!rows.length) throw new PlaceError("리뷰를 찾을 수 없어요.", 404);
+  return getReview(id);
+};
+
+export const deleteReview = async (id: number) => {
+  const rows = await getDb().delete(reviewsT).where(eq(reviewsT.id, id)).returning();
+  if (!rows.length) throw new PlaceError("리뷰를 찾을 수 없어요.", 404);
 };
 
 /* ───────── 지역 ───────── */
