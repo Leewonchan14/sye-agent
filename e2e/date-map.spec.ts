@@ -254,14 +254,23 @@ test("네이버 지도 링크가 있는 지출을 장소별로 묶어 지도와 
   await expect(detail).toBeVisible();
   await expect(detail.getByText("2번 방문 · 37,000원")).toBeVisible();
   await expect(detail.getByText("이탈리아음식 · 서울 성동구 연무장길 1")).toBeVisible();
-  // 간 날마다 한 줄. 같은 날 결제는 먼저 한 것부터 이어 붙이고 합친다.
-  const days = detail.getByRole("list", { name: "간 날" }).getByRole("listitem");
+  // 간 날마다 한 줄. 같은 날 결제는 합계를 보이고, 그 아래에 먼저 한 것부터 하나씩 보여 준다.
+  const days = detail.getByRole("list", { name: "간 날" }).locator(":scope > li");
   await expect(days).toHaveCount(2);
-  await expect(days.first()).toContainText("파스타 점심 · 파스타 저녁");
   await expect(days.first()).toContainText("결제 2건");
   await expect(days.first()).toContainText("30,000원");
+  const payments = days
+    .first()
+    .getByRole("list", { name: /결제$/ })
+    .getByRole("listitem");
+  await expect(payments).toHaveCount(2);
+  await expect(payments.first()).toContainText("파스타 점심");
+  await expect(payments.first()).toContainText("12,000원");
+  await expect(payments.nth(1)).toContainText("파스타 저녁");
+  await expect(payments.nth(1)).toContainText("18,000원");
   await expect(days.nth(1)).toContainText("작년 파스타");
   await expect(days.nth(1)).not.toContainText("결제");
+  await expect(days.nth(1).getByRole("list")).toHaveCount(0);
   // 장소 사진은 가계부 수정 화면과 같은 캐러셀로 넘겨 본다.
   const photos = detail.getByRole("region", { name: "성수 파스타집 사진 2장" });
   await expect(photos.getByRole("img")).toHaveCount(2);

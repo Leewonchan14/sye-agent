@@ -38,6 +38,7 @@ import {
   MAP_RANGES,
   toMapSearchParams,
   type LedgerMapPayload,
+  type LedgerMapPayment,
   type LedgerMapPlace,
 } from "@/lib/ledger/map-types";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,9 @@ const visitDate = (date: string) => {
   return day.format(day.isSame(kst(), "year") ? "M.D (dd)" : "YY.M.D (dd)");
 };
 
+const paymentLabel = (payment: LedgerMapPayment) =>
+  payment.memo || payment.categoryName || "지출";
+
 const PlacePhoto = ({ src, className }: { src: string | null; className?: string }) => (
   <div
     className={cn(
@@ -142,27 +146,49 @@ const PlaceDetail = ({ place }: { place: LedgerMapPlace }) => (
         </p>
       </div>
       <ul aria-label="간 날" className="flex flex-col divide-y divide-hairline-soft">
-        {place.entries.map((visit) => (
-          <li key={visit.date} className="flex items-baseline gap-3 py-1.5 text-[13px]">
-            <span className="w-20 shrink-0 text-muted tabular-nums">
-              {visitDate(visit.date)}
-            </span>
-            {/* 같은 날 여러 번 결제했으면 한 줄로 모아 메모를 이어 붙인다. 길면 두 줄까지 보인다. */}
-            <span className="line-clamp-2 min-w-0 flex-1 text-body">
-              {visit.payments
-                .map((payment) => payment.memo || payment.categoryName || "지출")
-                .join(" · ")}
-            </span>
-            {visit.payments.length > 1 && (
-              <span className="shrink-0 text-[11px] text-muted tabular-nums">
-                결제 {visit.payments.length}건
-              </span>
-            )}
-            <span className="shrink-0 text-ink tabular-nums">
-              {formatWon(visit.amount)}
-            </span>
-          </li>
-        ))}
+        {place.entries.map((visit) => {
+          const several = visit.payments.length > 1;
+          return (
+            <li key={visit.date} className="flex flex-col gap-1 py-1.5 text-[13px]">
+              <div className="flex items-baseline gap-3">
+                <span className="w-20 shrink-0 text-muted tabular-nums">
+                  {visitDate(visit.date)}
+                </span>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-body",
+                    several && "text-muted tabular-nums"
+                  )}
+                >
+                  {several
+                    ? `결제 ${visit.payments.length}건`
+                    : paymentLabel(visit.payments[0])}
+                </span>
+                <span className="shrink-0 text-ink tabular-nums">
+                  {formatWon(visit.amount)}
+                </span>
+              </div>
+              {/* 같은 날 여러 번 결제했으면 날짜 아래에 결제를 하나씩 먼저 한 것부터 보여 준다. */}
+              {several && (
+                <ul
+                  aria-label={`${visitDate(visit.date)} 결제`}
+                  className="flex flex-col gap-0.5 pl-23 text-[12px]"
+                >
+                  {visit.payments.map((payment) => (
+                    <li key={payment.id} className="flex items-baseline gap-3">
+                      <span className="min-w-0 flex-1 truncate text-body">
+                        {paymentLabel(payment)}
+                      </span>
+                      <span className="shrink-0 text-muted tabular-nums">
+                        {formatWon(payment.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
       </ul>
       <a
         href={place.mapUrl}
