@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { activeEntry } from "@/lib/db/ledger";
@@ -29,6 +29,10 @@ const toNote = (row: Pick<PlaceRow, "rating" | "review" | "ratedAt">): PlaceNote
   ratedAt: row.ratedAt?.toISOString() ?? null,
 });
 
+/** 한 장소의 별점·리뷰. 매긴 게 없으면 null */
+export const getPlaceNote = async (key: string): Promise<PlaceNote | null> =>
+  (await getPlaceNotes([key])).get(key) ?? null;
+
 /** 매긴 별점·리뷰가 있는 장소만 key → 별점으로 돌려준다. */
 export const getPlaceNotes = async (keys: string[]): Promise<Map<string, PlaceNote>> => {
   const unique = [...new Set(keys.filter(Boolean))];
@@ -50,8 +54,8 @@ export const getPlaceNotes = async (keys: string[]): Promise<Map<string, PlaceNo
 };
 
 /**
- * 가계부 지도에 찍힌 장소의 정보를 key(네이버 장소 id, 없으면 지도 링크)로 찾는다.
- * 같은 장소를 여러 번 갔으면 가장 최근 지출에서 읽은 이름·사진을 쓴다.
+ * 가계부 지출의 지도 링크가 가리키는 장소 정보를 key(네이버 장소 id, 없으면 지도 링크)로 찾는다.
+ * 좌표를 아직 못 읽은 링크도 별점은 남길 수 있다. 같은 장소를 여러 번 갔으면 가장 최근 지출에서 읽은 이름·사진을 쓴다.
  */
 const findLedgerPlace = async (key: string) => {
   const [row] = await getDb()
@@ -70,7 +74,7 @@ const findLedgerPlace = async (key: string) => {
     .where(
       and(
         activeEntry,
-        isNotNull(entriesT.mapLat),
+        eq(entriesT.kind, "expense"),
         or(
           eq(entriesT.mapPlaceId, key),
           and(eq(entriesT.mapPlaceId, ""), eq(entriesT.mapUrl, key))
@@ -121,7 +125,8 @@ export const savePlaceNote = async (input: PlaceNoteInput): Promise<PlaceNote> =
   }
 
   const place = await findLedgerPlace(key);
-  if (!place) throw new PlaceError("장소를 찾을 수 없어요.", 404);
+  if (!place)
+    throw new PlaceError("지도 링크가 있는 지출에만 별점을 남길 수 있어요.", 404);
   const [row] = await getDb()
     .insert(placesT)
     .values({ key, ...place, ...note })

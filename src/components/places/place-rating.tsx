@@ -41,7 +41,8 @@ export const RatingStars = ({
   </span>
 );
 
-const StarPicker = ({
+/** 별 1~5 고르기. 버튼이라 다른 폼 안에도 넣을 수 있다. */
+export const StarPicker = ({
   value,
   onChange,
 }: {

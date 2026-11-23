@@ -13,6 +13,7 @@ import { getPlaceNotes } from "@/lib/db/places";
 import { kst } from "@/lib/kst";
 import type { LedgerCategoryColorKey, LedgerCategoryIconKey } from "@/lib/ledger/icons";
 import { isNaverMapUrl } from "@/lib/ledger/map-url";
+import { toPlaceKey } from "@/lib/places/types";
 
 import {
   toMapRange,
@@ -195,7 +196,7 @@ export const getLedgerMapPlaces = async (
   const byKey = new Map<string, LedgerMapPlace>();
   for (const row of picked) {
     if (row.mapLat === null || row.mapLng === null) continue;
-    const key = row.mapPlaceId || row.mapUrl;
+    const key = toPlaceKey(row);
     const payment: LedgerMapPayment = {
       id: row.id,
       time: row.entryTime,
