@@ -40,6 +40,30 @@ export const createPickSchema = z.object({
 });
 export type CreatePickInput = z.input<typeof createPickSchema>;
 
+/**
+ * 돌리기 전에 적고 있는 고민과 후보. 쓰는 중에 저장하므로 고민 끝 공백은 다듬지 않는다
+ * ("오늘 " 다음에 "저녁"을 이어 쓸 수 있게).
+ */
+export const pickDraftSchema = z.object({
+  title: z
+    .string()
+    .default("")
+    .transform((v) => v.slice(0, MAX_PICK_TITLE)),
+  labels: z
+    .array(z.string())
+    .max(MAX_PICK_OPTIONS, `후보는 ${MAX_PICK_OPTIONS}개까지 넣을 수 있어요.`)
+    .default([])
+    .transform(uniqueLabels),
+});
+export type PickDraftInput = z.input<typeof pickDraftSchema>;
+
+export interface PickDraft {
+  title: string;
+  labels: string[];
+}
+
+export const EMPTY_PICK_DRAFT: PickDraft = { title: "", labels: [] };
+
 export interface PickOptionView {
   id: number;
   label: string;

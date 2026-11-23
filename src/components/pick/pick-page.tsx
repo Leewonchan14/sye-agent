@@ -14,7 +14,6 @@ import {
 import { parseAsInteger, useQueryState } from "nuqs";
 import { useState } from "react";
 import { toast } from "sonner";
-import useLocalStorageState from "use-local-storage-state";
 
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -28,23 +27,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { kst } from "@/lib/kst";
-import { usePick, usePickHistory, usePickMutations } from "@/lib/picks/queries";
 import {
+  usePick,
+  usePickDraft,
+  usePickHistory,
+  usePickMutations,
+} from "@/lib/picks/queries";
+import {
+  EMPTY_PICK_DRAFT,
   MAX_PICK_LABEL,
   MAX_PICK_OPTIONS,
   MAX_PICK_TITLE,
   MIN_PICK_OPTIONS,
+  type PickDraft,
   type PickView,
   uniqueLabels,
 } from "@/lib/picks/types";
 import { cn } from "@/lib/utils";
-
-interface Draft {
-  title: string;
-  labels: string[];
-}
-
-const EMPTY_DRAFT: Draft = { title: "", labels: [] };
 
 /** 지금 화면에서 돌린 결과. 다른 폰에서 바뀐 결과는 애니메이션 없이 바로 보여 준다. */
 interface Spin {
@@ -82,10 +81,13 @@ const OptionEditor = ({
   draft,
   setDraft,
   disabled,
+  saving,
 }: {
-  draft: Draft;
-  setDraft: (draft: Draft) => void;
+  draft: PickDraft;
+  setDraft: (draft: PickDraft) => void;
   disabled: boolean;
+  /** 아직 서버에 저장되지 않은 입력이 있는지 */
+  saving: boolean;
 }) => {
   const [input, setInput] = useState("");
   const full = draft.labels.length >= MAX_PICK_OPTIONS;
@@ -192,18 +194,23 @@ const OptionEditor = ({
         </p>
       )}
 
-      {(draft.labels.length > 0 || draft.title) && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start text-muted"
-          disabled={disabled}
-          onClick={() => setDraft(EMPTY_DRAFT)}
-        >
-          <Trash2 />
-          모두 지우기
-        </Button>
-      )}
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        {(draft.labels.length > 0 || draft.title) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted"
+            disabled={disabled}
+            onClick={() => setDraft(EMPTY_PICK_DRAFT)}
+          >
+            <Trash2 />
+            모두 지우기
+          </Button>
+        )}
+        <span className="ml-auto text-xs text-muted" aria-live="polite">
+          {saving ? "저장 중…" : "다른 폰에서도 이어서 쓸 수 있어요"}
+        </span>
+      </div>
     </section>
   );
 };
@@ -350,9 +357,7 @@ const HistoryList = ({
 
 export const PickPage = () => {
   const [pickId, setPickId] = useQueryState("pick", parseAsPickId);
-  const [draft, setDraft] = useLocalStorageState<Draft>("pick-draft", {
-    defaultValue: EMPTY_DRAFT,
-  });
+  const { draft, setDraft, flush, ready, saving } = usePickDraft();
   const [spin, setSpin] = useState<Spin | null>(null);
   const { data: pick, isLoading: pickLoading, error: pickError } = usePick(pickId);
   const { data: history } = usePickHistory();
@@ -384,7 +389,8 @@ export const PickPage = () => {
     });
   };
 
-  const onSpin = () =>
+  const onSpin = () => {
+    flush();
     create.mutate(
       { title: draft.title, options: draft.labels },
       {
@@ -394,6 +400,7 @@ export const PickPage = () => {
         },
       }
     );
+  };
 
   const onDelete = async (target: PickView) => {
     const ok = await confirm({
@@ -475,7 +482,7 @@ export const PickPage = () => {
                   void setPickId(null);
                 }}
                 onNew={() => {
-                  setDraft(EMPTY_DRAFT);
+                  setDraft(EMPTY_PICK_DRAFT);
                   void setPickId(null);
                 }}
               />
@@ -483,7 +490,8 @@ export const PickPage = () => {
               <OptionEditor
                 draft={draft}
                 setDraft={setDraft}
-                disabled={create.isPending}
+                disabled={!ready || create.isPending}
+                saving={saving}
               />
             )}
           </div>

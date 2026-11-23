@@ -656,3 +656,17 @@ export const pickOptions = pgTable(
     pickIdx: index("pick_options_pick_idx").on(t.pickId),
   })
 );
+
+/**
+ * 돌리기 전에 적고 있는 고민과 후보. 둘이 같이 쓰는 한 장짜리(id=1)라서
+ * 다른 폰에서 열어도 이어서 쓸 수 있다.
+ */
+export const pickDraft = pgTable("pick_draft", {
+  id: integer("id").primaryKey(),
+  title: text("title").notNull().default(""),
+  labels: text("labels")
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

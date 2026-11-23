@@ -6,12 +6,19 @@ import { getDb, schema } from "@/lib/db/db";
 import {
   type CreatePickInput,
   createPickSchema,
+  EMPTY_PICK_DRAFT,
   MAX_PICK_REROLLS,
+  type PickDraft,
+  type PickDraftInput,
+  pickDraftSchema,
   type PickStatus,
   type PickView,
 } from "@/lib/picks/types";
 
-const { picks: picksT, pickOptions: optionsT } = schema;
+const { picks: picksT, pickOptions: optionsT, pickDraft: draftT } = schema;
+
+/** 둘이 같이 쓰는 한 장짜리 임시 저장 */
+const DRAFT_ID = 1;
 
 /** 기록 목록에 보여 줄 최근 뽑기 수 */
 const HISTORY_LIMIT = 30;
@@ -139,10 +146,27 @@ export const decidePick = async (pickId: number): Promise<PickView> => {
   return getPick(pick.id);
 };
 
+/** 돌리기 전에 적고 있던 고민과 후보 */
+export const getPickDraft = async (): Promise<PickDraft> => {
+  const [row] = await getDb()
+    .select()
+    .from(draftT)
+    .where(eq(draftT.id, DRAFT_ID))
+    .limit(1);
+  return row ? { title: row.title, labels: row.labels } : EMPTY_PICK_DRAFT;
+};
+
+export const savePickDraft = async (input: PickDraftInput): Promise<PickDraft> => {
+  const draft = pickDraftSchema.parse(input);
+  const values = { ...draft, updatedAt: new Date() };
+  await getDb()
+    .insert(draftT)
+    .values({ id: DRAFT_ID, ...values })
+    .onConflictDoUpdate({ target: draftT.id, set: values });
+  return draft;
+};
+
 export const deletePick = async (pickId: number) => {
-  const [deleted] = await getDb()
-    .delete(picksT)
-    .where(eq(picksT.id, pickId))
-    .returning();
+  const [deleted] = await getDb().delete(picksT).where(eq(picksT.id, pickId)).returning();
   if (!deleted) throw new PickError("뽑기를 찾지 못했어요.", 404);
 };
