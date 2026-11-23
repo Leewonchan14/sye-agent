@@ -66,7 +66,18 @@ const ledgerCard = (place: LedgerMapPlace, area: AreaView): PlaceCard => ({
   visits: place.visits,
   total: place.total,
   lastDate: place.lastDate,
-  note: place.note,
+  rating: place.rating,
+  // 전체 기간으로 읽었으므로 간 날 리뷰를 모으면 이 장소 리뷰 전체다.
+  reviews: place.entries
+    .flatMap((visit) => visit.reviews)
+    .sort(
+      (a, b) =>
+        b.entryDate.localeCompare(a.entryDate) || b.createdAt.localeCompare(a.createdAt)
+    ),
+  visitEntries: place.entries.map((visit) => ({
+    date: visit.date,
+    entryId: visit.payments[0].id,
+  })),
 });
 
 const spotCard = (spot: DateSpotView): PlaceCard => ({
@@ -86,7 +97,9 @@ const spotCard = (spot: DateSpotView): PlaceCard => ({
   visits: 0,
   total: 0,
   lastDate: null,
-  note: null,
+  rating: null,
+  reviews: [],
+  visitEntries: [],
 });
 
 /** 이 지역의 찜한 추천과 다녀온 추천. 가계부 지도에도 있는 곳(이름이 같은 곳)은 뺀다. */

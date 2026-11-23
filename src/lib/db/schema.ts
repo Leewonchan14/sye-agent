@@ -678,8 +678,8 @@ export const pickDraft = pgTable("pick_draft", {
 /* ───────────────────────── 지역 수첩 (우리 별점·리뷰) ───────────────────────── */
 
 /**
- * 우리 수첩에 오른 장소. 한 장소 = 한 행이고, 별점·한 줄 리뷰는 둘이 같이 매기는 하나만 둔다.
- * 가계부 지도(/map)와 데이트 추천(/dates)이 같은 행을 읽어서 어디서 매겨도 같은 별점이 보인다.
+ * 우리 수첩에 오른 장소. 한 장소 = 한 행. 하치와레 추천처럼 가계부 내역이 없는 장소의 정보를 둔다.
+ * 별점·리뷰는 가계부 내역마다 남기는 place_reviews에 있다.
  */
 export const places = pgTable(
   "places",
@@ -696,10 +696,11 @@ export const places = pgTable(
     lng: doublePrecision("lng"),
     mapUrl: text("map_url").notNull().default(""),
     imageUrl: text("image_url"),
-    /** 1~5. 아직 안 매겼으면 null */
+    /** @deprecated 예전 공동 별점. 지금은 내역마다 남기는 place_reviews를 쓴다. */
     rating: integer("rating"),
-    /** 한 줄 리뷰 */
+    /** @deprecated 예전 공동 한 줄 리뷰. place_reviews를 쓴다. */
     review: text("review").notNull().default(""),
+    /** @deprecated */
     ratedAt: timestamp("rated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -729,5 +730,30 @@ export const placeAreas = pgTable(
   },
   (t) => ({
     nameUniq: uniqueIndex("place_areas_name_uniq").on(t.name),
+  })
+);
+
+/**
+ * 가계부 내역(지도 링크가 있는 지출 한 건)에 남기는 리뷰. 한 내역에 원찬·예은이 각자 여러 개 남길 수 있다.
+ * 장소 별점은 그 장소(네이버 장소 id, 없으면 지도 링크)를 가리키는 내역들의 리뷰 별점 평균이다.
+ */
+export const placeReviews = pgTable(
+  "place_reviews",
+  {
+    id: serial("id").primaryKey(),
+    entryId: integer("entry_id")
+      .notNull()
+      .references(() => ledgerEntries.id, { onDelete: "cascade" }),
+    /** wonchan | yeeun */
+    author: text("author").notNull(),
+    /** 1~5 */
+    rating: integer("rating").notNull(),
+    /** 한 줄 리뷰 (안 써도 된다) */
+    review: text("review").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    entryIdx: index("place_reviews_entry_idx").on(t.entryId),
   })
 );

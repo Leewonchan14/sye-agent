@@ -28,7 +28,7 @@ import {
 import { DayRouteButton } from "@/components/ledger/day-route/day-route-button";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
 import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
-import { PlaceRating, RatingStars } from "@/components/places/place-rating";
+import { EntryReviews, RatingSummary } from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -167,17 +167,11 @@ const PlaceDetail = ({
             {[place.category, place.address].filter(Boolean).join(" · ")}
           </p>
         )}
-        <p className="mt-1 text-[13px] text-body tabular-nums">
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-body tabular-nums">
           {place.visits}번 방문 · {formatWon(place.total)}
+          {place.rating && <RatingSummary rating={place.rating} />}
         </p>
       </div>
-      {/* 고른 장소가 바뀌면 쓰던 별점 입력을 닫는다. */}
-      <PlaceRating
-        key={place.key}
-        placeKey={place.key}
-        note={place.note}
-        className="rounded-xl bg-canvas-soft p-3"
-      />
       {/* 간 날이 많으면 이 목록만 스크롤한다. 장소 이름과 지도 링크는 늘 보인다. */}
       <ul
         aria-label="간 날"
@@ -223,6 +217,13 @@ const PlaceDetail = ({
                   ))}
                 </ul>
               )}
+              {/* 그날 결제 내역(먼저 한 결제)에 리뷰를 남긴다. 고른 장소가 바뀌면 쓰던 리뷰를 닫는다. */}
+              <EntryReviews
+                key={`${place.key}:${visit.date}`}
+                entryId={visit.payments[0].id}
+                reviews={visit.reviews}
+                className="pl-23"
+              />
             </li>
           );
         })}
@@ -270,7 +271,7 @@ const PlaceList = ({
               {place.name}
             </span>
             <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
-              {place.note?.rating && <RatingStars rating={place.note.rating} />}
+              {place.rating && <RatingSummary rating={place.rating} />}
               <span className="truncate">
                 {place.category || place.address || "장소"}
               </span>

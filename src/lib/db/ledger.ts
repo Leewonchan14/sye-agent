@@ -1,17 +1,5 @@
 import type { SQL } from "drizzle-orm";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import { dayjs, kst } from "@/lib/kst";
@@ -29,7 +17,7 @@ import {
 import { extractMapUrl, isHttpUrl, MAX_MAP_URL_LENGTH } from "@/lib/ledger/map-url";
 import { fetchNaverPlacePreview } from "@/lib/ledger/naver-place";
 import { suggestLedgerCategoryName } from "@/lib/ledger/notification";
-import { toPlaceKey, type PlaceNote } from "@/lib/places/types";
+import { toPlaceKey, type PlaceReview, type ReviewAuthor } from "@/lib/places/types";
 
 export type LedgerEntryKind = "expense" | "income";
 export type LedgerEntrySource = "web" | "agent";
@@ -53,10 +41,10 @@ export type LedgerEntryView = {
   mapPlaceName: string;
   /** 네이버 지도 링크에서 읽은 장소 사진 주소들. 앞의 것이 대표 사진 */
   mapImageUrls: string[];
-  /** 우리 별점을 매기는 장소 key(네이버 장소 id, 없으면 지도 링크). 지도 링크가 없는 지출·입금은 빈 문자열 */
+  /** 리뷰가 모이는 장소 key(네이버 장소 id, 없으면 지도 링크). 지도 링크가 없는 지출·입금은 빈 문자열 */
   placeKey: string;
-  /** 이 장소에 남긴 우리 별점·한 줄 리뷰. 없거나 읽지 않은 목록이면 null */
-  placeNote: PlaceNote | null;
+  /** 이 내역에 남긴 리뷰 (남긴 순서대로). 리뷰를 읽지 않는 목록이면 빈 배열 */
+  reviews: PlaceReview[];
   tags: string;
   tripId: number | null;
   tripName: string | null;
@@ -457,36 +445,41 @@ export const toLedgerEntryView = (
     mapPlaceName: entry.mapPlaceName,
     mapImageUrls: entry.mapImageUrls,
     placeKey: toEntryKind(entry.kind) === "expense" ? toPlaceKey(entry) : "",
-    placeNote: null,
+    reviews: [],
     tripId: entry.tripId,
     tripName: entry.tripId == null ? null : (tripById.get(entry.tripId)?.name ?? null),
   };
 };
 
-/** 목록의 지출마다 그 장소에 남긴 우리 별점·리뷰를 붙인다. */
-const attachPlaceNotes = async (entries: LedgerEntryView[]) => {
-  const keys = [...new Set(entries.map((entry) => entry.placeKey).filter(Boolean))];
-  if (!keys.length) return entries;
+/** 목록의 지도 링크가 있는 지출마다 남긴 리뷰를 붙인다. */
+const attachReviews = async (entries: LedgerEntryView[]) => {
+  const ids = entries.filter((entry) => entry.placeKey).map((entry) => entry.id);
+  if (!ids.length) return entries;
   const rows = await getDb()
     .select({
-      key: schema.places.key,
-      rating: schema.places.rating,
-      review: schema.places.review,
-      ratedAt: schema.places.ratedAt,
+      id: schema.placeReviews.id,
+      entryId: schema.placeReviews.entryId,
+      author: schema.placeReviews.author,
+      rating: schema.placeReviews.rating,
+      review: schema.placeReviews.review,
+      createdAt: schema.placeReviews.createdAt,
     })
-    .from(schema.places)
-    .where(and(inArray(schema.places.key, keys), isNotNull(schema.places.rating)));
-  const notes = new Map<string, PlaceNote>(
-    rows.map((row) => [
-      row.key,
-      {
-        rating: row.rating,
-        review: row.review,
-        ratedAt: row.ratedAt?.toISOString() ?? null,
-      },
-    ])
-  );
-  for (const entry of entries) entry.placeNote = notes.get(entry.placeKey) ?? null;
+    .from(schema.placeReviews)
+    .where(inArray(schema.placeReviews.entryId, ids))
+    .orderBy(asc(schema.placeReviews.createdAt), asc(schema.placeReviews.id));
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  for (const row of rows) {
+    const entry = byId.get(row.entryId);
+    entry?.reviews.push({
+      id: row.id,
+      entryId: row.entryId,
+      entryDate: entry.entryDate,
+      author: row.author as ReviewAuthor,
+      rating: row.rating,
+      review: row.review,
+      createdAt: row.createdAt.toISOString(),
+    });
+  }
   return entries;
 };
 
@@ -758,7 +751,7 @@ export const getLedgerMonth = async (month: string): Promise<LedgerMonthPayload>
   }));
 
   const categoryById = new Map(categories.map((category) => [category.id, category]));
-  const entries = await attachPlaceNotes(
+  const entries = await attachReviews(
     entryRows
       .map((entry) => toLedgerEntryView(entry, categoryById, tripById))
       .sort(compareLedgerEntries)
@@ -1326,7 +1319,7 @@ export const searchLedgerEntries = async (query: string, limit = 200) => {
     .sort(compareLedgerEntries);
 
   return {
-    entries: await attachPlaceNotes(views.slice(0, limit)),
+    entries: await attachReviews(views.slice(0, limit)),
     income: views
       .filter((e) => e.kind === "income")
       .reduce((sum, e) => sum + e.amount, 0),

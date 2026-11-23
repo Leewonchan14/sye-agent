@@ -2,9 +2,10 @@
 
 import { EntryIcon } from "@/components/ledger/category-icon";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
-import { RatingStars } from "@/components/places/place-rating";
+import { RatingStars } from "@/components/places/place-reviews";
 import type { LedgerEntryView } from "@/lib/db/ledger";
 import { formatWon } from "@/lib/ledger/format";
+import { REVIEW_AUTHOR_LABEL } from "@/lib/places/types";
 
 export type { LedgerEntryView };
 
@@ -42,14 +43,18 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
               {entry.note}
             </span>
           )}
-          {entry.placeNote?.rating && (
-            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-body">
-              <RatingStars rating={entry.placeNote.rating} />
-              {entry.placeNote.review && (
-                <span className="truncate">{entry.placeNote.review}</span>
-              )}
+          {entry.reviews.map((review) => (
+            <span
+              key={review.id}
+              className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-body"
+            >
+              <span className="shrink-0 font-medium">
+                {REVIEW_AUTHOR_LABEL[review.author]}
+              </span>
+              <RatingStars rating={review.rating} />
+              {review.review && <span className="truncate">{review.review}</span>}
             </span>
-          )}
+          ))}
         </span>
         <span
           className={`shrink-0 text-[13px] font-medium tabular-nums ${

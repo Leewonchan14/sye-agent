@@ -323,7 +323,7 @@ test("고른 지역 반경 안의 가 보고 싶은 곳·다녀온 곳·숙소�
   await expect(section(page, "다녀온 곳")).toContainText("도림천 공방");
   await expect(section(page, "다녀온 곳")).toContainText("신도림 와인바");
   await expect(section(page, "다녀온 곳")).not.toContainText("성수 파스타집");
-  await expect(section(page, "다녀온 곳").getByText("별점 안 남긴 곳 2")).toBeVisible();
+  await expect(section(page, "다녀온 곳").getByText("리뷰 없는 곳 2")).toBeVisible();
 
   // 숙소: 업종으로 나눈다.
   await expect(cards(page, "숙소")).toHaveCount(1);
@@ -343,13 +343,36 @@ test("고른 지역 반경 안의 가 보고 싶은 곳·다녀온 곳·숙소�
   await expect(section(page, "가 보고 싶은 곳")).toContainText("디큐브 전시");
   await expect(cards(page, "다녀온 곳")).toHaveCount(1);
   await expect(section(page, "다녀온 곳")).toContainText("도림천 공방");
+  // 맛집·카페·놀거리 탭에서는 숙소 구역을 뺀다.
+  await expect(section(page, "숙소")).toHaveCount(0);
+
+  // 숙소 탭: 숙소 구역만 보인다.
+  await page
+    .getByRole("group", { name: "종류" })
+    .getByRole("button", { name: "숙소" })
+    .click();
+  await expect(page).toHaveURL(/kind=stay/);
+  await expect(cards(page, "숙소")).toHaveCount(1);
+  await expect(section(page, "숙소")).toContainText("신도림 호텔");
+  await expect(section(page, "가 보고 싶은 곳")).toHaveCount(0);
+  await expect(section(page, "다녀온 곳")).toHaveCount(0);
+  // 머리글 개수는 탭과 상관없이 지역 전체다.
+  await expect(
+    page.getByText("신도림 반경 1.5km · 가 보고 싶은 곳 2 · 다녀온 곳 3 · 숙소 1")
+  ).toBeVisible();
 });
 
-test("지역 수첩에서 남긴 별점이 데이트 지도에도 보이고, 반경을 줄이면 먼 곳이 빠진다", async ({
+test("지역 수첩 카드에서 간 날을 골라 리뷰를 남기면 데이트 지도에도 보이고, 반경을 줄이면 먼 곳이 빠진다", async ({
   page,
   request,
 }) => {
   await createEntry(request, { memo: "국수", amount: 9_000, mapUrl: placeUrl("4001") });
+  await createEntry(request, {
+    memo: "국수 또",
+    amount: 9_000,
+    mapUrl: placeUrl("4001"),
+    entryDate: daysAgo(10),
+  });
   await createEntry(request, { memo: "공방", amount: 30_000, mapUrl: placeUrl("4004") });
   const area = await createArea(request, { name: "신도림", lat: 37.509, lng: 126.8916 });
   await openPlaces(page, `/places?area=${area.id}`);
@@ -357,12 +380,48 @@ test("지역 수첩에서 남긴 별점이 데이트 지도에도 보이고, 반
   const noodle = section(page, "다녀온 곳").getByRole("article", {
     name: "신도림 국수집",
   });
-  await noodle.getByRole("button", { name: "별점 남기기" }).click();
-  await noodle.getByRole("button", { name: "별 5개" }).click();
-  await noodle.getByRole("textbox", { name: "한 줄 리뷰" }).fill("국물이 진해");
-  await noodle.getByRole("button", { name: "저장" }).click();
-  await expect(noodle.getByRole("img", { name: "별 5개" })).toBeVisible();
-  await expect(section(page, "다녀온 곳").getByText("별점 안 남긴 곳 1")).toBeVisible();
+  await expect(noodle.getByText("아직 리뷰가 없어요.")).toBeVisible();
+
+  // 기본은 가장 최근에 간 날, 고르면 예전 날에도 남긴다.
+  await noodle.getByRole("button", { name: "리뷰 쓰기" }).click();
+  let editor = noodle.getByRole("group", { name: "리뷰 쓰기" });
+  await editor
+    .getByRole("group", { name: "쓴 사람" })
+    .getByRole("button", { name: "예은" })
+    .click();
+  await editor.getByRole("button", { name: "별 5개" }).click();
+  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("국물이 진해");
+  await editor.getByRole("button", { name: "저장" }).click();
+  await expect(noodle.getByRole("listitem", { name: "예은 리뷰" })).toContainText(
+    "국물이 진해"
+  );
+
+  await noodle.getByRole("button", { name: "리뷰 쓰기" }).click();
+  await noodle.getByRole("combobox", { name: "간 날" }).click();
+  await page
+    .getByRole("option", { name: /에 간 날/ })
+    .nth(1)
+    .click();
+  editor = noodle.getByRole("group", { name: "리뷰 쓰기" });
+  await editor
+    .getByRole("group", { name: "쓴 사람" })
+    .getByRole("button", { name: "원찬" })
+    .click();
+  await editor.getByRole("button", { name: "별 4개" }).click();
+  await editor.getByRole("button", { name: "저장" }).click();
+  await expect(
+    noodle.getByRole("img", { name: "별점 평균 4.5, 리뷰 2개" })
+  ).toBeVisible();
+  await expect(section(page, "다녀온 곳").getByText("리뷰 없는 곳 1")).toBeVisible();
+
+  const { rows } = await pool.query(
+    `select e.entry_date, r.author, r.rating from place_reviews r
+     join ledger_entries e on e.id = r.entry_id order by r.id`
+  );
+  expect(rows).toEqual([
+    { entry_date: today(), author: "yeeun", rating: 5 },
+    { entry_date: daysAgo(10), author: "wonchan", rating: 4 },
+  ]);
 
   // 반경을 500m로 줄이면 700m쯤 떨어진 공방이 빠진다.
   await page.getByRole("combobox", { name: "반경" }).click();
@@ -373,23 +432,25 @@ test("지역 수첩에서 남긴 별점이 데이트 지도에도 보이고, 반
       .rows[0]
   ).toEqual({ radius_m: 500 });
 
-  // 데이트 지도에서도 같은 별점이 보인다.
+  // 데이트 지도에서도 같은 리뷰가 간 날에 붙어 보인다.
   await page.goto("/map?place=4001");
   const detail = page.getByRole("region", { name: "신도림 국수집 방문 기록" });
   await expect(
-    detail.getByLabel("우리 별점").getByRole("img", { name: "별 5개" })
+    detail.getByRole("img", { name: "별점 평균 4.5, 리뷰 2개" })
   ).toBeVisible();
-  await expect(detail.getByText("“국물이 진해”")).toBeVisible();
+  const days = detail.getByRole("list", { name: "간 날" }).locator(":scope > li");
+  await expect(days.first().getByRole("listitem", { name: "예은 리뷰" })).toBeVisible();
+  await expect(days.nth(1).getByRole("listitem", { name: "원찬 리뷰" })).toBeVisible();
 });
 
-test("지역을 지우면 다른 지역이 열리고, 장소 별점은 남는다", async ({
-  page,
-  request,
-}) => {
+test("지역을 지우면 다른 지역이 열리고, 리뷰는 남는다", async ({ page, request }) => {
   await createEntry(request, { memo: "국수", amount: 9_000, mapUrl: placeUrl("4001") });
-  await request.put("/api/places/notes", {
+  const { rows: entries } = await pool.query<{ id: number }>(
+    "select id from ledger_entries where memo = '국수'"
+  );
+  await request.post("/api/places/reviews", {
     headers: authHeaders(token),
-    data: { key: "4001", rating: 4 },
+    data: { entryId: entries[0].id, author: "wonchan", rating: 4 },
   });
   const sungsu = await createArea(request, { name: "성수", lat: 37.5446, lng: 127.0557 });
   const sindorim = await createArea(request, {
@@ -409,7 +470,9 @@ test("지역을 지우면 다른 지역이 열리고, 장소 별점은 남는다
   expect((await pool.query("select id from place_areas")).rows).toEqual([
     { id: sungsu.id },
   ]);
-  expect((await pool.query("select rating from places")).rows).toEqual([{ rating: 4 }]);
+  expect((await pool.query("select rating from place_reviews")).rows).toEqual([
+    { rating: 4 },
+  ]);
 });
 
 test("지역 API는 잘못된 값을 막는다", async ({ request }) => {

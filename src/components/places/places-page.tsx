@@ -20,7 +20,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 
 import type { MapPin as MapPinData } from "@/components/map/place-map";
-import { PlaceRating } from "@/components/places/place-rating";
+import { PlaceReviews } from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import {
   AlertDialog,
@@ -76,12 +76,13 @@ const PlaceMap = dynamic(
 const VISITED_PIN = "#d96c75";
 const STAY_PIN = "#c9893f";
 
-const KIND_FILTERS = ["all", "eat", "play"] as const;
+const KIND_FILTERS = ["all", "eat", "play", "stay"] as const;
 type KindFilter = (typeof KIND_FILTERS)[number];
 const KIND_LABEL: Record<KindFilter, string> = {
   all: "전체",
   eat: "맛집·카페",
   play: "놀거리",
+  stay: "숙소",
 };
 
 const formatRadius = (m: number) => (m >= 1000 ? `${m / 1000}km` : `${m}m`);
@@ -282,15 +283,15 @@ const PlaceItem = ({ card, selected }: { card: PlaceCard; selected: boolean }) =
           </div>
         </div>
         {card.source === "ledger" && (
-          <PlaceRating
-            placeKey={card.key}
-            note={card.note}
-            className="rounded-xl bg-canvas-soft p-3"
+          <PlaceReviews
+            rating={card.rating}
+            reviews={card.reviews}
+            visits={card.visitEntries}
           />
         )}
         {card.source === "spot" && (
           <p className="text-[12px] text-muted">
-            하치와레 추천 · 가계부에 지도 링크를 남기면 별점을 매길 수 있어요.
+            하치와레 추천 · 다녀와서 가계부에 지도 링크를 남기면 리뷰를 쓸 수 있어요.
           </p>
         )}
       </article>
@@ -311,7 +312,7 @@ const Section = ({
   empty: string;
   selectedKey: string | null;
 }) => {
-  const unrated = cards.filter((card) => card.source === "ledger" && !card.note?.rating);
+  const unrated = cards.filter((card) => card.source === "ledger" && !card.rating);
   return (
     <section aria-label={title} className="flex flex-col gap-2">
       <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-ink">
@@ -322,7 +323,7 @@ const Section = ({
         </span>
         {unrated.length > 0 && (
           <span className="ml-auto text-[12px] font-normal text-muted">
-            별점 안 남긴 곳 {unrated.length}
+            리뷰 없는 곳 {unrated.length}
           </span>
         )}
       </h2>
@@ -374,9 +375,12 @@ export const PlacesPage = () => {
   const { setRadius, remove } = useAreaMutations();
 
   const area = data?.area ?? null;
-  const want = byKind(data?.want ?? [], kind);
-  const visited = byKind(data?.visited ?? [], kind);
-  const stays = data?.stays ?? [];
+  // 숙소 탭은 숙소 구역만, 맛집·카페·놀거리 탭은 숙소 구역을 빼고 보여 준다.
+  const showStays = kind === "all" || kind === "stay";
+  const showOthers = kind !== "stay";
+  const want = showOthers ? byKind(data?.want ?? [], kind) : [];
+  const visited = showOthers ? byKind(data?.visited ?? [], kind) : [];
+  const stays = showStays ? (data?.stays ?? []) : [];
 
   const pins: MapPinData[] = [
     ...visited.map((card) => ({ card, color: VISITED_PIN })),
@@ -417,7 +421,7 @@ export const PlacesPage = () => {
           </h1>
           <p className="text-[13px] text-muted tabular-nums" aria-live="polite">
             {area
-              ? `${area.name} 반경 ${formatRadius(area.radiusM)} · 가 보고 싶은 곳 ${data?.want.length ?? 0} · 다녀온 곳 ${data?.visited.length ?? 0} · 숙소 ${stays.length}`
+              ? `${area.name} 반경 ${formatRadius(area.radiusM)} · 가 보고 싶은 곳 ${data?.want.length ?? 0} · 다녀온 곳 ${data?.visited.length ?? 0} · 숙소 ${data?.stays.length ?? 0}`
               : "동네를 고르면 그 동네의 가 보고 싶은 곳·다녀온 곳·숙소를 한 번에 봐요."}
           </p>
         </header>
@@ -519,27 +523,33 @@ export const PlacesPage = () => {
                 />
               </div>
               <div className="flex flex-col gap-6">
-                <Section
-                  title="가 보고 싶은 곳"
-                  icon={Heart}
-                  cards={want}
-                  selectedKey={selectedKey}
-                  empty="데이트 추천에서 '가 보고 싶어'로 표시한 이 동네 장소가 여기에 모여요."
-                />
-                <Section
-                  title="다녀온 곳"
-                  icon={Utensils}
-                  cards={visited}
-                  selectedKey={selectedKey}
-                  empty="가계부에 네이버 지도 링크를 남긴 이 동네 장소가 여기에 모여요."
-                />
-                <Section
-                  title="숙소"
-                  icon={BedDouble}
-                  cards={stays}
-                  selectedKey={selectedKey}
-                  empty="이 동네에서 묵었던 숙소가 여기에 모여요."
-                />
+                {showOthers && (
+                  <>
+                    <Section
+                      title="가 보고 싶은 곳"
+                      icon={Heart}
+                      cards={want}
+                      selectedKey={selectedKey}
+                      empty="데이트 추천에서 '가 보고 싶어'로 표시한 이 동네 장소가 여기에 모여요."
+                    />
+                    <Section
+                      title="다녀온 곳"
+                      icon={Utensils}
+                      cards={visited}
+                      selectedKey={selectedKey}
+                      empty="가계부에 네이버 지도 링크를 남긴 이 동네 장소가 여기에 모여요."
+                    />
+                  </>
+                )}
+                {showStays && (
+                  <Section
+                    title="숙소"
+                    icon={BedDouble}
+                    cards={stays}
+                    selectedKey={selectedKey}
+                    empty="이 동네에서 묵었던 숙소가 여기에 모여요."
+                  />
+                )}
               </div>
             </div>
           </>
