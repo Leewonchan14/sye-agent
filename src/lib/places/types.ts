@@ -24,6 +24,13 @@ export const inferPlaceKind = (category: string): PlaceKind => {
   return "eat";
 };
 
+/**
+ * 가계부 지출이 가리키는 장소 key — 네이버 장소 id, 없으면 지도 링크. 지도 링크가 없으면 빈 문자열.
+ * 데이트 지도의 장소 key와 같아서, 같은 가게의 내역들은 별점 하나를 같이 쓴다.
+ */
+export const toPlaceKey = (entry: { mapPlaceId: string; mapUrl: string }) =>
+  entry.mapPlaceId || entry.mapUrl;
+
 /** 별점·리뷰 저장. 별점을 null로 보내고 리뷰도 비우면 지운다. */
 export const placeNoteInputSchema = z.object({
   key: z.string().trim().min(1).max(500),

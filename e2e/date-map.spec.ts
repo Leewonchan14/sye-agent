@@ -8,6 +8,7 @@ import {
   daysAgo,
   getCategories,
   login,
+  openLedger,
   pool,
   resetLedger,
   resetPlaces,
@@ -745,4 +746,108 @@ test("별점 API는 잘못된 값과 모르는 장소를 막는다", async ({ re
     rating: 5,
     review: "최고",
   });
+});
+
+test("가계부 내역에서 별점·리뷰를 남기면 같은 가게의 다른 내역과 데이트 지도에도 보인다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  await createEntry(request, {
+    memo: "파스타 저녁",
+    amount: 18_000,
+    mapUrl: "https://m.place.naver.com/restaurant/2001/home",
+    entryDate: daysAgo(1),
+  });
+  await createEntry(request, { memo: "편의점", amount: 3_000 });
+
+  await openLedger(page, token);
+  const row = (memo: string) =>
+    page.getByRole("button", { name: new RegExp(memo) }).first();
+
+  // 지도 링크가 없는 내역에는 별점 칸이 없다.
+  await row("편의점").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "내역 수정" })).toBeVisible();
+  await expect(dialog.getByRole("group", { name: "우리 별점" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "취소" }).click();
+
+  await row("파스타 점심").click();
+  const rating = dialog.getByRole("group", { name: "우리 별점" });
+  await expect(rating).toBeVisible();
+  // 리뷰만 쓰고 별을 안 고르면 저장하지 않는다.
+  await rating.getByRole("textbox", { name: "한 줄 리뷰" }).fill("면이 쫄깃");
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(page.getByText("리뷰를 남기려면 별점도 골라 주세요.")).toBeVisible();
+  await rating.getByRole("button", { name: "별 4개" }).click();
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(dialog).toBeHidden();
+
+  // 같은 가게(링크 모양이 달라도 같은 장소 id)의 두 내역에 같은 별점이 붙는다.
+  await expect(page.getByRole("img", { name: "별 4개" })).toHaveCount(2);
+  await expect(page.getByText("면이 쫄깃")).toHaveCount(2);
+  expect((await pool.query("select key, rating, review from places")).rows).toEqual([
+    { key: "2001", rating: 4, review: "면이 쫄깃" },
+  ]);
+
+  // 다른 내역을 열면 저장된 별점을 불러와 고칠 수 있다.
+  await row("파스타 저녁").click();
+  await expect(rating.getByRole("button", { name: "별 4개" })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  await expect(rating.getByRole("textbox", { name: "한 줄 리뷰" })).toHaveValue(
+    "면이 쫄깃"
+  );
+  await rating.getByRole("button", { name: "별 5개" }).click();
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("img", { name: "별 5개" })).toHaveCount(2);
+
+  // 데이트 지도에도 같은 별점이 보인다.
+  await page.goto("/map?place=2001");
+  const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  await expect(
+    detail.getByLabel("우리 별점").getByRole("img", { name: "별 5개" })
+  ).toBeVisible();
+  await expect(detail.getByText("“면이 쫄깃”")).toBeVisible();
+
+  // 지우면 두 내역 모두 별점이 사라진다.
+  await page.goto("/ledger");
+  await row("파스타 점심").click();
+  await rating.getByRole("button", { name: "별점 지우기" }).click();
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("img", { name: /^별 \d개$/ })).toHaveCount(0);
+  expect((await pool.query("select rating, review from places")).rows).toEqual([
+    { rating: null, review: "" },
+  ]);
+});
+
+test("새 내역을 추가하면서 지도 링크와 별점을 같이 남긴다", async ({ page }) => {
+  await openLedger(page, token);
+  await page.getByRole("button", { name: "내역 추가" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#ledger-amount").fill("5500");
+  await dialog.locator("#ledger-memo").fill("라테");
+  const rating = dialog.getByRole("group", { name: "우리 별점" });
+  // 링크를 넣기 전에는 별점 칸이 없다.
+  await expect(rating).toHaveCount(0);
+  await dialog
+    .locator("#ledger-map-url")
+    .fill("https://map.naver.com/p/entry/place/2002");
+  await rating.getByRole("button", { name: "별 3개" }).click();
+  await rating.getByRole("textbox", { name: "한 줄 리뷰" }).fill("자리가 넓어");
+  await dialog.getByRole("button", { name: "저장" }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page.getByRole("img", { name: "별 3개" })).toBeVisible();
+  await expect(page.getByText("자리가 넓어")).toBeVisible();
+  expect((await pool.query("select key, name, rating, review from places")).rows).toEqual(
+    [{ key: "2002", name: "망원 카페", rating: 3, review: "자리가 넓어" }]
+  );
 });

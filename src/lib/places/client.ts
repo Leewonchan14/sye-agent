@@ -20,9 +20,26 @@ export const placeKeys = {
   all: ["places"] as const,
   list: (areaId: number | null) => ["places", "list", areaId ?? "recent"] as const,
   areaSearch: (q: string) => ["places", "area-search", q] as const,
+  note: (key: string) => ["places", "note", key] as const,
 };
 
 const useToken = () => useAuthStore((s) => s.token) ?? "";
+
+/** 한 장소의 우리 별점·리뷰. key가 비어 있으면 읽지 않는다. */
+export const usePlaceNote = (key: string) => {
+  const token = useToken();
+  return useQuery({
+    queryKey: placeKeys.note(key),
+    queryFn: async () =>
+      (
+        await ledgerRequest<{ note: PlaceNote | null }>(
+          token,
+          `/api/places/notes?key=${encodeURIComponent(key)}`
+        )
+      ).note,
+    enabled: Boolean(token && key),
+  });
+};
 
 /** 지역 수첩. areaId가 없으면 서버가 최근에 연 지역을 고른다. */
 export const usePlaces = (areaId: number | null) => {

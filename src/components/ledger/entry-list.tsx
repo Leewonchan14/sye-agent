@@ -2,6 +2,7 @@
 
 import { EntryIcon } from "@/components/ledger/category-icon";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
+import { RatingStars } from "@/components/places/place-rating";
 import type { LedgerEntryView } from "@/lib/db/ledger";
 import { formatWon } from "@/lib/ledger/format";
 
@@ -39,6 +40,14 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
           {entry.note && (
             <span className="mt-0.5 block truncate text-[11px] text-muted/80">
               {entry.note}
+            </span>
+          )}
+          {entry.placeNote?.rating && (
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-body">
+              <RatingStars rating={entry.placeNote.rating} />
+              {entry.placeNote.review && (
+                <span className="truncate">{entry.placeNote.review}</span>
+              )}
             </span>
           )}
         </span>
