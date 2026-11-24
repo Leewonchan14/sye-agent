@@ -1134,7 +1134,7 @@ test("만료된 사진은 감추고, 만료가 가까우면 새 주소로 바꾼
   );
 });
 
-/* ───────── 지역 수첩·리뷰와 하치와레 ───────── */
+/* ───────── 동네·리뷰와 하치와레 ───────── */
 
 /** 가계부 지도에 찍힌 지출을 바로 넣는다(네이버 장소를 읽지 않는다). */
 const seedPlaceEntry = async (
@@ -1246,7 +1246,7 @@ test("다녀와서 남긴 리뷰가 하치와레 프롬프트와 추천 카드�
   ).toHaveCount(0);
 });
 
-test("지역 수첩의 '이 동네 더 찾아 줘'는 그 동네만 찾고, 새 추천을 가 보고 싶은 곳으로 옮긴다", async ({
+test("데이트 지도 동네의 '가 볼 곳 더 찾아 줘'는 그 동네만 찾고, 새 추천을 가 보고 싶은 곳으로 옮긴다", async ({
   page,
   request,
 }) => {
@@ -1293,20 +1293,25 @@ test("지역 수첩의 '이 동네 더 찾아 줘'는 그 동네만 찾고, 새 
       JSON.stringify({ state: { token: value }, version: 0 })
     );
   }, token);
-  await page.goto(`/places?area=${area.id}`);
-  await page.getByRole("heading", { name: "지역 수첩" }).waitFor();
+  await page.goto(`/map?area=${area.id}`);
+  await page.getByRole("heading", { name: "데이트 지도" }).waitFor();
   await expect(page.getByRole("region", { name: "하치와레 새 추천" })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "이 동네 더 찾아 줘" }).click();
+  // 가 볼 곳·숙소 찾기는 "더 찾아 줘" 메뉴 하나에 있다.
+  await page.getByRole("button", { name: "더 찾아 줘" }).click();
+  await expect(page.getByRole("menu")).toContainText("하치와레가 신도림에서");
+  await page.getByRole("menuitem", { name: "가 볼 곳 더 찾아 줘" }).click();
   const fresh = page.getByRole("region", { name: "하치와레 새 추천" });
-  await expect(fresh.getByRole("article")).toHaveCount(2, { timeout: 20_000 });
+  await expect(fresh.getByRole("listitem")).toHaveCount(2, { timeout: 20_000 });
   await expect(fresh).toContainText("신도림 베이커리");
   await expect(fresh).toContainText("신도림 국밥");
   await expect(fresh).not.toContainText("멀리 있는 신도림 카페");
-  await expect(page.getByRole("button", { name: "이 동네 더 찾아 줘" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "더 찾아 줘" })).toBeEnabled();
 
   const input = runs.get("run_1")?.input ?? "";
-  expect(input).toContain("지역 수첩에서 '신도림' 동네만 골라서 더 찾아 달라는 요청이야");
+  expect(input).toContain(
+    "데이트 지도에서 '신도림' 동네만 골라서 더 찾아 달라는 요청이야"
+  );
   expect(input).toContain(
     "지역: 신도림 한 곳만 — 가운데 서울 구로구 새말로 117 (위도 37.509, 경도 126.8916)에서 반경 1.5km 안"
   );
@@ -1317,17 +1322,18 @@ test("지역 수첩의 '이 동네 더 찾아 줘'는 그 동네만 찾고, 새 
   );
   expect(rows).toHaveLength(3);
 
-  await fresh
-    .getByRole("article", { name: "신도림 베이커리" })
+  await fresh.getByRole("button", { name: /신도림 베이커리/ }).click();
+  await page
+    .getByRole("region", { name: "신도림 베이커리 추천" })
     .getByRole("button", { name: "가 보고 싶어" })
     .click();
   const want = page.getByRole("region", { name: "가 보고 싶은 곳" });
-  await expect(want.getByRole("article", { name: "신도림 베이커리" })).toBeVisible();
-  await expect(want).toContainText(/가운데서 \d+m/);
-  await expect(fresh.getByRole("article")).toHaveCount(1);
+  await expect(want).toContainText("신도림 베이커리");
+  await expect(fresh.getByRole("listitem")).toHaveCount(1);
 
-  await fresh
-    .getByRole("article", { name: "신도림 국밥" })
+  await fresh.getByRole("button", { name: /신도림 국밥/ }).click();
+  await page
+    .getByRole("region", { name: "신도림 국밥 추천" })
     .getByRole("button", { name: "별로" })
     .click();
   await expect(page.getByRole("region", { name: "하치와레 새 추천" })).toHaveCount(0);
@@ -1360,7 +1366,7 @@ const stay = (name: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-test("지역 수첩 숙소 탭에서 날짜를 골라 이 동네 숙소를 찾고, 가 보고 싶은 숙소로 모은다", async ({
+test("데이트 지도 동네의 '숙소 찾아 줘'로 날짜를 골라 숙소를 찾고, 숙소 레이어에 모은다", async ({
   page,
   request,
 }) => {
@@ -1422,16 +1428,17 @@ test("지역 수첩 숙소 탭에서 날짜를 골라 이 동네 숙소를 찾�
       JSON.stringify({ state: { token: value }, version: 0 })
     );
   }, token);
-  await page.goto(`/places?area=${area.id}&kind=stay`);
-  await page.getByRole("heading", { name: "지역 수첩" }).waitFor();
-  // 숙소 탭에서는 다녀온 곳 구역 없이 숙소만 본다.
+  await page.goto(`/map?area=${area.id}&layers=stay`);
+  await page.getByRole("heading", { name: "데이트 지도" }).waitFor();
+  // 숙소 레이어만 켜면 다녀온 곳 구역 없이 숙소만 본다.
   await expect(page.getByRole("region", { name: "다녀온 곳" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "가 보고 싶은 숙소" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "숙소", exact: true })).toContainText(
+  const stays = page.getByRole("region", { name: "숙소", exact: true });
+  await expect(stays.getByRole("list", { name: "묵었던 숙소" })).toContainText(
     "지난번 호텔"
   );
 
-  await page.getByRole("button", { name: "이 동네 숙소 찾아 줘" }).click();
+  await page.getByRole("button", { name: "더 찾아 줘" }).click();
+  await page.getByRole("menuitem", { name: "숙소 찾아 줘 (NOL)" }).click();
   const dialog = page.getByRole("dialog", { name: "신도림 숙소 찾기" });
   const saturday = kst().startOf("day");
   const nextSat = saturday.add((6 - saturday.day() + 7) % 7, "day").format("YYYY-MM-DD");
@@ -1441,17 +1448,21 @@ test("지역 수첩 숙소 탭에서 날짜를 골라 이 동네 숙소를 찾�
   await dialog.getByRole("button", { name: "찾아 줘" }).click();
   await expect(dialog).toBeHidden();
 
-  const fresh = page.getByRole("region", { name: "하치와레 새 추천" });
-  await expect(fresh.getByRole("article")).toHaveCount(2, { timeout: 20_000 });
-  const hotelCard = fresh.getByRole("article", { name: "샘플 호텔" });
-  await expect(hotelCard).toContainText("1박 12만원대 (12.5~6 기준)");
-  await expect(
-    hotelCard.getByRole("link", { name: "샘플 호텔 NOL에서 보기" })
-  ).toHaveAttribute("href", storeUrl("샘플 호텔"));
+  // 찾아 온 숙소는 숙소 구역의 숙소 추천에 모인다.
+  const found = stays.getByRole("list", { name: "숙소 추천" });
+  await expect(found.getByRole("listitem")).toHaveCount(2, { timeout: 20_000 });
+  const hotelRow = found.getByRole("button", { name: /샘플 호텔/ });
+  await expect(hotelRow).toContainText("1박 12만원대 (12.5~6 기준)");
+  await hotelRow.click();
+  const hotelCard = page.getByRole("region", { name: "샘플 호텔 추천" });
+  await expect(hotelCard.getByRole("link", { name: "NOL에서 보기" })).toHaveAttribute(
+    "href",
+    storeUrl("샘플 호텔")
+  );
 
   const input = runs.get("run_1")?.input ?? "";
   const checkout = checkin.add(1, "day");
-  expect(input).toContain("[지역 수첩 숙소 찾기] 신도림");
+  expect(input).toContain("[동네 숙소 찾기] 신도림");
   expect(input).toContain(`체크인 ${checkin.format("YYYY.MM.DD (dd)")}`);
   expect(input).toContain(
     `opencli yanolja search "신도림 호텔" --checkin ${checkin.format("YYYY-MM-DD")} --checkout ${checkout.format("YYYY-MM-DD")}`
@@ -1462,19 +1473,18 @@ test("지역 수첩 숙소 탭에서 날짜를 골라 이 동네 숙소를 찾�
   expect(input).not.toContain("맛있는 국수");
 
   await hotelCard.getByRole("button", { name: "가 보고 싶어" }).click();
-  const wantStays = page.getByRole("region", { name: "가 보고 싶은 숙소" });
-  await expect(wantStays.getByRole("article", { name: "샘플 호텔" })).toBeVisible();
-  await expect(fresh.getByRole("article")).toHaveCount(1);
+  await expect(hotelCard).toContainText("가 보고 싶은 곳 · 호텔");
+  await expect(hotelCard.getByRole("button", { name: "가 보고 싶어" })).toHaveCount(0);
+  await expect(found.getByRole("listitem")).toHaveCount(2);
 
-  // 맛집·카페 탭에서는 숙소 추천이 보이지 않는다.
+  // 다른 레이어를 켜도 숙소 추천은 숙소 구역에만 있고, 새 추천·가 보고 싶은 곳에는 없다.
   await page
-    .getByRole("group", { name: "종류" })
-    .getByRole("button", { name: "맛집·카페" })
+    .getByRole("group", { name: "지도에 보기" })
+    .getByRole("button", { name: /^가 보고 싶은 곳/ })
     .click();
   await expect(page.getByRole("region", { name: "하치와레 새 추천" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "가 보고 싶은 곳" })).not.toContainText(
-    "샘플 호텔"
-  );
+  await expect(page.getByRole("region", { name: "가 보고 싶은 곳" })).toHaveCount(0);
+  await expect(found.getByRole("listitem")).toHaveCount(2);
 
   // 숙소도 오늘 데이트 추천에 쌓이고, NOL 링크로 연다.
   await openDates(page, token);

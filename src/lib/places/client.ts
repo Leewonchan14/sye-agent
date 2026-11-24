@@ -12,14 +12,14 @@ import type {
   AreaView,
   CreateAreaInput,
   CreateReviewInput,
+  MapLayersPayload,
   PlaceReview,
-  PlacesPayload,
   UpdateReviewInput,
 } from "@/lib/places/types";
 
 export const placeKeys = {
   all: ["places"] as const,
-  list: (areaId: number | null) => ["places", "list", areaId ?? "recent"] as const,
+  layers: (areaId: number | null) => ["places", "layers", areaId ?? "all"] as const,
   areaSearch: (q: string) => ["places", "area-search", q] as const,
   entryReviews: (entryId: number) => ["places", "entry-reviews", entryId] as const,
 };
@@ -42,15 +42,20 @@ export const useEntryReviews = (entryId: number | null) => {
   });
 };
 
-/** 지역 수첩. areaId가 없으면 서버가 최근에 연 지역을 고른다. */
-export const usePlaces = (areaId: number | null) => {
+const SEARCHING_POLL_MS = 5_000;
+
+/**
+ * 데이트 지도의 동네와 하치와레 추천 레이어. areaId가 없으면 전체.
+ * 리뷰·표시·동네를 바꾸면 placeKeys.all로 함께 다시 읽는다.
+ */
+export const useMapLayers = (areaId: number | null) => {
   const token = useToken();
   return useQuery({
-    queryKey: placeKeys.list(areaId),
+    queryKey: placeKeys.layers(areaId),
     queryFn: () =>
-      ledgerRequest<PlacesPayload>(
+      ledgerRequest<MapLayersPayload>(
         token,
-        areaId === null ? "/api/places" : `/api/places?area=${areaId}`
+        areaId === null ? "/api/places/layers" : `/api/places/layers?area=${areaId}`
       ),
     enabled: Boolean(token),
     placeholderData: keepPreviousData,
@@ -60,8 +65,6 @@ export const usePlaces = (areaId: number | null) => {
       query.state.data?.searching ? SEARCHING_POLL_MS : LEDGER_LIVE_QUERY.refetchInterval,
   });
 };
-
-const SEARCHING_POLL_MS = 5_000;
 
 /** "이 동네 더 찾아 줘", 하치와레 추천에 가 보고 싶어·별로 표시 */
 export const useAreaSpotMutations = () => {
@@ -144,7 +147,7 @@ export const useAreaMutations = () => {
         ledgerRequest(token, `/api/places/areas/${id}`, { method: "DELETE" }),
       // 지운 지역은 다시 읽어도 404라서 버리고, 나머지는 기다리지 않고 새로 읽는다.
       onSuccess: (_data, id) => {
-        queryClient.removeQueries({ queryKey: placeKeys.list(id) });
+        queryClient.removeQueries({ queryKey: placeKeys.layers(id) });
         void refresh();
       },
     }),

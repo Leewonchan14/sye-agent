@@ -3,7 +3,13 @@
  * 주소 쿼리(`?q=&sort=&rated=`)에 그대로 남기는 값이라 브라우저와 서버가 함께 쓸 수 있게 순수 함수로 둔다.
  */
 import type { LedgerMapPlace } from "@/lib/ledger/map-types";
-import { DISLIKED_RATING, LIKED_RATING, type PlaceReview } from "@/lib/places/types";
+import {
+  DISLIKED_RATING,
+  LIKED_RATING,
+  type PlaceCard,
+  type PlaceRatingSummary,
+  type PlaceReview,
+} from "@/lib/places/types";
 
 /** 목록 정렬: 방문 많은 순(기본) · 별점 높은 순 · 최근에 간 순 */
 export const MAP_SORTS = ["visits", "rating", "recent"] as const;
@@ -43,8 +49,11 @@ export const placeReviews = (place: LedgerMapPlace): PlaceReview[] =>
 export const pickReviewSnippet = (
   place: LedgerMapPlace,
   query = ""
-): PlaceReview | null => {
-  const written = placeReviews(place).filter((review) => review.review.trim());
+): PlaceReview | null => pickSnippet(placeReviews(place), query);
+
+/** 리뷰 목록(최근 것부터)에서 목록 줄에 보여 줄 하나를 고른다. */
+export const pickSnippet = (reviews: PlaceReview[], query = ""): PlaceReview | null => {
+  const written = reviews.filter((review) => review.review.trim());
   const needle = normalize(query);
   if (needle) {
     const hit = written.find((review) => normalize(review.review).includes(needle));
@@ -67,7 +76,10 @@ export const matchesPlaceQuery = (place: LedgerMapPlace, query: string) => {
   return haystack.some((value) => normalize(value).includes(needle));
 };
 
-const matchesRated = (place: LedgerMapPlace, rated: MapRatedFilter) => {
+const matchesRated = (
+  place: { rating: PlaceRatingSummary | null },
+  rated: MapRatedFilter
+) => {
   if (rated === "all") return true;
   if (!place.rating) return false;
   if (rated === "liked") return place.rating.average >= LIKED_RATING;
@@ -118,3 +130,37 @@ export const filterMapPlaces = (
   places
     .filter((place) => matchesRated(place, rated) && matchesPlaceQuery(place, query))
     .sort(COMPARATORS[sort]);
+
+/** 가 보고 싶은 곳(하치와레 추천) 카드 검색: 이름·업종·주소·추천 이유·리뷰 글 */
+export const matchesSpotQuery = (card: PlaceCard, query: string) => {
+  const needle = normalize(query);
+  if (!needle) return true;
+  return [
+    card.name,
+    card.category,
+    card.address,
+    card.reason,
+    ...card.reviews.map((review) => review.review),
+  ].some((value) => normalize(value).includes(needle));
+};
+
+/** 별점 높은 순(같으면 리뷰 많은 곳), 리뷰 없는 곳은 원래 순서대로 뒤에 */
+const byCardRating = (a: PlaceCard, b: PlaceCard) => {
+  if (!a.rating || !b.rating)
+    return Number(Boolean(b.rating)) - Number(Boolean(a.rating));
+  return b.rating.average - a.rating.average || b.rating.count - a.rating.count;
+};
+
+/**
+ * 가 보고 싶은 곳 카드를 같은 검색·리뷰 필터로 거른다. 간 적이 없어 방문순·최근순은
+ * 서버 순서(최근에 받은 추천부터)를 그대로 두고, 별점순만 다시 정렬한다.
+ */
+export const filterSpotCards = (
+  cards: PlaceCard[],
+  { query, sort, rated }: MapListQuery
+): PlaceCard[] => {
+  const shown = cards.filter(
+    (card) => matchesRated(card, rated) && matchesSpotQuery(card, query)
+  );
+  return sort === "rating" ? shown.sort(byCardRating) : shown;
+};

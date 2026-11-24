@@ -149,8 +149,8 @@ export interface AreaCandidate {
 /* ───────── 지역 수첩 화면 ───────── */
 
 /**
- * 지역 수첩 카드 한 장.
- * - ledger: 가계부 지도에 찍힌 다녀온 곳 (별점을 매길 수 있다)
+ * 데이트 지도의 하치와레 추천 카드 한 장.
+ * - ledger: 가계부 지도에 찍힌 다녀온 곳 (지금은 데이트 지도 API의 LedgerMapPlace로 따로 온다)
  * - spot: 하치와레 데이트 추천에서 가 보고 싶어·다녀왔어로 표시한 곳
  */
 export interface PlaceCard {
@@ -190,15 +190,20 @@ export interface PlaceCard {
   reaction: "like" | "pass" | "visited" | null;
 }
 
-export interface PlacesPayload {
-  /** 저장한 지역 (최근에 연 순) */
+/**
+ * 데이트 지도의 동네와 하치와레 추천 레이어 (`GET /api/places/layers?area=`).
+ * 좌표가 없는 추천은 지도 핀 없이 목록에만 보인다.
+ */
+export interface MapLayersPayload {
+  /** 저장한 동네 (고른 동네가 먼저, 그다음 최근에 연 순) */
   areas: AreaView[];
-  /** 고른 지역. 없으면 지역 없이 전체 개수만 */
+  /** 고른 동네. 없으면 전체 */
   area: AreaView | null;
+  /** 가 보고 싶어로 표시한 추천 (최근에 받은 것부터) */
   want: PlaceCard[];
-  visited: PlaceCard[];
-  stays: PlaceCard[];
-  /** 아직 표시하지 않은 이 동네의 최근 하치와레 추천 */
+  /** 다녀왔어로 표시했지만 가계부 지도에는 없는 추천 */
+  done: PlaceCard[];
+  /** 동네를 골랐을 때 아직 표시하지 않은 최근 추천 */
   fresh: PlaceCard[];
   /** 하치와레가 지금 찾고 있는지 */
   searching: boolean;
