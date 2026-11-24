@@ -15,6 +15,9 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+import { CLUSTER_PIN, SELECTED_STROKE, VISITED_PIN } from "@/components/map/pin-colors";
+import { circleBounds, circlePolygon } from "@/lib/places/geo";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /** 지도에 찍는 핀 하나. 데이트 지도의 장소(LedgerMapPlace)도 그대로 넘길 수 있다. */
@@ -42,9 +45,8 @@ export const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
  */
 setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href);
 
-/** 핀은 캔버스에 그려 CSS 변수를 못 쓰므로 --color-primary 값을 그대로 쓴다. */
-const PIN = "#d96c75";
-const PIN_DARK = "#b9505a";
+/** 핀 색이 없으면 다녀온 곳 색(--color-primary) */
+const PIN = VISITED_PIN;
 export const SEOUL = { longitude: 126.978, latitude: 37.5665, zoom: 11 };
 const FOCUS_ZOOM = 15;
 /** 지역 가운데만 보여 줄 때의 확대 정도 — 동네 하나가 화면에 들어온다. */
@@ -85,15 +87,31 @@ interface Props {
   places: MapPin[];
   /** 핀이 없을 때 보여 줄 가운데(지역 수첩의 지역 중심). 없으면 서울 */
   center?: { lat: number; lng: number };
+  /**
+   * 고른 동네. 있으면 반경 원을 그리고, 핀 대신 이 원에 지도를 맞춘다
+   * (검색·필터로 핀이 바뀌어도 동네 밖으로 밀려나지 않게).
+   */
+  area?: { lat: number; lng: number; radiusM: number } | null;
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }
 
-export const PlaceMap = ({ places, center, selectedKey, onSelect }: Props) => {
+const AREA_SOURCE_ID = "date-area";
+
+export const PlaceMap = ({ places, center, area, selectedKey, onSelect }: Props) => {
   const mapRef = useRef<MapRef>(null);
   const [loaded, setLoaded] = useState(false);
   const [hovering, setHovering] = useState(false);
 
+  /**
+   * 핀 색마다 번호(tone)를 매긴다. 묶음은 번호의 최솟값·최댓값을 모아(clusterProperties)
+   * 둘이 같으면 그 색으로, 다르면 종류가 섞인 것으로 보고 중립색으로 칠한다.
+   */
+  // 빈 배열이면 지도 식 검사가 배열 타입을 못 정하므로 기본 색을 하나 둔다.
+  const tones = useMemo(
+    () => [...new Set([PIN, ...places.map((place) => place.color ?? PIN)])],
+    [places]
+  );
   const data = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
     () => ({
       type: "FeatureCollection",
@@ -105,17 +123,43 @@ export const PlaceMap = ({ places, center, selectedKey, onSelect }: Props) => {
           name: place.name,
           visits: place.visits,
           color: place.color ?? PIN,
+          tone: tones.indexOf(place.color ?? PIN),
         },
       })),
     }),
-    [places]
+    [places, tones]
   );
 
-  // 장소 목록(기간)이 바뀌면 모든 핀이 보이게 맞춘다.
+  const areaShape = useMemo<GeoJSON.Feature<GeoJSON.Polygon> | null>(
+    () =>
+      area
+        ? {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [circlePolygon(area, area.radiusM)],
+            },
+            properties: {},
+          }
+        : null,
+    [area]
+  );
+
+  // 동네를 고르거나 반경을 바꾸면 그 원이 다 보이게 맞춘다.
+  const areaKey = area ? `${area.lat},${area.lng},${area.radiusM}` : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!loaded || !map || !area) return;
+    map.fitBounds(circleBounds(area, area.radiusM), { padding: 24, duration: 600 });
+    // 동네가 바뀔 때만 다시 맞춘다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, areaKey]);
+
+  // 장소 목록(기간)이 바뀌면 모든 핀이 보이게 맞춘다. 동네를 골랐으면 동네에 맞춘 그대로 둔다.
   const boundsKey = places.map((place) => place.key).join("|");
   useEffect(() => {
     const map = mapRef.current;
-    if (!loaded || !map || !places.length) return;
+    if (!loaded || !map || !places.length || areaKey) return;
     if (places.length === 1) {
       map.easeTo({ center: [places[0].lng, places[0].lat], zoom: FOCUS_ZOOM });
       return;
@@ -191,6 +235,26 @@ export const PlaceMap = ({ places, center, selectedKey, onSelect }: Props) => {
         touchPitch={false}
       >
         <NavigationControl position="top-right" showCompass={false} />
+        {/* 고른 동네의 반경. 핀보다 먼저 그려 핀 아래에 깔린다. */}
+        {areaShape && (
+          <Source id={AREA_SOURCE_ID} type="geojson" data={areaShape}>
+            <Layer
+              id="date-area-fill"
+              type="fill"
+              paint={{ "fill-color": PIN, "fill-opacity": 0.06 }}
+            />
+            <Layer
+              id="date-area-line"
+              type="line"
+              paint={{
+                "line-color": PIN,
+                "line-width": 1.5,
+                "line-opacity": 0.6,
+                "line-dasharray": [2, 2],
+              }}
+            />
+          </Source>
+        )}
         <Source
           id={SOURCE_ID}
           type="geojson"
@@ -198,13 +262,27 @@ export const PlaceMap = ({ places, center, selectedKey, onSelect }: Props) => {
           cluster
           clusterRadius={36}
           clusterMaxZoom={14}
+          clusterProperties={{
+            minTone: ["min", ["get", "tone"]],
+            maxTone: ["max", ["get", "tone"]],
+          }}
         >
           <Layer
             id={CLUSTER_LAYER}
             type="circle"
             filter={["has", "point_count"]}
             paint={{
-              "circle-color": PIN,
+              // 묶인 핀이 모두 같은 색이면 그 색, 종류가 섞였으면 중립색
+              "circle-color": [
+                "case",
+                ["==", ["get", "minTone"], ["get", "maxTone"]],
+                // 식 검사가 타입을 알 수 있게 번호는 숫자로, 꺼낸 값은 색으로 바꾼다.
+                [
+                  "to-color",
+                  ["at", ["to-number", ["get", "minTone"]], ["literal", tones]],
+                ],
+                CLUSTER_PIN,
+              ],
               "circle-opacity": 0.85,
               "circle-radius": ["step", ["get", "point_count"], 16, 5, 20, 15, 26],
               "circle-stroke-width": 3,
@@ -228,19 +306,25 @@ export const PlaceMap = ({ places, center, selectedKey, onSelect }: Props) => {
             type="circle"
             filter={["!", ["has", "point_count"]]}
             paint={{
-              "circle-color": [
-                "case",
-                ["==", ["get", "key"], selectedKey ?? ""],
-                PIN_DARK,
-                ["get", "color"],
-              ],
+              // 고른 핀은 제 색을 지키고 크기와 진한 테두리로 표시한다(레이어 색이 섞이지 않게).
+              "circle-color": ["get", "color"],
               "circle-radius": [
                 "+",
                 ["step", ["get", "visits"], 8, 2, 10, 4, 12, 8, 14],
                 ["case", ["==", ["get", "key"], selectedKey ?? ""], 3, 0],
               ],
-              "circle-stroke-width": 2.5,
-              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": [
+                "case",
+                ["==", ["get", "key"], selectedKey ?? ""],
+                3,
+                2.5,
+              ],
+              "circle-stroke-color": [
+                "case",
+                ["==", ["get", "key"], selectedKey ?? ""],
+                SELECTED_STROKE,
+                "#ffffff",
+              ],
             }}
           />
           <Layer

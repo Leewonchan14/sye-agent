@@ -517,7 +517,7 @@ export const SpotCard = ({
               href={spot.instagramUrl}
               target="_blank"
               rel="noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
             >
               <Camera />
               인스타
@@ -533,7 +533,7 @@ export const SpotCard = ({
               href={spot.sourceUrl}
               target="_blank"
               rel="noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
             >
               <ExternalLink />
               {spot.kind === "stay" ? "NOL에서 보기" : "자세히"}
@@ -545,7 +545,7 @@ export const SpotCard = ({
               href={mapUrl(spot)}
               target="_blank"
               rel="noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
             >
               <MapPin />
               지도

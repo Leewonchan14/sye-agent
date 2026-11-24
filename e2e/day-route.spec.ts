@@ -530,7 +530,7 @@ test("데이트 지도에서 하루만 고르면 그날 동선을 열고, 분류
     `/map?range=custom&from=${today()}&to=${today()}&category=${category("식비")}`
   );
   await expect(
-    page.getByRole("list", { name: "다녀온 곳" }).getByRole("button")
+    page.getByRole("list", { name: "다녀온 곳" }).getByRole("listitem")
   ).toHaveCount(1);
   const filtered = await openRoute(page);
   await expect(filtered).toContainText("오늘 2곳");

@@ -10,7 +10,7 @@ export const MAX_SPOT_COUNT = 10;
 
 /**
  * place: 가 볼 장소 · content: 팝업·게임·공연처럼 둘이 같이 즐길 거리
- * stay: 둘이 묵을 숙소 (지역 수첩에서 숙소를 찾아 달라고 할 때만, NOL 숙소 페이지를 근거로)
+ * stay: 둘이 묵을 숙소 (데이트 지도 동네에서 숙소를 찾아 달라고 할 때만, NOL 숙소 페이지를 근거로)
  */
 export const DATE_SPOT_KINDS = ["place", "content", "stay"] as const;
 export type DateSpotKind = (typeof DATE_SPOT_KINDS)[number];

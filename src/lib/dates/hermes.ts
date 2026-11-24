@@ -118,7 +118,7 @@ export const buildDateSpotPrompt = (options: {
   history: Awaited<ReturnType<typeof getRecommendationHistory>>;
   /** 다녀와서 가계부 내역에 리뷰를 남긴 곳 */
   rated?: RatedPlace[];
-  /** 지역 수첩의 "이 동네 더 찾아 줘" — 이 지역 반경 안에서만 찾는다. */
+  /** 데이트 지도 동네의 "가 볼 곳 더 찾아 줘" — 이 동네 반경 안에서만 찾는다. */
   area?: AreaView | null;
   callbackUrl: string;
   token: string;
@@ -131,7 +131,7 @@ export const buildDateSpotPrompt = (options: {
     `원찬이랑 예은이가 같이 할 데이트 추천을 ${settings.count}개 찾아 줘.`,
     "가 볼 장소(카페·맛집·술집·전시·공방·산책·야경)와 같이 즐길 거리(팝업스토어, 인스타그램에서 소개된 둘이서 하는 협동·공포 게임, 공연·영화, 축제·시즌 이벤트, 원데이 클래스, 집데이트 거리)를 따로 나누지 말고 한 목록으로 섞어서 골라. 몇 개씩 나눌지는 정하지 말고, 오늘 둘에게 가장 좋은 것부터 골라.",
     area
-      ? `지역 수첩에서 '${area.name}' 동네만 골라서 더 찾아 달라는 요청이야. 이 동네 밖은 빼.`
+      ? `데이트 지도에서 '${area.name}' 동네만 골라서 더 찾아 달라는 요청이야. 이 동네 밖은 빼.`
       : options.extra
         ? "오늘 이미 추천한 것이 있어서 더 찾아 달라는 요청이야. 오늘 고른 것과 겹치지 않게 다른 분위기로 골라."
         : "매일 아침 받아 보는 오늘의 추천이야.",
@@ -171,7 +171,7 @@ export const buildDateSpotPrompt = (options: {
   ].join("\n");
 };
 
-/** 지역 수첩 숙소 찾기에서 받는 숙소 수 */
+/** 동네 숙소 찾기에서 받는 숙소 수 */
 export const STAY_SEARCH_COUNT = 5;
 
 const STAY_FORMAT = `spots 원소 형식 (JSON) — 숙소:
@@ -192,7 +192,7 @@ const STAY_FORMAT = `spots 원소 형식 (JSON) — 숙소:
 }`;
 
 /**
- * 지역 수첩의 "이 동네 숙소 찾아 줘" — 그 지역 반경 안에서 둘이 묵을 숙소를 NOL로 찾는다.
+ * 데이트 지도 동네의 "숙소 찾아 줘" — 그 동네 반경 안에서 둘이 묵을 숙소를 NOL로 찾는다.
  * 가격은 날짜마다 다르므로 체크인 날짜(1박)를 정해서 보낸다.
  */
 export const buildStayPrompt = (options: {
@@ -209,7 +209,7 @@ export const buildStayPrompt = (options: {
   const checkout = checkin.add(1, "day");
   const stayRated = rated.filter((place) => place.kind === "stay");
   return [
-    `[지역 수첩 숙소 찾기] ${area.name}`,
+    `[동네 숙소 찾기] ${area.name}`,
     `원찬이랑 예은이가 '${area.name}'에서 묵을 숙소를 ${STAY_SEARCH_COUNT}곳 찾아 줘.`,
     `체크인 ${checkin.format("YYYY.MM.DD (dd)")} → 체크아웃 ${checkout.format("MM.DD (dd)")}, 1박 2인 기준이야.`,
     `지역: ${area.name} — 가운데 ${area.address || `${area.lat}, ${area.lng}`} (위도 ${area.lat}, 경도 ${area.lng})에서 반경 ${area.radiusM / 1000}km 안만. 좌표(lat·lng)로 반경 안인지 꼭 확인해.`,
@@ -243,9 +243,9 @@ export const startDateSpotSearch = async (options: {
   origin: string;
   digestId: number;
   extra: boolean;
-  /** 지역 수첩의 "이 동네 더 찾아 줘" */
+  /** 데이트 지도 동네의 "가 볼 곳 더 찾아 줘" */
   area?: AreaView | null;
-  /** 지역 수첩의 "이 동네 숙소 찾아 줘" — area와 함께, 체크인 날짜(YYYY-MM-DD) */
+  /** 데이트 지도 동네의 "숙소 찾아 줘" — area와 함께, 체크인 날짜(YYYY-MM-DD) */
   stayCheckin?: string | null;
 }) => {
   const missing = missingHermesEnv();

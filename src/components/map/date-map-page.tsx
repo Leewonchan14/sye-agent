@@ -6,10 +6,11 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ExternalLink, MapPin, MapPinned, RefreshCw, X } from "lucide-react";
+import { ExternalLink, MapPinned, Pencil, RefreshCw, X } from "lucide-react";
 import {
   createParser,
   debounce,
+  parseAsArrayOf,
   parseAsInteger,
   parseAsString,
   parseAsStringLiteral,
@@ -18,7 +19,7 @@ import {
 } from "nuqs";
 import { toast } from "sonner";
 
-import { useDeferredValue, useEffect, useMemo, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -29,9 +30,18 @@ import {
 } from "@/components/ledger/category-chips";
 import { DayRouteButton } from "@/components/ledger/day-route/day-route-button";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
+import { AreaBar, formatRadius } from "@/components/map/area-controls";
 import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
+import { spotPinColor, STAY_PIN } from "@/components/map/pin-colors";
 import { PlaceListControls } from "@/components/map/place-list-controls";
-import { EntryReviews, RatingSummary } from "@/components/places/place-reviews";
+import type { MapPin } from "@/components/map/place-map";
+import { PlacePhoto } from "@/components/map/place-photo";
+import { LayerChips, SpotDetail, SpotList } from "@/components/map/spot-layer";
+import {
+  PlaceReviewWriter,
+  RatingSummary,
+  ReviewList,
+} from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -39,12 +49,16 @@ import { useAuthStore } from "@/lib/auth-store";
 import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
 import { formatWon } from "@/lib/ledger/format";
+import { MAP_RATED_FILTERS, MAP_SORTS, pickReviewSnippet } from "@/lib/ledger/map-filter";
 import {
-  filterMapPlaces,
-  MAP_RATED_FILTERS,
-  MAP_SORTS,
-  pickReviewSnippet,
-} from "@/lib/ledger/map-filter";
+  filterSection,
+  layerCounts,
+  MAP_LAYERS,
+  sectionSize,
+  splitLayers,
+  type LayerSectionId,
+  type MapLayer,
+} from "@/lib/ledger/map-layers";
 import {
   MAP_RANGES,
   toMapSearchParams,
@@ -52,6 +66,7 @@ import {
   type LedgerMapPayment,
   type LedgerMapPlace,
 } from "@/lib/ledger/map-types";
+import { useMapLayers } from "@/lib/places/client";
 import { REVIEW_AUTHOR_LABEL } from "@/lib/places/types";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +112,8 @@ const listParsers = {
   q: parseAsString.withDefault("").withOptions({ limitUrlUpdates: debounce(300) }),
   sort: parseAsStringLiteral(MAP_SORTS).withDefault("visits"),
   rated: parseAsStringLiteral(MAP_RATED_FILTERS).withDefault("all"),
+  /** `?layers=visited,want`: 지도에 겹쳐 볼 레이어. 기본은 모두 켠다. */
+  layers: parseAsArrayOf(parseAsStringLiteral(MAP_LAYERS)).withDefault([...MAP_LAYERS]),
 };
 
 /** 헤더 요약 앞에 붙이는 기간 이름. 전체·올해·이번 달은 칩으로 충분하다. */
@@ -118,36 +135,14 @@ const visitDate = (date: string) => {
 const paymentLabel = (payment: LedgerMapPayment) =>
   payment.memo || payment.categoryName || "지출";
 
-const PlacePhoto = ({ src, className }: { src: string | null; className?: string }) => (
-  <div
-    className={cn(
-      // 흰 바탕 사진도 테두리가 보이게 한다.
-      "flex shrink-0 items-center justify-center overflow-hidden border border-hairline bg-canvas-soft",
-      className
-    )}
-  >
-    {src ? (
-      // 네이버 이미지 서버에서 바로 받는다. next/image 최적화를 거치지 않는다.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        className="size-full object-cover"
-      />
-    ) : (
-      <MapPin className="size-5 text-muted-soft" />
-    )}
-  </div>
-);
-
 const PlaceDetail = ({
   place,
+  startWriting,
   onClose,
 }: {
   place: LedgerMapPlace;
+  /** 목록 줄의 "리뷰 쓰기"로 열었으면 리뷰 입력창을 바로 연다. */
+  startWriting: boolean;
   onClose: () => void;
 }) => (
   <section
@@ -191,6 +186,15 @@ const PlaceDetail = ({
           {place.rating && <RatingSummary rating={place.rating} />}
         </p>
       </div>
+      {/* 리뷰는 간 날에 붙는다. 쓸 때 간 날을 고르고(기본은 가장 최근), 고른 장소가 바뀌면 쓰던 리뷰를 닫는다. */}
+      <PlaceReviewWriter
+        key={`${place.key}:${startWriting}`}
+        visits={place.entries.map((visit) => ({
+          date: visit.date,
+          entryId: visit.payments[0].id,
+        }))}
+        defaultWriting={startWriting}
+      />
       {/* 간 날이 많으면 이 목록만 스크롤한다. 장소 이름과 지도 링크는 늘 보인다. */}
       <ul
         aria-label="간 날"
@@ -236,10 +240,9 @@ const PlaceDetail = ({
                   ))}
                 </ul>
               )}
-              {/* 그날 결제 내역(먼저 한 결제)에 리뷰를 남긴다. 고른 장소가 바뀌면 쓰던 리뷰를 닫는다. */}
-              <EntryReviews
+              {/* 그날 남긴 리뷰. 연필로 고친다. 새 리뷰는 카드 위쪽 "리뷰 쓰기"에서 쓴다. */}
+              <ReviewList
                 key={`${place.key}:${visit.date}`}
-                entryId={visit.payments[0].id}
                 reviews={visit.reviews}
                 className="pl-23"
               />
@@ -251,7 +254,7 @@ const PlaceDetail = ({
         href={place.mapUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={buttonVariants({ variant: "outline", size: "sm" })}
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
       >
         <ExternalLink />
         네이버 지도에서 열기
@@ -265,18 +268,25 @@ const PlaceList = ({
   query,
   selectedKey,
   onSelect,
+  onWrite,
+  label = "다녀온 곳",
 }: {
   places: LedgerMapPlace[];
   /** 검색어. 리뷰 글에 걸렸으면 그 리뷰를 보여 준다. */
   query: string;
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  /** 리뷰 없는 줄의 "리뷰 쓰기": 장소 카드를 열면서 입력창도 연다. */
+  onWrite: (key: string) => void;
+  /** 목록의 접근성 이름 (다녀온 곳 · 묵었던 숙소) */
+  label?: string;
 }) => (
-  <ol aria-label="다녀온 곳" className="flex flex-col gap-1">
+  <ol aria-label={label} className="flex flex-col gap-1">
     {places.map((place, index) => {
       const snippet = pickReviewSnippet(place, query);
+      const canWrite = !place.rating;
       return (
-        <li key={place.key}>
+        <li key={place.key} className="relative">
           <button
             type="button"
             aria-current={place.key === selectedKey || undefined}
@@ -313,6 +323,8 @@ const PlaceList = ({
                   </span>
                 </span>
               )}
+              {/* 리뷰 한 줄 자리에 "리뷰 쓰기"를 둔다. 버튼 안에 버튼을 둘 수 없어 자리만 잡고 아래에 따로 겹친다. */}
+              {canWrite && <span aria-hidden className="mt-0.5 h-4" />}
             </span>
             <span className="flex shrink-0 flex-col items-end">
               <span className="text-[13px] font-medium text-ink tabular-nums">
@@ -323,6 +335,17 @@ const PlaceList = ({
               </span>
             </span>
           </button>
+          {canWrite && (
+            <button
+              type="button"
+              aria-label={`${place.name} 리뷰 쓰기`}
+              onClick={() => onWrite(place.key)}
+              className="absolute bottom-2 left-[92px] inline-flex h-4 items-center gap-0.5 rounded-sm text-[11px] text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <Pencil className="size-3" />
+              리뷰 쓰기
+            </button>
+          )}
         </li>
       );
     })}
@@ -336,10 +359,32 @@ const Empty = () => (
     <p className="max-w-md text-sm text-muted">
       가계부 지출에 네이버 지도 링크를 붙이면 여기에 핀으로 모여요.
     </p>
-    <Link href="/ledger" className={buttonVariants({ variant: "outline", size: "sm" })}>
+    <Link
+      href="/ledger"
+      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+    >
       가계부로 가기
     </Link>
   </div>
+);
+
+/** 목록 구역의 이름과, 그 안 가계부 장소·추천 목록의 접근성 이름 */
+const SECTION_TEXT: Record<
+  LayerSectionId,
+  { title: string; ledger: string; spots: string }
+> = {
+  fresh: { title: "하치와레 새 추천", ledger: "", spots: "하치와레 새 추천" },
+  visited: { title: "다녀온 곳", ledger: "다녀온 곳", spots: "다녀왔어로 표시한 곳" },
+  want: { title: "가 보고 싶은 곳", ledger: "", spots: "가 보고 싶은 곳" },
+  stay: { title: "숙소", ledger: "묵었던 숙소", spots: "숙소 추천" },
+};
+
+/** 레이어별 목록 머리: "다녀온 곳 4" */
+const ListHeading = ({ label, count }: { label: string; count: number }) => (
+  <h2 className="flex items-baseline gap-1.5 px-1 pt-1 text-[13px] font-semibold text-ink">
+    {label}
+    <span className="text-[12px] font-normal text-muted tabular-nums">{count}</span>
+  </h2>
 );
 
 const EmptyPeriod = () => (
@@ -356,6 +401,11 @@ export const DateMapPage = () => {
   const [period, setPeriod] = useQueryStates(periodParsers, { history: "push" });
   const [selectedKey, setSelectedKey] = useQueryState("place", placeParser);
   const [list, setList] = useQueryStates(listParsers, { history: "replace" });
+  /** `?area=<동네 id>`: 고른 동네. 바꿀 때마다 히스토리를 쌓아 뒤로 가기로 앞 동네로 돌아간다. */
+  const [areaId, setAreaId] = useQueryState(
+    "area",
+    parseAsInteger.withOptions({ history: "push" })
+  );
   // 장소가 많아도 글자를 칠 때 입력창이 밀리지 않게 거르기는 한 박자 늦게 한다.
   const query = useDeferredValue(list.q.trim());
   // 기간에 쓰지 않는 값(예: 전체인데 남은 from)은 API에 보내지 않는다.
@@ -409,23 +459,104 @@ export const DateMapPage = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hasSelection, setSelectedKey]);
 
-  const places = useMemo(() => data?.places ?? [], [data]);
-  // 검색·리뷰 필터로 거른 장소. 지도 핀과 목록이 함께 따른다.
-  const shown = useMemo(
-    () => filterMapPlaces(places, { query, sort: list.sort, rated: list.rated }),
-    [places, query, list.sort, list.rated]
+  // 동네와 하치와레 추천 레이어. 동네를 바꾸는 동안에는 앞 동네 결과를 잠깐 보여 주므로,
+  // 원은 고른 동네와 응답이 같을 때만 그린다.
+  const layersQuery = useMapLayers(areaId);
+  const layersData = layersQuery.data;
+  const area =
+    areaId !== null && layersData?.area?.id === areaId ? layersData.area : null;
+  const selectArea = (id: number | null) => {
+    void setSelectedKey(null);
+    void setAreaId(id);
+  };
+
+  const sections = useMemo(
+    () => splitLayers(data?.places ?? [], layersData, area),
+    [data, layersData, area]
+  );
+  const counts = layerCounts(sections);
+  /**
+   * 레이어를 켜고 끈다. 마지막 하나는 끄지 않는다(빈 지도가 되지 않게).
+   * 순서(다녀온 곳 → 가 보고 싶은 곳 → 숙소)를 지키고, 모두 켜면 주소에서 뺀다.
+   */
+  const toggleLayer = (layer: MapLayer) => {
+    const on = list.layers.includes(layer);
+    if (on && list.layers.length === 1) return;
+    const next = MAP_LAYERS.filter((item) =>
+      item === layer ? !on : list.layers.includes(item)
+    );
+    void setList({ layers: next.length === MAP_LAYERS.length ? null : next });
+  };
+
+  const visible = sections.filter((section) => list.layers.includes(section.layer));
+  // 검색·리뷰 필터로 거른 구역. 지도 핀과 목록이 함께 따른다.
+  const shownSections = useMemo(
+    () =>
+      sections
+        .filter((section) => list.layers.includes(section.layer))
+        .map((section) =>
+          filterSection(section, { query, sort: list.sort, rated: list.rated })
+        ),
+    [sections, list.layers, query, list.sort, list.rated]
+  );
+  const pins = useMemo<MapPin[]>(
+    () => [
+      // 다녀온 곳 핀이 위에 그려지게 추천을 먼저 넣는다.
+      ...shownSections.flatMap((section) =>
+        section.spots.flatMap((card) =>
+          card.lat !== null && card.lng !== null
+            ? [
+                {
+                  key: card.key,
+                  name: card.name,
+                  lat: card.lat,
+                  lng: card.lng,
+                  visits: 0,
+                  color: spotPinColor(card),
+                },
+              ]
+            : []
+        )
+      ),
+      ...shownSections.flatMap((section) =>
+        section.ledger.map((place) =>
+          section.id === "stay" ? { ...place, color: STAY_PIN } : place
+        )
+      ),
+    ],
+    [shownSections]
   );
   const filtering = Boolean(query) || list.rated !== "all";
   const clearFilters = () => void setList({ q: null, rated: null });
+  const visibleTotal = visible.reduce((sum, section) => sum + sectionSize(section), 0);
+  const shownTotal = shownSections.reduce(
+    (sum, section) => sum + sectionSize(section),
+    0
+  );
+  const searching = Boolean(layersData?.searching);
+
   // 걸러져 목록에 없는 장소도 카드는 계속 열어 둔다(보고 있던 것이 갑자기 닫히지 않게).
-  const selected = places.find((place) => place.key === selectedKey) ?? null;
-  const totalVisits = places.reduce((sum, place) => sum + place.visits, 0);
-  const totalSpent = places.reduce((sum, place) => sum + place.total, 0);
+  const ledgerAll = sections.flatMap((section) => section.ledger);
+  const spotAll = sections.flatMap((section) => section.spots);
+  const selected = ledgerAll.find((place) => place.key === selectedKey) ?? null;
+  const selectedSpot = selected
+    ? null
+    : (spotAll.find((card) => card.key === selectedKey) ?? null);
+  const totalVisits = ledgerAll.reduce((sum, place) => sum + place.visits, 0);
+  const totalSpent = ledgerAll.reduce((sum, place) => sum + place.total, 0);
   const mapBoxRef = useRef<HTMLDivElement>(null);
+  /** 목록 줄의 "리뷰 쓰기"로 연 장소. 카드를 열면서 리뷰 입력창도 연다. */
+  const [writeKey, setWriteKey] = useState<string | null>(null);
   const clearPlace = () => void setSelectedKey(null);
   // 이미 고른 장소를 다시 누르면 선택을 푼다.
-  const selectPlace = (key: string) =>
+  const selectPlace = (key: string) => {
+    setWriteKey(null);
     void setSelectedKey(key === selectedKey ? null : key);
+  };
+  const writeReview = (key: string) => {
+    setWriteKey(key);
+    void setSelectedKey(key);
+  };
   // 좁은 화면에서는 목록이 지도 아래에 있으므로, 목록에서 고르면 지도가 보이게 올린다.
   const selectFromList = (key: string) => {
     selectPlace(key);
@@ -448,13 +579,16 @@ export const DateMapPage = () => {
             <p className="text-[13px] text-muted tabular-nums" aria-live="polite">
               {data
                 ? [
+                    area && `${area.name} 반경 ${formatRadius(area.radiusM)}`,
                     periodTitle(data),
                     categoryTitle(data),
-                    `다녀온 곳 ${places.length}곳 · ${totalVisits}번 · ${formatWon(totalSpent)}`,
+                    `다녀온 곳 ${counts.visited}곳 · ${totalVisits}번 · ${formatWon(totalSpent)}`,
+                    counts.want > 0 && `가 보고 싶은 곳 ${counts.want}곳`,
+                    counts.stay > 0 && `숙소 ${counts.stay}곳`,
                   ]
                     .filter(Boolean)
                     .join(" · ")
-                : "가계부에 남긴 네이버 지도 링크로 다녀온 곳을 모아 봐요."}
+                : "다녀온 곳, 가 보고 싶은 곳, 숙소를 동네별로 모아 봐요."}
             </p>
           </div>
           <MapPeriodFilter
@@ -468,6 +602,17 @@ export const DateMapPage = () => {
             onTrip={(trip) => changePeriod({ range: "trip", trip })}
           />
         </header>
+
+        {/* 동네를 고르면 그 반경 안만 보고, 하치와레에게 이 동네를 더 찾아 달라고 할 수 있다. */}
+        <AreaBar
+          areas={layersData?.areas ?? []}
+          area={area}
+          searching={searching}
+          onSelect={selectArea}
+        />
+
+        {/* 지도에 겹쳐 볼 레이어. 기간·분류는 가계부에서 온 장소에만 걸린다. */}
+        <LayerChips layers={list.layers} counts={counts} onToggle={toggleLayer} />
 
         {/* 가계부와 같은 분류 칩. 이 기간 지도에 찍힌 지출이 있는 분류만 보여 준다. */}
         {data && data.categories.length > 0 && (
@@ -512,17 +657,24 @@ export const DateMapPage = () => {
         )}
 
         {data &&
-          !places.length &&
+          !visibleTotal &&
+          !area &&
           (data.range === "all" && data.category === null ? <Empty /> : <EmptyPeriod />)}
 
-        {places.length > 0 && (
+        {(visibleTotal > 0 || area) && (
           // 열을 minmax(0, 1fr)로 둬, 지도 캔버스가 처음 그린 너비보다 화면이 좁아져도 따라 줄어든다.
           <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_340px]">
             <div
               ref={mapBoxRef}
               className="h-[58vh] min-h-[320px] scroll-mt-4 overflow-hidden rounded-2xl ring-1 ring-hairline md:sticky md:top-4 md:h-[calc(100dvh-180px)]"
             >
-              <PlaceMap places={shown} selectedKey={selectedKey} onSelect={selectPlace} />
+              <PlaceMap
+                places={pins}
+                center={area ?? undefined}
+                area={area}
+                selectedKey={selectedKey}
+                onSelect={selectPlace}
+              />
             </div>
             <div className="flex flex-col gap-4">
               {/*
@@ -531,9 +683,18 @@ export const DateMapPage = () => {
                 카드가 화면을 다 덮으면 목록 끝이 카드 밑에 가려 못 고르므로, 아래에 목록이 한 줄 이상 보이게
                 높이를 줄이고 카드 안에서 스크롤한다.
               */}
-              {selected && (
+              {(selected || selectedSpot) && (
                 <div className="md:sticky md:top-0 md:z-10 md:-mt-4 md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto md:overscroll-contain md:bg-canvas md:pt-4">
-                  <PlaceDetail place={selected} onClose={clearPlace} />
+                  {selected && (
+                    <PlaceDetail
+                      place={selected}
+                      startWriting={writeKey === selected.key}
+                      onClose={clearPlace}
+                    />
+                  )}
+                  {selectedSpot && (
+                    <SpotDetail card={selectedSpot} onClose={clearPlace} />
+                  )}
                 </div>
               )}
               <PlaceListControls
@@ -550,7 +711,7 @@ export const DateMapPage = () => {
                   aria-live="polite"
                 >
                   <span>
-                    {places.length}곳 중 {shown.length}곳
+                    {visibleTotal}곳 중 {shownTotal}곳
                   </span>
                   <button
                     type="button"
@@ -561,16 +722,53 @@ export const DateMapPage = () => {
                   </button>
                 </p>
               )}
-              {shown.length > 0 ? (
-                <PlaceList
-                  places={shown}
-                  query={query}
-                  selectedKey={selectedKey}
-                  onSelect={selectFromList}
-                />
-              ) : (
+              {/* 구역마다 이름과 개수를 붙인다. 새 추천 → 다녀온 곳 → 가 보고 싶은 곳 → 숙소 */}
+              {shownSections.map((section) => {
+                const text = SECTION_TEXT[section.id];
+                const size = sectionSize(section);
+                // 하치와레가 이 동네를 찾는 동안에는 새 추천 구역을 비어 있어도 보여 준다.
+                const waiting = section.id === "fresh" && area && searching;
+                if (!size && !waiting) return null;
+                return (
+                  <section
+                    key={section.id}
+                    aria-label={text.title}
+                    className="flex flex-col gap-1"
+                  >
+                    <ListHeading label={text.title} count={size} />
+                    {section.ledger.length > 0 && (
+                      <PlaceList
+                        label={text.ledger}
+                        places={section.ledger}
+                        query={query}
+                        selectedKey={selectedKey}
+                        onSelect={selectFromList}
+                        onWrite={writeReview}
+                      />
+                    )}
+                    {section.spots.length > 0 && (
+                      <SpotList
+                        label={text.spots}
+                        cards={section.spots}
+                        query={query}
+                        selectedKey={selectedKey}
+                        onSelect={selectFromList}
+                      />
+                    )}
+                    {!size && (
+                      <p className="flex items-center gap-2 rounded-xl bg-canvas-soft px-3 py-3 text-[12px] text-muted">
+                        <Spinner />
+                        하치와레가 {area?.name}을 찾고 있어요. 다 찾으면 여기에 보여요.
+                      </p>
+                    )}
+                  </section>
+                );
+              })}
+              {!shownTotal && !(area && searching) && (
                 <p className="rounded-xl border border-dashed border-hairline px-4 py-8 text-center text-[13px] text-muted">
-                  조건에 맞는 곳이 없어요.
+                  {visibleTotal
+                    ? "조건에 맞는 곳이 없어요."
+                    : `${area?.name ?? "이 동네"}에는 아직 모아 둔 곳이 없어요. '더 찾아 줘'로 하치와레에게 부탁해 보세요.`}
                 </p>
               )}
             </div>
