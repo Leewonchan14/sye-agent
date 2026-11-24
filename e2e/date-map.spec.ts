@@ -1021,3 +1021,132 @@ test("새 내역을 추가하면서 지도 링크와 리뷰 하나를 같이 남
     ).rows
   ).toEqual([{ memo: "라테", author: "yeeun", rating: 3, review: "자리가 넓어" }]);
 });
+
+test("다녀온 곳을 검색·정렬하고 리뷰로 거르며, 목록 줄에서 최근 리뷰를 본다", async ({
+  page,
+  request,
+}) => {
+  const pasta = "https://map.naver.com/p/entry/place/2001";
+  const chinese = "https://map.naver.com/p/entry/place/3001";
+  await createEntry(request, { memo: "파스타 점심", amount: 12_000, mapUrl: pasta });
+  await createEntry(request, {
+    memo: "파스타 예전",
+    amount: 15_000,
+    mapUrl: pasta,
+    entryDate: daysAgo(10),
+  });
+  await createEntry(request, {
+    memo: "카페 디저트",
+    amount: 9_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2002",
+    entryDate: daysAgo(1),
+  });
+  for (const days of [20, 15, 5]) {
+    await createEntry(request, {
+      memo: `짜장면 ${days}`,
+      amount: 8_000,
+      mapUrl: chinese,
+      entryDate: daysAgo(days),
+    });
+  }
+  await createEntry(request, {
+    memo: "인생네컷",
+    amount: 4_000,
+    mapUrl: "https://map.naver.com/p/entry/place/3002",
+    entryDate: daysAgo(2),
+  });
+
+  const review = async (memo: string, author: string, rating: number, text: string) => {
+    const res = await request.post("/api/places/reviews", {
+      headers: authHeaders(token),
+      data: { entryId: await entryIdOf(memo), author, rating, review: text },
+    });
+    expect(res.status()).toBe(201);
+  };
+  // 파스타: 평균 4.5(2개), 카페: 4.5(1개), 중식당: 1.5, 사진관: 리뷰 없음
+  await review("파스타 점심", "wonchan", 4.5, "웨이팅이 길었어");
+  await review("파스타 점심", "yeeun", 4.5, "면이 쫄깃");
+  await review("카페 디저트", "yeeun", 4.5, "디저트 맛집");
+  await review("짜장면 5", "wonchan", 1.5, "다시는 안 갈 듯");
+
+  await openMap(page);
+  const items = placeList(page).getByRole("button");
+  const names = () =>
+    items.evaluateAll((buttons) =>
+      buttons.map((button) => button.querySelector(".font-medium")?.textContent)
+    );
+
+  // 기본은 방문순. 목록 줄에 최근에 남긴 리뷰가 한 줄 보인다.
+  await expect(items).toHaveCount(4);
+  expect(await names()).toEqual([
+    "신림 중식당",
+    "성수 파스타집",
+    "망원 카페",
+    "샤로수길 사진관",
+  ]);
+  await expect(items.nth(1).getByTestId("review-snippet")).toHaveText(
+    "“면이 쫄깃” — 예은"
+  );
+  await expect(items.nth(3).getByTestId("review-snippet")).toHaveCount(0);
+
+  // 별점순: 평균이 같으면 리뷰가 많은 곳이 먼저, 리뷰 없는 곳은 맨 뒤
+  await page.getByRole("combobox", { name: "정렬" }).click();
+  await page.getByRole("option", { name: "별점순" }).click();
+  await expect
+    .poll(names)
+    .toEqual(["성수 파스타집", "망원 카페", "신림 중식당", "샤로수길 사진관"]);
+  await expect(page).toHaveURL(/sort=rating/);
+
+  // 최근순
+  await page.getByRole("combobox", { name: "정렬" }).click();
+  await page.getByRole("option", { name: "최근순" }).click();
+  await expect
+    .poll(names)
+    .toEqual(["성수 파스타집", "망원 카페", "샤로수길 사진관", "신림 중식당"]);
+
+  // 리뷰 필터
+  const filters = page.getByRole("group", { name: "리뷰 필터" });
+  await filters.getByRole("button", { name: /또 갈 곳/ }).click();
+  await expect.poll(names).toEqual(["성수 파스타집", "망원 카페"]);
+  await expect(page.getByText("4곳 중 2곳")).toBeVisible();
+  await filters.getByRole("button", { name: /다시 안 갈 곳/ }).click();
+  await expect.poll(names).toEqual(["신림 중식당"]);
+  await filters.getByRole("button", { name: "리뷰 있는 곳" }).click();
+  await expect(items).toHaveCount(3);
+  await filters.getByRole("button", { name: "전체" }).click();
+  await expect(items).toHaveCount(4);
+
+  // 검색: 리뷰 글에 걸리면 그 리뷰를 목록 줄에 보여 준다.
+  const search = page.getByRole("searchbox", { name: "다녀온 곳 검색" });
+  await search.fill("웨이팅");
+  await expect.poll(names).toEqual(["성수 파스타집"]);
+  await expect(items.first().getByTestId("review-snippet")).toHaveText(
+    "“웨이팅이 길었어” — 원찬"
+  );
+  // 띄어쓰기는 무시하고, 결제 메모·주소도 찾는다.
+  await search.fill("인생 네컷");
+  await expect.poll(names).toEqual(["샤로수길 사진관"]);
+  await search.fill("관악구");
+  await expect(items).toHaveCount(2);
+  await search.fill("없는 가게");
+  await expect(page.getByText("조건에 맞는 곳이 없어요.")).toBeVisible();
+
+  // 검색어·정렬·필터는 주소에 남아 새로 고쳐도 그대로다.
+  await search.fill("관악구");
+  await filters.getByRole("button", { name: /다시 안 갈 곳/ }).click();
+  await expect(page).toHaveURL(/q=/);
+  await page.reload();
+  await expect(search).toHaveValue("관악구");
+  await expect(filters.getByRole("button", { name: /다시 안 갈 곳/ })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  await expect(page.getByRole("combobox", { name: "정렬" })).toContainText("최근순");
+  await expect.poll(names).toEqual(["신림 중식당"]);
+
+  // 지우기로 처음 목록으로 돌아간다. 정렬은 그대로 둔다.
+  await page.getByRole("button", { name: "검색·필터 지우기" }).click();
+  await expect(search).toHaveValue("");
+  await expect(items).toHaveCount(4);
+  await expect(page.getByText("4곳 중")).toHaveCount(0);
+});
