@@ -952,6 +952,41 @@ test("가계부 목록 줄에서 내역 창을 열지 않고 리뷰를 쓰고 �
   ).toEqual([{ author: "yeeun", rating: 3, review: "소스가 진해" }]);
 });
 
+test("통계 탭 내역에서도 내역 창을 열지 않고 리뷰를 쓴다", async ({ page, request }) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  await createEntry(request, { memo: "편의점", amount: 3_000 });
+
+  await openLedger(page, token);
+  await page.getByRole("tab", { name: "통계" }).click();
+  // 통계 맨 아래 "지출·입금 내역" 줄
+  const write = page.getByRole("button", { name: "파스타 점심 리뷰 쓰기" });
+  await expect(write).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "편의점 리뷰 쓰기" })).toHaveCount(0);
+
+  await write.click();
+  const editor = page.getByRole("group", { name: "리뷰 쓰기" });
+  await editor
+    .getByRole("group", { name: "쓴 사람" })
+    .getByRole("button", { name: "원찬" })
+    .click();
+  await editor.getByRole("radio", { name: "별 3.5개" }).click();
+  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("양이 많아");
+  await editor.getByRole("button", { name: "저장" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // 저장하면 통계를 다시 읽어 그 줄에 리뷰가 보인다.
+  const item = page.getByRole("listitem", { name: "원찬 리뷰" });
+  await expect(item).toContainText("양이 많아");
+  await expect(item.getByRole("img", { name: "별 3.5개" })).toBeVisible();
+  expect(
+    (await pool.query("select author, rating, review from place_reviews")).rows
+  ).toEqual([{ author: "wonchan", rating: 3.5, review: "양이 많아" }]);
+});
+
 test("새 내역을 추가하면서 지도 링크와 리뷰 하나를 같이 남긴다", async ({ page }) => {
   await openLedger(page, token);
   await page.getByRole("button", { name: "내역 추가" }).first().click();

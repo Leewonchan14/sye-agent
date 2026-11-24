@@ -2,6 +2,7 @@ import { and, asc, isNull, lte } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import {
+  attachReviews,
   compareLedgerEntries,
   getLedgerOpeningBalance,
   LedgerError,
@@ -279,7 +280,8 @@ export const getLedgerStats = async (
     },
     allTime,
     // 화면은 오래된 순으로 받아 뒤집어 쓴다.
-    entries: entries.sort((a, b) => compareLedgerEntries(b, a)),
+    // 통계 내역 줄에서도 리뷰를 보고 바로 쓰게 리뷰를 붙인다.
+    entries: await attachReviews(entries.sort((a, b) => compareLedgerEntries(b, a))),
     byCategory,
     monthly,
     daily,
