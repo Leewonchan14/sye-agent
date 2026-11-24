@@ -452,7 +452,7 @@ export const toLedgerEntryView = (
 };
 
 /** 목록의 지도 링크가 있는 지출마다 남긴 리뷰를 붙인다. */
-const attachReviews = async (entries: LedgerEntryView[]) => {
+export const attachReviews = async (entries: LedgerEntryView[]) => {
   const ids = entries.filter((entry) => entry.placeKey).map((entry) => entry.id);
   if (!ids.length) return entries;
   const rows = await getDb()

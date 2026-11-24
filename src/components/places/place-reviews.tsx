@@ -363,7 +363,15 @@ const reviewDate = (date: string) => {
   return day.format(day.isSame(kst(), "year") ? "M.D" : "YY.M.D");
 };
 
-const ReviewItem = ({ review, showDate }: { review: PlaceReview; showDate: boolean }) => {
+const ReviewItem = ({
+  review,
+  showDate,
+  compact,
+}: {
+  review: PlaceReview;
+  showDate: boolean;
+  compact: boolean;
+}) => {
   const [editing, setEditing] = useState(false);
   const author = REVIEW_AUTHOR_LABEL[review.author];
   if (editing) {
@@ -380,10 +388,21 @@ const ReviewItem = ({ review, showDate }: { review: PlaceReview; showDate: boole
   return (
     <li
       aria-label={`${author} 리뷰`}
-      className="flex items-start gap-2 text-[13px] leading-snug"
+      className={cn(
+        "flex items-start gap-2 text-[13px] leading-snug",
+        // 목록 줄 안에서는 시각·분류 줄(11px)과 같은 크기로 둔다.
+        compact && "gap-1.5 text-[11px]"
+      )}
     >
-      <span className="shrink-0 font-medium text-ink">{author}</span>
-      <RatingStars rating={review.rating} className="mt-0.5" />
+      <span
+        className={cn(
+          "shrink-0 font-medium text-ink",
+          compact && "font-normal text-body"
+        )}
+      >
+        {author}
+      </span>
+      <RatingStars rating={review.rating} className={cn("mt-0.5", compact && "mt-px")} />
       <span className="min-w-0 flex-1 break-words text-body">
         {review.review}
         {showDate && (
@@ -396,9 +415,12 @@ const ReviewItem = ({ review, showDate }: { review: PlaceReview; showDate: boole
         type="button"
         aria-label={`${author} 리뷰 고치기`}
         onClick={() => setEditing(true)}
-        className="-mt-0.5 shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-soft hover:text-ink"
+        className={cn(
+          "-mt-0.5 shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-soft hover:text-ink",
+          compact && "-mt-1"
+        )}
       >
-        <Pencil className="size-3.5" />
+        <Pencil className={cn("size-3.5", compact && "size-3")} />
       </button>
     </li>
   );
@@ -407,41 +429,64 @@ const ReviewItem = ({ review, showDate }: { review: PlaceReview; showDate: boole
 export const ReviewList = ({
   reviews,
   showDate = false,
+  compact = false,
   className,
 }: {
   reviews: PlaceReview[];
   showDate?: boolean;
+  /** 가계부 목록 줄처럼 좁은 곳에서 글자를 줄인다. */
+  compact?: boolean;
   className?: string;
 }) =>
   reviews.length ? (
-    <ul aria-label="리뷰" className={cn("flex flex-col gap-1.5", className)}>
+    <ul
+      aria-label="리뷰"
+      className={cn("flex flex-col gap-1.5", compact && "gap-1", className)}
+    >
       {reviews.map((review) => (
-        <ReviewItem key={review.id} review={review} showDate={showDate} />
+        <ReviewItem
+          key={review.id}
+          review={review}
+          showDate={showDate}
+          compact={compact}
+        />
       ))}
     </ul>
   ) : null;
 
-/** 내역 하나의 리뷰와 "리뷰 쓰기". 데이트 지도의 간 날, 가계부 내역 창에서 쓴다. */
+/**
+ * 내역 하나의 리뷰와 "리뷰 쓰기". 데이트 지도의 간 날, 가계부 내역 창·목록 줄에서 쓴다.
+ * 목록 줄에서는 `compact`로 작게 두고, 줄마다 버튼을 구분하도록 `writeLabel`을 준다.
+ */
 export const EntryReviews = ({
   entryId,
   reviews,
+  compact = false,
+  writeLabel,
   className,
 }: {
   entryId: number;
   reviews: PlaceReview[];
+  compact?: boolean;
+  /** "리뷰 쓰기" 버튼의 접근성 이름 (기본은 "리뷰 쓰기") */
+  writeLabel?: string;
   className?: string;
 }) => {
   const [writing, setWriting] = useState(false);
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <ReviewList reviews={reviews} />
+    <div className={cn("flex flex-col gap-1.5", compact && "gap-1", className)}>
+      <ReviewList reviews={reviews} compact={compact} />
       {writing ? (
         <ReviewEditor entryId={entryId} onDone={() => setWriting(false)} />
       ) : (
         <button
           type="button"
+          aria-label={writeLabel}
           onClick={() => setWriting(true)}
-          className="inline-flex w-fit items-center gap-1 rounded-md text-[12px] text-primary hover:underline"
+          className={cn(
+            "inline-flex w-fit items-center gap-1 rounded-md text-[12px] text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            compact && "text-[11px]"
+          )}
         >
           <Plus className="size-3.5" />
           리뷰 쓰기

@@ -2,10 +2,9 @@
 
 import { EntryIcon } from "@/components/ledger/category-icon";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
-import { RatingStars } from "@/components/places/place-reviews";
+import { EntryReviews } from "@/components/places/place-reviews";
 import type { LedgerEntryView } from "@/lib/db/ledger";
 import { formatWon } from "@/lib/ledger/format";
-import { REVIEW_AUTHOR_LABEL } from "@/lib/places/types";
 
 export type { LedgerEntryView };
 
@@ -43,18 +42,6 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
               {entry.note}
             </span>
           )}
-          {entry.reviews.map((review) => (
-            <span
-              key={review.id}
-              className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-body"
-            >
-              <span className="shrink-0 font-medium">
-                {REVIEW_AUTHOR_LABEL[review.author]}
-              </span>
-              <RatingStars rating={review.rating} />
-              {review.review && <span className="truncate">{review.review}</span>}
-            </span>
-          ))}
         </span>
         <span
           className={`shrink-0 text-[13px] font-medium tabular-nums ${
@@ -67,13 +54,23 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
       </button>
       {entry.mapUrl && (
         // pl-14: 버튼 여백 + 아이콘 + 간격 = 제목 시작점
-        <PlacePhotoStrip
-          title={title}
-          mapUrl={entry.mapUrl}
-          placeName={entry.mapPlaceName}
-          imageUrls={entry.mapImageUrls}
-          className="pr-2 pb-3 pl-14"
-        />
+        <div className="flex flex-col gap-2 pr-2 pb-3 pl-14">
+          <PlacePhotoStrip
+            title={title}
+            mapUrl={entry.mapUrl}
+            placeName={entry.mapPlaceName}
+            imageUrls={entry.mapImageUrls}
+          />
+          {/* 리뷰는 내역 창을 열지 않고 목록에서 바로 쓰고 고친다. */}
+          {entry.placeKey && (
+            <EntryReviews
+              entryId={entry.id}
+              reviews={entry.reviews}
+              compact
+              writeLabel={`${title} 리뷰 쓰기`}
+            />
+          )}
+        </div>
       )}
     </>
   );

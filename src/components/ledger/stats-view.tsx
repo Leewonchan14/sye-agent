@@ -49,6 +49,7 @@ import {
   TopExpensesList,
 } from "@/components/ledger/top-expenses";
 import { compactWon, shortDate, TrendChart } from "@/components/ledger/trend-chart";
+import { EntryReviews } from "@/components/places/place-reviews";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -945,14 +946,23 @@ const PeriodEntriesCard = ({
                 </button>
                 {entry.mapUrl && (
                   // pl-7: 아이콘 + 간격
-                  <PlacePhotoStrip
-                    title={entry.memo.trim() || (isIncome ? "입금" : "지출")}
-                    mapUrl={entry.mapUrl}
-                    placeName={entry.mapPlaceName}
-                    imageUrls={entry.mapImageUrls}
-                    size="sm"
-                    className="pb-2 pl-7"
-                  />
+                  <div className="flex flex-col gap-1.5 pb-2 pl-7">
+                    <PlacePhotoStrip
+                      title={entry.memo.trim() || (isIncome ? "입금" : "지출")}
+                      mapUrl={entry.mapUrl}
+                      placeName={entry.mapPlaceName}
+                      imageUrls={entry.mapImageUrls}
+                      size="sm"
+                    />
+                    {entry.placeKey && (
+                      <EntryReviews
+                        entryId={entry.id}
+                        reviews={entry.reviews}
+                        compact
+                        writeLabel={`${entry.memo.trim() || "지출"} 리뷰 쓰기`}
+                      />
+                    )}
+                  </div>
                 )}
               </li>
             );

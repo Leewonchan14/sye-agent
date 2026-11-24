@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 
 import type { CategoryFilter } from "@/components/ledger/category-chips";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
+import { EntryReviews } from "@/components/places/place-reviews";
 import type { LedgerEntryView } from "@/lib/db/ledger";
 import { kst } from "@/lib/kst";
 import { formatWon } from "@/lib/ledger/format";
@@ -114,14 +115,23 @@ export const EntryDateList = ({
               )}
               {entry.mapUrl && (
                 // 5.25rem: 여백(0.25) + 날짜 칸(4.5) + 간격(0.5) = 내용 시작점
-                <PlacePhotoStrip
-                  title={entryTitle(entry)}
-                  mapUrl={entry.mapUrl}
-                  placeName={entry.mapPlaceName}
-                  imageUrls={entry.mapImageUrls}
-                  size="sm"
-                  className="pb-1 pl-[5.25rem]"
-                />
+                <div className="flex flex-col gap-1 pb-1 pl-[5.25rem]">
+                  <PlacePhotoStrip
+                    title={entryTitle(entry)}
+                    mapUrl={entry.mapUrl}
+                    placeName={entry.mapPlaceName}
+                    imageUrls={entry.mapImageUrls}
+                    size="sm"
+                  />
+                  {entry.placeKey && (
+                    <EntryReviews
+                      entryId={entry.id}
+                      reviews={entry.reviews}
+                      compact
+                      writeLabel={`${entryTitle(entry)} 리뷰 쓰기`}
+                    />
+                  )}
+                </div>
               )}
             </li>
           );
