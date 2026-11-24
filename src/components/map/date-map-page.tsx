@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ExternalLink, MapPinned, RefreshCw, X } from "lucide-react";
+import { ExternalLink, MapPinned, Pencil, RefreshCw, X } from "lucide-react";
 import {
   createParser,
   debounce,
@@ -19,7 +19,7 @@ import {
 } from "nuqs";
 import { toast } from "sonner";
 
-import { useDeferredValue, useEffect, useMemo, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -37,7 +37,11 @@ import { PlaceListControls } from "@/components/map/place-list-controls";
 import type { MapPin } from "@/components/map/place-map";
 import { PlacePhoto } from "@/components/map/place-photo";
 import { LayerChips, SpotDetail, SpotList } from "@/components/map/spot-layer";
-import { EntryReviews, RatingSummary } from "@/components/places/place-reviews";
+import {
+  PlaceReviewWriter,
+  RatingSummary,
+  ReviewList,
+} from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -133,9 +137,12 @@ const paymentLabel = (payment: LedgerMapPayment) =>
 
 const PlaceDetail = ({
   place,
+  startWriting,
   onClose,
 }: {
   place: LedgerMapPlace;
+  /** 목록 줄의 "리뷰 쓰기"로 열었으면 리뷰 입력창을 바로 연다. */
+  startWriting: boolean;
   onClose: () => void;
 }) => (
   <section
@@ -179,6 +186,15 @@ const PlaceDetail = ({
           {place.rating && <RatingSummary rating={place.rating} />}
         </p>
       </div>
+      {/* 리뷰는 간 날에 붙는다. 쓸 때 간 날을 고르고(기본은 가장 최근), 고른 장소가 바뀌면 쓰던 리뷰를 닫는다. */}
+      <PlaceReviewWriter
+        key={`${place.key}:${startWriting}`}
+        visits={place.entries.map((visit) => ({
+          date: visit.date,
+          entryId: visit.payments[0].id,
+        }))}
+        defaultWriting={startWriting}
+      />
       {/* 간 날이 많으면 이 목록만 스크롤한다. 장소 이름과 지도 링크는 늘 보인다. */}
       <ul
         aria-label="간 날"
@@ -224,10 +240,9 @@ const PlaceDetail = ({
                   ))}
                 </ul>
               )}
-              {/* 그날 결제 내역(먼저 한 결제)에 리뷰를 남긴다. 고른 장소가 바뀌면 쓰던 리뷰를 닫는다. */}
-              <EntryReviews
+              {/* 그날 남긴 리뷰. 연필로 고친다. 새 리뷰는 카드 위쪽 "리뷰 쓰기"에서 쓴다. */}
+              <ReviewList
                 key={`${place.key}:${visit.date}`}
-                entryId={visit.payments[0].id}
                 reviews={visit.reviews}
                 className="pl-23"
               />
@@ -239,7 +254,7 @@ const PlaceDetail = ({
         href={place.mapUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={buttonVariants({ variant: "outline", size: "sm" })}
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
       >
         <ExternalLink />
         네이버 지도에서 열기
@@ -253,6 +268,7 @@ const PlaceList = ({
   query,
   selectedKey,
   onSelect,
+  onWrite,
   label = "다녀온 곳",
 }: {
   places: LedgerMapPlace[];
@@ -260,14 +276,17 @@ const PlaceList = ({
   query: string;
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  /** 리뷰 없는 줄의 "리뷰 쓰기": 장소 카드를 열면서 입력창도 연다. */
+  onWrite: (key: string) => void;
   /** 목록의 접근성 이름 (다녀온 곳 · 묵었던 숙소) */
   label?: string;
 }) => (
   <ol aria-label={label} className="flex flex-col gap-1">
     {places.map((place, index) => {
       const snippet = pickReviewSnippet(place, query);
+      const canWrite = !place.rating;
       return (
-        <li key={place.key}>
+        <li key={place.key} className="relative">
           <button
             type="button"
             aria-current={place.key === selectedKey || undefined}
@@ -304,6 +323,8 @@ const PlaceList = ({
                   </span>
                 </span>
               )}
+              {/* 리뷰 한 줄 자리에 "리뷰 쓰기"를 둔다. 버튼 안에 버튼을 둘 수 없어 자리만 잡고 아래에 따로 겹친다. */}
+              {canWrite && <span aria-hidden className="mt-0.5 h-4" />}
             </span>
             <span className="flex shrink-0 flex-col items-end">
               <span className="text-[13px] font-medium text-ink tabular-nums">
@@ -314,6 +335,17 @@ const PlaceList = ({
               </span>
             </span>
           </button>
+          {canWrite && (
+            <button
+              type="button"
+              aria-label={`${place.name} 리뷰 쓰기`}
+              onClick={() => onWrite(place.key)}
+              className="absolute bottom-2 left-[92px] inline-flex h-4 items-center gap-0.5 rounded-sm text-[11px] text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <Pencil className="size-3" />
+              리뷰 쓰기
+            </button>
+          )}
         </li>
       );
     })}
@@ -327,7 +359,10 @@ const Empty = () => (
     <p className="max-w-md text-sm text-muted">
       가계부 지출에 네이버 지도 링크를 붙이면 여기에 핀으로 모여요.
     </p>
-    <Link href="/ledger" className={buttonVariants({ variant: "outline", size: "sm" })}>
+    <Link
+      href="/ledger"
+      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+    >
       가계부로 가기
     </Link>
   </div>
@@ -510,10 +545,18 @@ export const DateMapPage = () => {
   const totalVisits = ledgerAll.reduce((sum, place) => sum + place.visits, 0);
   const totalSpent = ledgerAll.reduce((sum, place) => sum + place.total, 0);
   const mapBoxRef = useRef<HTMLDivElement>(null);
+  /** 목록 줄의 "리뷰 쓰기"로 연 장소. 카드를 열면서 리뷰 입력창도 연다. */
+  const [writeKey, setWriteKey] = useState<string | null>(null);
   const clearPlace = () => void setSelectedKey(null);
   // 이미 고른 장소를 다시 누르면 선택을 푼다.
-  const selectPlace = (key: string) =>
+  const selectPlace = (key: string) => {
+    setWriteKey(null);
     void setSelectedKey(key === selectedKey ? null : key);
+  };
+  const writeReview = (key: string) => {
+    setWriteKey(key);
+    void setSelectedKey(key);
+  };
   // 좁은 화면에서는 목록이 지도 아래에 있으므로, 목록에서 고르면 지도가 보이게 올린다.
   const selectFromList = (key: string) => {
     selectPlace(key);
@@ -642,7 +685,13 @@ export const DateMapPage = () => {
               */}
               {(selected || selectedSpot) && (
                 <div className="md:sticky md:top-0 md:z-10 md:-mt-4 md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto md:overscroll-contain md:bg-canvas md:pt-4">
-                  {selected && <PlaceDetail place={selected} onClose={clearPlace} />}
+                  {selected && (
+                    <PlaceDetail
+                      place={selected}
+                      startWriting={writeKey === selected.key}
+                      onClose={clearPlace}
+                    />
+                  )}
                   {selectedSpot && (
                     <SpotDetail card={selectedSpot} onClose={clearPlace} />
                   )}
@@ -694,6 +743,7 @@ export const DateMapPage = () => {
                         query={query}
                         selectedKey={selectedKey}
                         onSelect={selectFromList}
+                        onWrite={writeReview}
                       />
                     )}
                     {section.spots.length > 0 && (

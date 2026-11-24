@@ -210,7 +210,7 @@ const SpotReactions = ({ spotId }: { spotId: number }) => {
   );
 };
 
-const linkClass = buttonVariants({ variant: "outline", size: "sm" });
+const linkClass = cn(buttonVariants({ variant: "outline", size: "sm" }));
 
 const MARKER_LABEL = (card: PlaceCard) => {
   if (card.reaction === "like") return "가 보고 싶은 곳";

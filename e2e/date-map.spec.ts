@@ -148,6 +148,8 @@ test.beforeEach(async ({ page, request }) => {
   failing.clear();
   await resetLedger();
   await resetPlaces();
+  // 데이트 지도는 하치와레 추천(가 보고 싶은 곳·숙소)도 보여 주므로 함께 비운다.
+  await pool.query("truncate date_spot_digests restart identity cascade");
   token = await login(request);
   await page
     .context()
@@ -193,6 +195,9 @@ const openMap = async (page: Page, path = "/map") => {
 };
 
 const placeList = (page: Page) => page.getByRole("list", { name: "다녀온 곳" });
+/** 목록 줄을 고르는 버튼. 리뷰 없는 줄의 "리뷰 쓰기" 버튼은 빼고 센다. */
+const placeRows = (page: Page) =>
+  placeList(page).locator(":scope > li > button:first-child");
 
 test("네이버 지도 링크가 있는 지출을 장소별로 묶어 지도와 목록으로 본다", async ({
   page,
@@ -244,7 +249,7 @@ test("네이버 지도 링크가 있는 지출을 장소별로 묶어 지도와 
   // worker가 떠야 스타일을 다 읽는다. 번들 뒤 worker 주소가 틀리면 지도가 빈 채로 남는다.
   await expect(page.locator("[data-map-ready]")).toBeVisible();
 
-  const items = placeList(page).getByRole("button");
+  const items = placeRows(page);
   await expect(items).toHaveCount(2);
   // 많이 간 곳이 먼저
   await expect(items.first()).toContainText("성수 파스타집");
@@ -357,7 +362,7 @@ test("좌표를 못 읽은 네이버 지도 링크는 다시 찾기로 지도에
   await banner.getByRole("button", { name: "다시 찾기" }).click();
   await expect(page.getByText("2곳을 지도에 찍었어요.")).toBeVisible();
   await expect(banner).toBeHidden();
-  const items = placeList(page).getByRole("button");
+  const items = placeRows(page);
   await expect(items).toHaveCount(2);
   await expect(placeList(page)).toContainText("신림 중식당");
   await expect(placeList(page)).toContainText("샤로수길 사진관");
@@ -415,7 +420,7 @@ test("날짜를 직접 고르거나 여행을 골라 그때 간 곳만 지도에
 
   // 주소로 바로 열어도 같은 기간을 본다.
   await openMap(page, `/map?range=custom&from=${daysAgo(31)}&to=${daysAgo(29)}`);
-  const items = placeList(page).getByRole("button");
+  const items = placeRows(page);
   await expect(items).toHaveCount(1);
   await expect(items.first()).toContainText("망원 카페");
   const period = page.getByRole("navigation", { name: "기간" });
@@ -502,7 +507,7 @@ test("분류를 골라 그 분류 지출로 간 곳만 보고, 기간을 바꿔�
   const chips = page.getByRole("group", { name: "분류 필터" });
   // 지도에 찍힌 지출이 있는 분류만 칩으로 보여 준다.
   await expect(chips.getByRole("button")).toHaveText(["전체", "식비", "카페"]);
-  const items = placeList(page).getByRole("button");
+  const items = placeRows(page);
   await expect(items).toHaveCount(3);
 
   await chips.getByRole("button", { name: "식비" }).click();
@@ -551,7 +556,7 @@ test("간 날이 많으면 장소 카드 안의 간 날 목록만 스크롤한�
   }
 
   await openMap(page);
-  await placeList(page).getByRole("button").first().click();
+  await placeRows(page).first().click();
   const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
   await expect(detail.getByText("16번 방문")).toBeVisible();
   // 흰 바탕 사진도 카드 본문과 구분되게 사진 아래에 경계선이 있다.
@@ -613,9 +618,7 @@ test("좁은 모바일 화면에서도 데이트 지도가 좌우로 넘치지 �
     await expect.poll(overflowX).toBe(0);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await placeList(page)
-    .getByRole("button", { name: /성수 파스타집/ })
-    .click();
+  await placeRows(page).filter({ hasText: "성수 파스타집" }).click();
   await expect(
     page.getByRole("region", { name: "성수 파스타집 방문 기록" })
   ).toBeVisible();
@@ -646,14 +649,19 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
     entryDate: daysAgo(3),
   });
 
-  await openMap(page, "/map?place=2001");
+  // 리뷰 없는 목록 줄의 "리뷰 쓰기"는 장소 카드를 열면서 입력창도 바로 연다.
+  await openMap(page);
+  await placeList(page).getByRole("button", { name: "성수 파스타집 리뷰 쓰기" }).click();
+  await expect(page).toHaveURL(/place=2001/);
   const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
   const days = detail.getByRole("list", { name: "간 날" }).locator(":scope > li");
   await expect(days).toHaveCount(2);
 
-  // 오늘 간 날: 원찬이 별 4개, 예은이 별 5개
-  await days.first().getByRole("button", { name: "리뷰 쓰기" }).click();
-  let editor = days.first().getByRole("group", { name: "리뷰 쓰기" });
+  // 기본은 가장 최근에 간 날(오늘): 원찬이 별 4개
+  let editor = detail.getByRole("group", { name: "리뷰 쓰기" });
+  await expect(detail.getByRole("combobox", { name: "간 날" })).toContainText(
+    `${kst(today()).format("YY.M.D")}`
+  );
   await editor
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "원찬" })
@@ -666,9 +674,15 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   await expect(days.first().getByRole("listitem", { name: "원찬 리뷰" })).toContainText(
     "면이 쫄깃"
   );
+  await expect(editor).toHaveCount(0);
+  // 리뷰가 생기면 목록 줄의 "리뷰 쓰기"는 빠지고 리뷰 한 줄이 보인다.
+  await expect(
+    placeList(page).getByRole("button", { name: "성수 파스타집 리뷰 쓰기" })
+  ).toHaveCount(0);
 
-  await days.first().getByRole("button", { name: "리뷰 쓰기" }).click();
-  editor = days.first().getByRole("group", { name: "리뷰 쓰기" });
+  // 카드 위쪽 "리뷰 쓰기": 예은이 별 5개
+  await detail.getByRole("button", { name: "리뷰 쓰기", exact: true }).click();
+  editor = detail.getByRole("group", { name: "리뷰 쓰기" });
   await editor
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "예은" })
@@ -681,9 +695,14 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
     "소스가 진해"
   );
 
-  // 3일 전에 간 날: 원찬이 별 3개
-  await days.nth(1).getByRole("button", { name: "리뷰 쓰기" }).click();
-  editor = days.nth(1).getByRole("group", { name: "리뷰 쓰기" });
+  // 간 날을 골라 3일 전에 간 날에: 원찬이 별 3개
+  await detail.getByRole("button", { name: "리뷰 쓰기", exact: true }).click();
+  await detail.getByRole("combobox", { name: "간 날" }).click();
+  await page
+    .getByRole("option", { name: /에 간 날/ })
+    .nth(1)
+    .click();
+  editor = detail.getByRole("group", { name: "리뷰 쓰기" });
   await editor
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "원찬" })
@@ -1070,7 +1089,7 @@ test("다녀온 곳을 검색·정렬하고 리뷰로 거르며, 목록 줄에�
   await review("짜장면 5", "wonchan", 1.5, "다시는 안 갈 듯");
 
   await openMap(page);
-  const items = placeList(page).getByRole("button");
+  const items = placeRows(page);
   const names = () =>
     items.evaluateAll((buttons) =>
       buttons.map((button) => button.querySelector(".font-medium")?.textContent)

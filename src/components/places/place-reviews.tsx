@@ -3,7 +3,7 @@
 import { Pencil, Plus, Star, StarHalf } from "lucide-react";
 import { toast } from "sonner";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -497,75 +497,73 @@ export const EntryReviews = ({
 };
 
 /**
- * 장소의 리뷰 전체와 "리뷰 쓰기". 지역 수첩 카드에서 쓴다.
- * 리뷰는 간 날(그날 첫 결제 내역)에 붙이므로 쓸 때 간 날을 고른다(기본은 가장 최근).
+ * 장소 카드 위쪽의 "리뷰 쓰기". 리뷰는 간 날(그날 첫 결제 내역)에 붙이므로
+ * 쓸 때 간 날을 고른다(기본은 가장 최근). 데이트 지도 장소 카드에서 쓴다.
  */
-export const PlaceReviews = ({
-  rating,
-  reviews,
+export const PlaceReviewWriter = ({
   visits,
+  defaultWriting = false,
   className,
 }: {
-  rating: PlaceRatingSummary | null;
-  reviews: PlaceReview[];
+  /** 최근에 간 날부터 */
   visits: { date: string; entryId: number }[];
+  /** 목록 줄의 "리뷰 쓰기"로 열었으면 입력창을 바로 연다. */
+  defaultWriting?: boolean;
   className?: string;
 }) => {
-  const [writing, setWriting] = useState(false);
+  const [writing, setWriting] = useState(defaultWriting);
   const [entryId, setEntryId] = useState<number | null>(visits[0]?.entryId ?? null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  // 목록에서 바로 열었으면 입력창이 보이게 옮긴다(좁은 화면에서는 카드가 지도 아래에 있다).
+  useEffect(() => {
+    if (defaultWriting) boxRef.current?.scrollIntoView({ block: "nearest" });
+  }, [defaultWriting]);
+  if (entryId === null) return null;
+  const visitLabel = (date: string) => `${kst(date).format("YY.M.D (dd)")}에 간 날`;
   const visitOptions = visits.map((visit) => ({
     value: String(visit.entryId),
-    label: `${kst(visit.date).format("YY.M.D (dd)")}에 간 날`,
+    label: visitLabel(visit.date),
   }));
 
+  if (!writing) {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className={cn("w-full", className)}
+        onClick={() => setWriting(true)}
+      >
+        <Pencil />
+        리뷰 쓰기
+      </Button>
+    );
+  }
   return (
-    <div className={cn("flex flex-col gap-2 rounded-xl bg-canvas-soft p-3", className)}>
-      <div className="flex items-center justify-between gap-2">
-        {rating ? (
-          <RatingSummary rating={rating} />
-        ) : (
-          <span className="text-[12px] text-muted">아직 리뷰가 없어요.</span>
-        )}
-        {!writing && entryId !== null && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setWriting(true)}
-          >
-            <Plus />
-            리뷰 쓰기
-          </Button>
-        )}
-      </div>
-      <ReviewList reviews={reviews} showDate />
-      {writing && entryId !== null && (
-        <div className="flex flex-col gap-2">
-          {visits.length > 1 && (
-            <Select
-              items={visitOptions}
-              value={String(entryId)}
-              onValueChange={(value) => setEntryId(Number(value))}
-            >
-              <SelectTrigger aria-label="간 날" size="sm" className="w-fit">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {visitOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <ReviewEditor
-            key={entryId}
-            entryId={entryId}
-            onDone={() => setWriting(false)}
-          />
-        </div>
+    <div ref={boxRef} className={cn("flex scroll-mt-4 flex-col gap-2", className)}>
+      {visits.length > 1 ? (
+        <Select
+          items={visitOptions}
+          value={String(entryId)}
+          onValueChange={(value) => setEntryId(Number(value))}
+        >
+          <SelectTrigger aria-label="간 날" size="sm" className="w-fit bg-surface">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {visitOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <p className="text-[12px] text-muted tabular-nums">
+          {visitLabel(visits[0].date)}
+        </p>
       )}
+      <ReviewEditor key={entryId} entryId={entryId} onDone={() => setWriting(false)} />
     </div>
   );
 };
