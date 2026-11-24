@@ -8,8 +8,11 @@ export type DateReaction = (typeof DATE_REACTIONS)[number];
 export const MIN_SPOT_COUNT = 3;
 export const MAX_SPOT_COUNT = 10;
 
-/** place: 가 볼 장소 · content: 팝업·게임·공연처럼 둘이 같이 즐길 거리 */
-export const DATE_SPOT_KINDS = ["place", "content"] as const;
+/**
+ * place: 가 볼 장소 · content: 팝업·게임·공연처럼 둘이 같이 즐길 거리
+ * stay: 둘이 묵을 숙소 (지역 수첩에서 숙소를 찾아 달라고 할 때만, NOL 숙소 페이지를 근거로)
+ */
+export const DATE_SPOT_KINDS = ["place", "content", "stay"] as const;
 export type DateSpotKind = (typeof DATE_SPOT_KINDS)[number];
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -142,6 +145,13 @@ export const agentSpotSchema = z
         path: ["instagramUrl"],
         message:
           "게임은 그 게임을 소개한 인스타그램 게시물 주소(instagram.com/p/… 또는 /reel/…)가 있어야 해요.",
+      });
+    }
+    if (spot.kind === "stay" && !spot.sourceUrl) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceUrl"],
+        message: "숙소는 sourceUrl(NOL 숙소 페이지 주소)이 있어야 해요.",
       });
     }
     if (spot.kind === "content" && !spot.instagramUrl && !spot.sourceUrl) {

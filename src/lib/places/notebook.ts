@@ -82,6 +82,8 @@ const ledgerCard = (place: LedgerMapPlace, area: AreaView): PlaceCard => ({
   visits: place.visits,
   total: place.total,
   lastDate: place.lastDate,
+  priceHint: null,
+  sourceUrl: null,
   spotId: null,
   reaction: null,
   rating: place.rating,
@@ -102,7 +104,8 @@ const spotCard = (spot: DateSpotView, area: AreaView): PlaceCard => ({
   key: `spot:${spot.id}`,
   source: "spot",
   name: spot.name,
-  kind: inferPlaceKind(spot.category),
+  // 하치와레가 숙소로 보낸 추천은 업종과 상관없이 숙소다.
+  kind: spot.kind === "stay" ? "stay" : inferPlaceKind(spot.category),
   category: spot.category,
   address: spot.address ?? "",
   lat: spot.lat,
@@ -123,6 +126,8 @@ const spotCard = (spot: DateSpotView, area: AreaView): PlaceCard => ({
   rating: spot.placeRating,
   reviews: spot.placeReviews,
   visitEntries: [],
+  priceHint: spot.priceHint,
+  sourceUrl: spot.sourceUrl,
   spotId: spot.id,
   reaction: spot.reaction,
 });

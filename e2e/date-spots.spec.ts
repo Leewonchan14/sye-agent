@@ -1137,11 +1137,23 @@ test("만료된 사진은 감추고, 만료가 가까우면 새 주소로 바꾼
 /* ───────── 지역 수첩·리뷰와 하치와레 ───────── */
 
 /** 가계부 지도에 찍힌 지출을 바로 넣는다(네이버 장소를 읽지 않는다). */
-const seedPlaceEntry = async (memo: string, placeId: string, name: string) => {
+const seedPlaceEntry = async (
+  memo: string,
+  placeId: string,
+  name: string,
+  category = ""
+) => {
   const { rows } = await pool.query<{ id: number }>(
-    `insert into ledger_entries (entry_date, kind, amount, memo, map_url, map_place_id, map_place_name, map_lat, map_lng)
-     values ($1, 'expense', 10000, $2, $3, $4, $5, 37.509, 126.8916) returning id`,
-    [today(), memo, `https://map.naver.com/p/entry/place/${placeId}`, placeId, name]
+    `insert into ledger_entries (entry_date, kind, amount, memo, map_url, map_place_id, map_place_name, map_lat, map_lng, map_category)
+     values ($1, 'expense', 10000, $2, $3, $4, $5, 37.509, 126.8916, $6) returning id`,
+    [
+      today(),
+      memo,
+      `https://map.naver.com/p/entry/place/${placeId}`,
+      placeId,
+      name,
+      category,
+    ]
   );
   return rows[0].id;
 };
@@ -1329,4 +1341,176 @@ test("지역 수첩의 '이 동네 더 찾아 줘'는 그 동네만 찾고, 새 
     { name: "신도림 국밥", reaction: "pass" },
     { name: "신도림 베이커리", reaction: "like" },
   ]);
+});
+
+/** 숙소 — NOL 숙소 페이지를 근거로 받는다. */
+const stay = (name: string, extra: Record<string, unknown> = {}) => ({
+  kind: "stay",
+  name,
+  area: "신도림",
+  category: "호텔",
+  summary: `${name} 소개 문장입니다.`,
+  reason: "역에서 가까워요.",
+  sourceUrl: storeUrl(name),
+  address: "서울 구로구 새말로 1",
+  priceHint: "1박 12만원대 (12.5~6 기준)",
+  tags: ["평점 9.2", "후기 1,203"],
+  lat: 37.5088,
+  lng: 126.8912,
+  ...extra,
+});
+
+test("지역 수첩 숙소 탭에서 날짜를 골라 이 동네 숙소를 찾고, 가 보고 싶은 숙소로 모은다", async ({
+  page,
+  request,
+}) => {
+  await resetPlaceData();
+  const token = await login(request);
+  const headers = { "x-auth-token": token };
+  // 묵었던 숙소 리뷰는 숙소 찾기에 넣고, 맛집 리뷰는 넣지 않는다.
+  const hotel = await seedPlaceEntry("1박", "7001", "지난번 호텔", "호텔");
+  await request.post("/api/places/reviews", {
+    headers,
+    data: { entryId: hotel, author: "yeeun", rating: 5, review: "조식이 맛있어" },
+  });
+  const noodle = await seedPlaceEntry("국수", "7002", "맛있는 국수", "국수");
+  await request.post("/api/places/reviews", {
+    headers,
+    data: { entryId: noodle, author: "wonchan", rating: 5 },
+  });
+  const areaRes = await request.post("/api/places/areas", {
+    headers,
+    data: {
+      name: "신도림",
+      lat: 37.509,
+      lng: 126.8916,
+      address: "서울 구로구 새말로 117",
+    },
+  });
+  const area = (await areaRes.json()) as { id: number };
+
+  // 숙소 찾기는 날짜가 있어야 하고, 지난 날짜는 안 된다.
+  const searchApi = (data: unknown) =>
+    request.post(`/api/places/areas/${area.id}/search`, { headers, data });
+  expect((await searchApi({ mode: "stay" })).status()).toBe(400);
+  expect((await searchApi({ mode: "stay", checkin: daysAgo(1) })).status()).toBe(400);
+  expect(
+    (
+      await searchApi({
+        mode: "stay",
+        checkin: kst().add(200, "day").format("YYYY-MM-DD"),
+      })
+    ).status()
+  ).toBe(400);
+
+  nextSpots = () => [
+    stay("샘플 호텔"),
+    stay("샘플 게스트하우스", { category: "게스트하우스", lat: 37.5079, lng: 126.8897 }),
+  ];
+
+  await page.context().route("https://tiles.openfreemap.org/**", (route) =>
+    route.request().url().includes("/styles/")
+      ? route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
+        })
+      : route.abort()
+  );
+  await page.addInitScript((value) => {
+    localStorage.setItem(
+      "trable-auth",
+      JSON.stringify({ state: { token: value }, version: 0 })
+    );
+  }, token);
+  await page.goto(`/places?area=${area.id}&kind=stay`);
+  await page.getByRole("heading", { name: "지역 수첩" }).waitFor();
+  // 숙소 탭에서는 다녀온 곳 구역 없이 숙소만 본다.
+  await expect(page.getByRole("region", { name: "다녀온 곳" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "가 보고 싶은 숙소" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "숙소", exact: true })).toContainText(
+    "지난번 호텔"
+  );
+
+  await page.getByRole("button", { name: "이 동네 숙소 찾아 줘" }).click();
+  const dialog = page.getByRole("dialog", { name: "신도림 숙소 찾기" });
+  const saturday = kst().startOf("day");
+  const nextSat = saturday.add((6 - saturday.day() + 7) % 7, "day").format("YYYY-MM-DD");
+  await expect(dialog.getByLabel("체크인 날짜")).toHaveValue(nextSat);
+  const checkin = kst().add(10, "day");
+  await dialog.getByLabel("체크인 날짜").fill(checkin.format("YYYY-MM-DD"));
+  await dialog.getByRole("button", { name: "찾아 줘" }).click();
+  await expect(dialog).toBeHidden();
+
+  const fresh = page.getByRole("region", { name: "하치와레 새 추천" });
+  await expect(fresh.getByRole("article")).toHaveCount(2, { timeout: 20_000 });
+  const hotelCard = fresh.getByRole("article", { name: "샘플 호텔" });
+  await expect(hotelCard).toContainText("1박 12만원대 (12.5~6 기준)");
+  await expect(
+    hotelCard.getByRole("link", { name: "샘플 호텔 NOL에서 보기" })
+  ).toHaveAttribute("href", storeUrl("샘플 호텔"));
+
+  const input = runs.get("run_1")?.input ?? "";
+  const checkout = checkin.add(1, "day");
+  expect(input).toContain("[지역 수첩 숙소 찾기] 신도림");
+  expect(input).toContain(`체크인 ${checkin.format("YYYY.MM.DD (dd)")}`);
+  expect(input).toContain(
+    `opencli yanolja search "신도림 호텔" --checkin ${checkin.format("YYYY-MM-DD")} --checkout ${checkout.format("YYYY-MM-DD")}`
+  );
+  expect(input).toContain("반경 1.5km 안만");
+  expect(input).toContain('"kind": "stay"');
+  expect(input).toContain('지난번 호텔(★5, 예은 "조식이 맛있어")');
+  expect(input).not.toContain("맛있는 국수");
+
+  await hotelCard.getByRole("button", { name: "가 보고 싶어" }).click();
+  const wantStays = page.getByRole("region", { name: "가 보고 싶은 숙소" });
+  await expect(wantStays.getByRole("article", { name: "샘플 호텔" })).toBeVisible();
+  await expect(fresh.getByRole("article")).toHaveCount(1);
+
+  // 맛집·카페 탭에서는 숙소 추천이 보이지 않는다.
+  await page
+    .getByRole("group", { name: "종류" })
+    .getByRole("button", { name: "맛집·카페" })
+    .click();
+  await expect(page.getByRole("region", { name: "하치와레 새 추천" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "가 보고 싶은 곳" })).not.toContainText(
+    "샘플 호텔"
+  );
+
+  // 숙소도 오늘 데이트 추천에 쌓이고, NOL 링크로 연다.
+  await openDates(page, token);
+  const card = page.getByRole("article", { name: "샘플 게스트하우스" });
+  await expect(card.getByRole("link", { name: "NOL에서 보기" })).toHaveAttribute(
+    "href",
+    storeUrl("샘플 게스트하우스")
+  );
+  const { rows } = await pool.query("select name, kind from date_spots order by id");
+  expect(rows).toEqual([
+    { name: "샘플 호텔", kind: "stay" },
+    { name: "샘플 게스트하우스", kind: "stay" },
+  ]);
+});
+
+test("숙소는 NOL 페이지 주소가 있어야 받고, 매일 조사에는 숙소를 넣지 않는다", async ({
+  request,
+}) => {
+  const token = await login(request);
+  const { rows } = await pool.query<{ id: number }>(
+    "insert into date_spot_digests (day_key) values ($1) returning id",
+    [today()]
+  );
+  const post = (spots: unknown[]) =>
+    request.post("/api/dates/agent/digests", {
+      headers: { "x-monitor-key": ingestKey },
+      data: { digestId: rows[0].id, spots },
+    });
+  const missing = await post([stay("주소 없는 호텔", { sourceUrl: null })]);
+  expect(missing.status()).toBe(400);
+  expect(await missing.text()).toContain("NOL 숙소 페이지");
+  expect((await post([stay("주소 있는 호텔")])).status()).toBe(201);
+
+  nextSpots = () => [];
+  await request.post("/api/dates", { headers: { "x-auth-token": token } });
+  await expect
+    .poll(() => runs.get("run_1")?.input ?? "")
+    .toContain('숙소("stay")는 넣지 마');
 });

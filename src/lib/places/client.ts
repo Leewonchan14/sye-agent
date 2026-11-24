@@ -70,8 +70,20 @@ export const useAreaSpotMutations = () => {
   const refresh = () => queryClient.invalidateQueries({ queryKey: placeKeys.all });
   return {
     search: useMutation({
-      mutationFn: (areaId: number) =>
-        ledgerRequest(token, `/api/places/areas/${areaId}/search`, { method: "POST" }),
+      mutationFn: ({
+        areaId,
+        ...body
+      }: {
+        areaId: number;
+        /** places: 가 볼 곳·즐길 거리 · stay: 숙소(NOL) */
+        mode?: "places" | "stay";
+        /** 숙소 체크인 날짜 (YYYY-MM-DD) */
+        checkin?: string;
+      }) =>
+        ledgerRequest(token, `/api/places/areas/${areaId}/search`, {
+          method: "POST",
+          body,
+        }),
       onSuccess: refresh,
     }),
     react: useMutation({

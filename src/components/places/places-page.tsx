@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { kst } from "@/lib/kst";
 import { formatWon } from "@/lib/ledger/format";
 import {
   useAreaMutations,
@@ -267,6 +268,11 @@ const PlaceItem = ({ card, selected }: { card: PlaceCard; selected: boolean }) =
                   ` · 마지막 ${card.lastDate.slice(2).replace(/-/g, ".")}`}
               </p>
             )}
+            {card.source === "spot" && card.priceHint && (
+              <p className="text-[12px] font-medium text-body tabular-nums">
+                {card.priceHint}
+              </p>
+            )}
             {card.source === "spot" && card.reason && (
               <p className="line-clamp-2 text-[12px] text-body">{card.reason}</p>
             )}
@@ -281,6 +287,21 @@ const PlaceItem = ({ card, selected }: { card: PlaceCard; selected: boolean }) =
                 className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
               >
                 <ExternalLink />
+              </a>
+            )}
+            {card.source === "spot" && card.sourceUrl && (
+              <a
+                href={card.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={
+                  card.kind === "stay"
+                    ? `${card.name} NOL에서 보기`
+                    : `${card.name} 소개 페이지 열기`
+                }
+                className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              >
+                {card.kind === "stay" ? <BedDouble /> : <ExternalLink />}
               </a>
             )}
             {card.instagramUrl && (
@@ -402,6 +423,71 @@ const Section = ({
   );
 };
 
+/* ───────── 숙소 찾기 ───────── */
+
+/** 다가오는 토요일 (오늘이 토요일이면 오늘) */
+const nextSaturday = () => {
+  const today = kst().startOf("day");
+  return today.add((6 - today.day() + 7) % 7, "day").format("YYYY-MM-DD");
+};
+
+const StaySearchDialog = ({
+  open,
+  onOpenChange,
+  areaName,
+  pending,
+  onSearch,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  areaName: string;
+  pending: boolean;
+  onSearch: (checkin: string) => void;
+}) => {
+  const [checkin, setCheckin] = useState(nextSaturday);
+  const today = kst().format("YYYY-MM-DD");
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{areaName} 숙소 찾기</DialogTitle>
+          <DialogDescription>
+            가격은 날짜마다 달라서, 묵을 날을 정해 1박 기준으로 NOL(야놀자)에서 찾아요.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (checkin) onSearch(checkin);
+          }}
+        >
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-muted">
+            체크인
+            <Input
+              type="date"
+              aria-label="체크인 날짜"
+              min={today}
+              value={checkin}
+              onChange={(event) => setCheckin(event.target.value)}
+            />
+          </label>
+          {checkin && (
+            <p className="text-[12px] text-muted">
+              {kst(checkin).format("M.D (dd)")} →{" "}
+              {kst(checkin).add(1, "day").format("M.D (dd)")} 1박 2인
+            </p>
+          )}
+          <Button type="submit" disabled={!checkin || pending}>
+            {pending ? <Spinner /> : <BedDouble />}
+            찾아 줘
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 /* ───────── 화면 ───────── */
 
 const NoAreas = ({ onAdd }: { onAdd: () => void }) => (
@@ -438,12 +524,14 @@ export const PlacesPage = () => {
 
   const area = data?.area ?? null;
   // 숙소 탭은 숙소 구역만, 맛집·카페·놀거리 탭은 숙소 구역을 빼고 보여 준다.
-  const showStays = kind === "all" || kind === "stay";
-  const showOthers = kind !== "stay";
-  const want = showOthers ? byKind(data?.want ?? [], kind) : [];
-  const fresh = showOthers ? byKind(data?.fresh ?? [], kind) : [];
-  const visited = showOthers ? byKind(data?.visited ?? [], kind) : [];
+  // 숙소 탭은 숙소만(새 추천·가 보고 싶은 숙소·묵었던 숙소), 맛집·카페·놀거리 탭은 숙소 구역을 뺀다.
+  const stayTab = kind === "stay";
+  const showStays = kind === "all" || stayTab;
+  const want = byKind(data?.want ?? [], kind);
+  const fresh = byKind(data?.fresh ?? [], kind);
+  const visited = stayTab ? [] : byKind(data?.visited ?? [], kind);
   const stays = showStays ? (data?.stays ?? []) : [];
+  const [stayDialog, setStayDialog] = useState(false);
 
   const pins: MapPinData[] = [
     ...fresh.map((card) => ({ card, color: FRESH_PIN })),
@@ -582,15 +670,24 @@ export const PlacesPage = () => {
                 variant="outline"
                 disabled={searching}
                 onClick={() =>
-                  search.mutate(area.id, {
-                    onSuccess: () =>
-                      toast.success(`하치와레가 ${area.name}에서 찾기 시작했어요.`),
-                    onError: (err) => toast.error(err.message),
-                  })
+                  stayTab
+                    ? setStayDialog(true)
+                    : search.mutate(
+                        { areaId: area.id },
+                        {
+                          onSuccess: () =>
+                            toast.success(`하치와레가 ${area.name}에서 찾기 시작했어요.`),
+                          onError: (err) => toast.error(err.message),
+                        }
+                      )
                 }
               >
-                {searching ? <Spinner /> : <Sparkles />}
-                {searching ? "하치와레가 찾는 중" : "이 동네 더 찾아 줘"}
+                {searching ? <Spinner /> : stayTab ? <BedDouble /> : <Sparkles />}
+                {searching
+                  ? "하치와레가 찾는 중"
+                  : stayTab
+                    ? "이 동네 숙소 찾아 줘"
+                    : "이 동네 더 찾아 줘"}
               </Button>
             </div>
 
@@ -605,7 +702,7 @@ export const PlacesPage = () => {
                 />
               </div>
               <div className="flex flex-col gap-6">
-                {showOthers && (fresh.length > 0 || searching) && (
+                {(fresh.length > 0 || searching) && (
                   <Section
                     title="하치와레 새 추천"
                     icon={Sparkles}
@@ -614,23 +711,25 @@ export const PlacesPage = () => {
                     empty="하치와레가 이 동네를 찾고 있어요. 다 찾으면 여기에 보여요."
                   />
                 )}
-                {showOthers && (
-                  <>
-                    <Section
-                      title="가 보고 싶은 곳"
-                      icon={Heart}
-                      cards={want}
-                      selectedKey={selectedKey}
-                      empty="데이트 추천에서 '가 보고 싶어'로 표시한 이 동네 장소가 여기에 모여요."
-                    />
-                    <Section
-                      title="다녀온 곳"
-                      icon={Utensils}
-                      cards={visited}
-                      selectedKey={selectedKey}
-                      empty="가계부에 네이버 지도 링크를 남긴 이 동네 장소가 여기에 모여요."
-                    />
-                  </>
+                <Section
+                  title={stayTab ? "가 보고 싶은 숙소" : "가 보고 싶은 곳"}
+                  icon={Heart}
+                  cards={want}
+                  selectedKey={selectedKey}
+                  empty={
+                    stayTab
+                      ? "'이 동네 숙소 찾아 줘'로 하치와레가 찾아 온 숙소 중 가 보고 싶은 곳이 여기에 모여요."
+                      : "데이트 추천에서 '가 보고 싶어'로 표시한 이 동네 장소가 여기에 모여요."
+                  }
+                />
+                {!stayTab && (
+                  <Section
+                    title="다녀온 곳"
+                    icon={Utensils}
+                    cards={visited}
+                    selectedKey={selectedKey}
+                    empty="가계부에 네이버 지도 링크를 남긴 이 동네 장소가 여기에 모여요."
+                  />
                 )}
                 {showStays && (
                   <Section
@@ -644,6 +743,29 @@ export const PlacesPage = () => {
               </div>
             </div>
           </>
+        )}
+
+        {area && (
+          <StaySearchDialog
+            open={stayDialog}
+            onOpenChange={setStayDialog}
+            areaName={area.name}
+            pending={search.isPending}
+            onSearch={(checkin) =>
+              search.mutate(
+                { areaId: area.id, mode: "stay", checkin },
+                {
+                  onSuccess: () => {
+                    setStayDialog(false);
+                    toast.success(
+                      `하치와레가 ${area.name} 숙소를 ${kst(checkin).format("M.D")} 1박 기준으로 찾기 시작했어요.`
+                    );
+                  },
+                  onError: (err) => toast.error(err.message),
+                }
+              )
+            }
+          />
         )}
 
         <AddAreaDialog

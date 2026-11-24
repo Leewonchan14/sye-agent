@@ -227,7 +227,8 @@ const openPlaces = async (page: Page, path = "/places") => {
   await page.getByRole("heading", { name: "지역 수첩" }).waitFor();
 };
 
-const section = (page: Page, name: string) => page.getByRole("region", { name });
+const section = (page: Page, name: string) =>
+  page.getByRole("region", { name, exact: true });
 const cards = (page: Page, name: string) => section(page, name).getByRole("article");
 
 test("지역을 이름으로 찾아 추가하면 역이 먼저 나오고, 고른 곳이 지역 가운데가 된다", async ({
