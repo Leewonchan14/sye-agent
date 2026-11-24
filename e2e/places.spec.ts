@@ -390,7 +390,7 @@ test("지역 수첩 카드에서 간 날을 골라 리뷰를 남기면 데이트
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "예은" })
     .click();
-  await editor.getByRole("button", { name: "별 5개" }).click();
+  await editor.getByRole("radio", { name: "별 5개" }).click();
   await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("국물이 진해");
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(noodle.getByRole("listitem", { name: "예은 리뷰" })).toContainText(
@@ -408,10 +408,17 @@ test("지역 수첩 카드에서 간 날을 골라 리뷰를 남기면 데이트
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "원찬" })
     .click();
-  await editor.getByRole("button", { name: "별 4개" }).click();
+  // 별 왼쪽 반을 누르면 반 개(3.5)다.
+  await editor.getByRole("radio", { name: "별 3.5개" }).click();
+  await expect(editor.getByRole("radio", { name: "별 3.5개" })).toBeChecked();
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(
-    noodle.getByRole("img", { name: "별점 평균 4.5, 리뷰 2개" })
+    noodle
+      .getByRole("listitem", { name: "원찬 리뷰" })
+      .getByRole("img", { name: "별 3.5개" })
+  ).toBeVisible();
+  await expect(
+    noodle.getByRole("img", { name: "별점 평균 4.3, 리뷰 2개" })
   ).toBeVisible();
   await expect(section(page, "다녀온 곳").getByText("리뷰 없는 곳 1")).toBeVisible();
 
@@ -421,7 +428,7 @@ test("지역 수첩 카드에서 간 날을 골라 리뷰를 남기면 데이트
   );
   expect(rows).toEqual([
     { entry_date: today(), author: "yeeun", rating: 5 },
-    { entry_date: daysAgo(10), author: "wonchan", rating: 4 },
+    { entry_date: daysAgo(10), author: "wonchan", rating: 3.5 },
   ]);
 
   // 반경을 500m로 줄이면 700m쯤 떨어진 공방이 빠진다.
@@ -437,7 +444,7 @@ test("지역 수첩 카드에서 간 날을 골라 리뷰를 남기면 데이트
   await page.goto("/map?place=4001");
   const detail = page.getByRole("region", { name: "신도림 국수집 방문 기록" });
   await expect(
-    detail.getByRole("img", { name: "별점 평균 4.5, 리뷰 2개" })
+    detail.getByRole("img", { name: "별점 평균 4.3, 리뷰 2개" })
   ).toBeVisible();
   const days = detail.getByRole("list", { name: "간 날" }).locator(":scope > li");
   await expect(days.first().getByRole("listitem", { name: "예은 리뷰" })).toBeVisible();

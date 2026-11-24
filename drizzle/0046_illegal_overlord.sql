@@ -1,0 +1,1 @@
+ALTER TABLE "place_reviews" ALTER COLUMN "rating" SET DATA TYPE double precision;

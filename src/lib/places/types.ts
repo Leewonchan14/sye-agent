@@ -4,7 +4,9 @@ import { z } from "zod";
 export const PLACE_KINDS = ["eat", "stay", "play"] as const;
 export type PlaceKind = (typeof PLACE_KINDS)[number];
 
-export const MIN_RATING = 1;
+/** 별점은 0.5 단위로 0.5~5 (반 개까지) */
+export const RATING_STEP = 0.5;
+export const MIN_RATING = RATING_STEP;
 export const MAX_RATING = 5;
 export const MAX_REVIEW_LENGTH = 100;
 
@@ -41,7 +43,11 @@ export const REVIEW_AUTHOR_LABEL: Record<ReviewAuthor, string> = {
   yeeun: "예은",
 };
 
-const ratingField = z.number().int().min(MIN_RATING).max(MAX_RATING);
+const ratingField = z
+  .number()
+  .min(MIN_RATING, `별점은 ${MIN_RATING}~${MAX_RATING} 사이여야 해요.`)
+  .max(MAX_RATING, `별점은 ${MIN_RATING}~${MAX_RATING} 사이여야 해요.`)
+  .multipleOf(RATING_STEP, `별점은 ${RATING_STEP} 단위로 골라 주세요.`);
 const reviewField = z
   .string()
   .trim()

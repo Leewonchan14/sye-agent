@@ -660,7 +660,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
     .click();
   // 별을 고르기 전에는 저장할 수 없다.
   await expect(editor.getByRole("button", { name: "저장" })).toBeDisabled();
-  await editor.getByRole("button", { name: "별 4개" }).click();
+  await editor.getByRole("radio", { name: "별 4개" }).click();
   await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("면이 쫄깃");
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(days.first().getByRole("listitem", { name: "원찬 리뷰" })).toContainText(
@@ -673,7 +673,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "예은" })
     .click();
-  await editor.getByRole("button", { name: "별 5개" }).click();
+  await editor.getByRole("radio", { name: "별 5개" }).click();
   // Enter로도 저장한다.
   await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("소스가 진해");
   await editor.getByRole("textbox", { name: "한 줄 리뷰" }).press("Enter");
@@ -688,7 +688,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
     .getByRole("group", { name: "쓴 사람" })
     .getByRole("button", { name: "원찬" })
     .click();
-  await editor.getByRole("button", { name: "별 3개" }).click();
+  await editor.getByRole("radio", { name: "별 3개" }).click();
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(days.nth(1).getByRole("listitem", { name: "원찬 리뷰" })).toBeVisible();
 
@@ -721,7 +721,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   await expect(editor.getByRole("textbox", { name: "한 줄 리뷰" })).toHaveValue(
     "면이 쫄깃"
   );
-  await editor.getByRole("button", { name: "별 2개" }).click();
+  await editor.getByRole("radio", { name: "별 2개" }).click();
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(
     detail.getByRole("img", { name: "별점 평균 3.3, 리뷰 3개" })
@@ -755,7 +755,9 @@ test("리뷰 API는 잘못된 값과 리뷰를 남길 수 없는 내역을 막�
   for (const data of [
     { ...base, rating: 6 },
     { ...base, rating: 0 },
-    { ...base, rating: 3.5 },
+    // 0.5 단위만 받는다.
+    { ...base, rating: 3.3 },
+    { ...base, rating: 0.25 },
     { ...base, author: "someone" },
     { ...base, review: "가".repeat(101) },
     // 지도 링크가 없는 지출
@@ -775,8 +777,10 @@ test("리뷰 API는 잘못된 값과 리뷰를 남길 수 없는 내역을 막�
     rating: 4,
     review: "최고",
   });
-  // 같은 사람이 같은 내역에 또 남길 수도 있다.
-  expect((await post({ ...base, rating: 2 })).status()).toBe(201);
+  // 같은 사람이 같은 내역에 또 남길 수도 있다. 반 개도 된다.
+  const half = await post({ ...base, rating: 2.5 });
+  expect(half.status()).toBe(201);
+  expect(await half.json()).toMatchObject({ rating: 2.5 });
 
   const listed = await request.get(`/api/places/reviews?entryId=${lunch}`, { headers });
   expect(((await listed.json()) as { reviews: unknown[] }).reviews).toHaveLength(2);
@@ -813,7 +817,8 @@ test("리뷰 API는 잘못된 값과 리뷰를 남길 수 없는 내역을 막�
     }[];
   };
   const pasta = places.find((place) => place.key === "2001");
-  expect(pasta?.rating).toEqual({ average: 3, count: 2 });
+  // (4 + 2.5) / 2 = 3.25 → 소수 첫째 자리로 3.3
+  expect(pasta?.rating).toEqual({ average: 3.3, count: 2 });
   expect(pasta?.entries[0].reviews.map((item) => item.author)).toEqual([
     "yeeun",
     "wonchan",
@@ -869,7 +874,7 @@ test("가계부 내역 창에서 둘이 각자 리뷰를 남기고, 목록 줄�
       .getByRole("group", { name: "쓴 사람" })
       .getByRole("button", { name: author })
       .click();
-    await editor.getByRole("button", { name: stars }).click();
+    await editor.getByRole("radio", { name: stars }).click();
     // Enter는 리뷰만 저장하고 내역 창은 그대로 둔다.
     await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill(text);
     await editor.getByRole("textbox", { name: "한 줄 리뷰" }).press("Enter");
@@ -918,7 +923,7 @@ test("새 내역을 추가하면서 지도 링크와 리뷰 하나를 같이 남
   await review.getByRole("textbox", { name: "한 줄 리뷰" }).fill("자리가 넓어");
   await dialog.getByRole("button", { name: "저장" }).click();
   await expect(page.getByText("리뷰를 남기려면 별점도 골라 주세요.")).toBeVisible();
-  await review.getByRole("button", { name: "별 3개" }).click();
+  await review.getByRole("radio", { name: "별 3개" }).click();
   await dialog.getByRole("button", { name: "저장" }).click();
   await expect(dialog).toBeHidden();
 
