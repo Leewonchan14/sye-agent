@@ -23,7 +23,7 @@ export const GET = async (req: Request) => {
   }
 };
 
-/** 내역에 리뷰 남기기: { entryId, author: wonchan|yeeun, rating: 1~5, review? } */
+/** 내역에 리뷰 남기기: { entryId, author: wonchan|yeeun, rating: 0.5~5(0.5 단위), review? } */
 export const POST = async (req: Request) => {
   const authError = await requireAuth(req);
   if (authError) return authError;

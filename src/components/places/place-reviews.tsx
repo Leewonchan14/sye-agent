@@ -1,9 +1,9 @@
 "use client";
 
-import { Pencil, Plus, Star } from "lucide-react";
+import { Pencil, Plus, Star, StarHalf } from "lucide-react";
 import { toast } from "sonner";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
   MAX_REVIEW_LENGTH,
   type PlaceRatingSummary,
   type PlaceReview,
+  RATING_STEP,
   REVIEW_AUTHOR_LABEL,
   REVIEW_AUTHORS,
   type ReviewAuthor,
@@ -31,6 +32,25 @@ import { cn } from "@/lib/utils";
 const STARS = Array.from({ length: MAX_RATING }, (_, index) => index + 1);
 
 /* ───────── 별 ───────── */
+
+type StarFill = "full" | "half" | "empty";
+
+/** `star`번째 별을 얼마나 채울지. 0.5 단위 별점이라 반 개까지 있다. */
+const starFill = (rating: number, star: number): StarFill =>
+  rating >= star ? "full" : rating >= star - 0.5 ? "half" : "empty";
+
+/** 별 하나 — 빈 별 위에 꽉 찬 별이나 왼쪽 반 별을 겹친다. */
+const StarIcon = ({ fill, className }: { fill: StarFill; className?: string }) => (
+  <span aria-hidden className="relative inline-flex">
+    <Star className={cn("text-primary-disabled", className)} />
+    {fill === "full" && (
+      <Star className={cn("absolute inset-0 fill-current", className)} />
+    )}
+    {fill === "half" && (
+      <StarHalf className={cn("absolute inset-0 fill-current", className)} />
+    )}
+  </span>
+);
 
 /** 읽기 전용 별 — 리뷰 줄에 작게 붙인다. */
 export const RatingStars = ({
@@ -45,16 +65,8 @@ export const RatingStars = ({
     aria-label={`별 ${rating}개`}
     className={cn("inline-flex shrink-0 items-center gap-px text-primary", className)}
   >
-    {STARS.map((value) => (
-      <Star
-        key={value}
-        aria-hidden
-        className={cn(
-          "size-3",
-          value <= rating && "fill-current",
-          value > rating && "text-primary-disabled"
-        )}
-      />
+    {STARS.map((star) => (
+      <StarIcon key={star} fill={starFill(rating, star)} className="size-3" />
     ))}
   </span>
 );
@@ -81,34 +93,70 @@ export const RatingSummary = ({
   </span>
 );
 
-/** 별 1~5 고르기. 버튼이라 다른 폼 안에도 넣을 수 있다. */
+/**
+ * 별 0.5~5 고르기. 별 하나를 왼쪽 반(0.5)·오른쪽 반(1)으로 나눈 라디오라
+ * 방향키로도 반 개씩 움직인다. 다른 폼 안에 있어도 Enter가 그 폼을 보내지 않고 `onEnter`를 부른다.
+ */
 export const StarPicker = ({
   value,
   onChange,
+  onEnter,
 }: {
   value: number | null;
   onChange: (value: number) => void;
-}) => (
-  <div role="group" aria-label="별점" className="flex items-center gap-0.5">
-    {STARS.map((star) => {
-      const on = value !== null && star <= value;
-      return (
-        <button
-          key={star}
-          type="button"
-          aria-label={`별 ${star}개`}
-          aria-pressed={value === star}
-          onClick={() => onChange(star)}
-          className="rounded-md p-1 text-primary transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <Star
-            className={cn("size-6", on && "fill-current", !on && "text-primary-disabled")}
-          />
-        </button>
-      );
-    })}
-  </div>
-);
+  onEnter?: () => void;
+}) => {
+  const name = useId();
+  const [hover, setHover] = useState<number | null>(null);
+  const shown = hover ?? value;
+  return (
+    <div
+      role="radiogroup"
+      aria-label="별점"
+      className="flex items-center gap-2"
+      onMouseLeave={() => setHover(null)}
+    >
+      <div className="flex items-center">
+        {STARS.map((star) => (
+          <span
+            key={star}
+            className="relative rounded-md p-1 text-primary has-focus-visible:ring-2 has-focus-visible:ring-ring"
+          >
+            <StarIcon
+              fill={shown === null ? "empty" : starFill(shown, star)}
+              className="size-7"
+            />
+            {[star - RATING_STEP, star].map((option, index) => (
+              <input
+                key={option}
+                type="radio"
+                name={name}
+                value={option}
+                aria-label={`별 ${option}개`}
+                checked={value === option}
+                onChange={() => onChange(option)}
+                onMouseEnter={() => setHover(option)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  onEnter?.();
+                }}
+                className={cn(
+                  "absolute inset-y-0 m-0 w-1/2 cursor-pointer appearance-none opacity-0",
+                  index === 0 && "left-0",
+                  index === 1 && "right-0"
+                )}
+              />
+            ))}
+          </span>
+        ))}
+      </div>
+      <span aria-hidden className="w-7 text-[13px] font-medium text-ink tabular-nums">
+        {shown?.toFixed(1)}
+      </span>
+    </div>
+  );
+};
 
 /* ───────── 쓴 사람 ───────── */
 
@@ -194,6 +242,7 @@ export const ReviewFields = ({
     <StarPicker
       value={draft.rating}
       onChange={(rating) => onChange({ ...draft, rating })}
+      onEnter={onEnter}
     />
     <Input
       aria-label="한 줄 리뷰"

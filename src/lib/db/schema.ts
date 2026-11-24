@@ -754,8 +754,8 @@ export const placeReviews = pgTable(
       .references(() => ledgerEntries.id, { onDelete: "cascade" }),
     /** wonchan | yeeun */
     author: text("author").notNull(),
-    /** 1~5 */
-    rating: integer("rating").notNull(),
+    /** 0.5~5, 0.5 단위 */
+    rating: doublePrecision("rating").notNull(),
     /** 한 줄 리뷰 (안 써도 된다) */
     review: text("review").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
