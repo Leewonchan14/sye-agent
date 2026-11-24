@@ -9,14 +9,16 @@ import {
 import { ExternalLink, MapPin, MapPinned, RefreshCw, X } from "lucide-react";
 import {
   createParser,
+  debounce,
   parseAsInteger,
+  parseAsString,
   parseAsStringLiteral,
   useQueryState,
   useQueryStates,
 } from "nuqs";
 import { toast } from "sonner";
 
-import { useEffect, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -28,6 +30,7 @@ import {
 import { DayRouteButton } from "@/components/ledger/day-route/day-route-button";
 import { PlacePhotoCarousel } from "@/components/ledger/place-photos";
 import { formatPeriod, MapPeriodFilter } from "@/components/map/map-period-filter";
+import { PlaceListControls } from "@/components/map/place-list-controls";
 import { EntryReviews, RatingSummary } from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -37,12 +40,19 @@ import { kst } from "@/lib/kst";
 import { LEDGER_LIVE_QUERY, ledgerKeys, ledgerRequest } from "@/lib/ledger/client";
 import { formatWon } from "@/lib/ledger/format";
 import {
+  filterMapPlaces,
+  MAP_RATED_FILTERS,
+  MAP_SORTS,
+  pickReviewSnippet,
+} from "@/lib/ledger/map-filter";
+import {
   MAP_RANGES,
   toMapSearchParams,
   type LedgerMapPayload,
   type LedgerMapPayment,
   type LedgerMapPlace,
 } from "@/lib/ledger/map-types";
+import { REVIEW_AUTHOR_LABEL } from "@/lib/places/types";
 import { cn } from "@/lib/utils";
 
 /** 지도(maplibre)는 브라우저에서만 그린다. 서버 렌더링과 첫 번들에서 뺀다. */
@@ -79,6 +89,15 @@ const periodParsers = {
 };
 /** 고른 장소. 공유·새로고침해도 같은 장소가 열린다. */
 const placeParser = { history: "replace" } as const;
+/**
+ * 목록 검색·정렬·리뷰 필터. 기간과 달리 히스토리를 쌓지 않는다.
+ * 검색어는 화면에는 바로 반영하고, 주소는 입력이 멈춘 뒤에 바꾼다.
+ */
+const listParsers = {
+  q: parseAsString.withDefault("").withOptions({ limitUrlUpdates: debounce(300) }),
+  sort: parseAsStringLiteral(MAP_SORTS).withDefault("visits"),
+  rated: parseAsStringLiteral(MAP_RATED_FILTERS).withDefault("all"),
+};
 
 /** 헤더 요약 앞에 붙이는 기간 이름. 전체·올해·이번 달은 칩으로 충분하다. */
 const periodTitle = (data: LedgerMapPayload) => {
@@ -243,51 +262,70 @@ const PlaceDetail = ({
 
 const PlaceList = ({
   places,
+  query,
   selectedKey,
   onSelect,
 }: {
   places: LedgerMapPlace[];
+  /** 검색어. 리뷰 글에 걸렸으면 그 리뷰를 보여 준다. */
+  query: string;
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }) => (
   <ol aria-label="다녀온 곳" className="flex flex-col gap-1">
-    {places.map((place, index) => (
-      <li key={place.key}>
-        <button
-          type="button"
-          aria-current={place.key === selectedKey || undefined}
-          onClick={() => onSelect(place.key)}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-canvas-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            place.key === selectedKey && "bg-canvas-card"
-          )}
-        >
-          <span className="w-4 shrink-0 text-center text-[12px] text-muted tabular-nums">
-            {index + 1}
-          </span>
-          <PlacePhoto src={place.imageUrl} className="size-11 rounded-lg" />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[14px] font-medium text-ink">
-              {place.name}
+    {places.map((place, index) => {
+      const snippet = pickReviewSnippet(place, query);
+      return (
+        <li key={place.key}>
+          <button
+            type="button"
+            aria-current={place.key === selectedKey || undefined}
+            onClick={() => onSelect(place.key)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-canvas-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              place.key === selectedKey && "bg-canvas-card"
+            )}
+          >
+            <span className="w-4 shrink-0 text-center text-[12px] text-muted tabular-nums">
+              {index + 1}
             </span>
-            <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
-              {place.rating && <RatingSummary rating={place.rating} />}
-              <span className="truncate">
-                {place.category || place.address || "장소"}
+            <PlacePhoto src={place.imageUrl} className="size-11 rounded-lg" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[14px] font-medium text-ink">
+                {place.name}
+              </span>
+              <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+                {place.rating && <RatingSummary rating={place.rating} />}
+                <span className="truncate">
+                  {place.category || place.address || "장소"}
+                </span>
+              </span>
+              {/* 가게를 누르지 않아도 최근 리뷰 한 줄을 본다. 전체 리뷰와 고치기는 장소 카드에서 한다. */}
+              {snippet && (
+                <span
+                  data-testid="review-snippet"
+                  className="mt-0.5 truncate text-[11px] text-body"
+                >
+                  “{snippet.review}”
+                  <span className="text-muted">
+                    {" "}
+                    — {REVIEW_AUTHOR_LABEL[snippet.author]}
+                  </span>
+                </span>
+              )}
+            </span>
+            <span className="flex shrink-0 flex-col items-end">
+              <span className="text-[13px] font-medium text-ink tabular-nums">
+                {place.visits}번
+              </span>
+              <span className="text-[11px] text-muted tabular-nums">
+                {formatWon(place.total)}
               </span>
             </span>
-          </span>
-          <span className="flex shrink-0 flex-col items-end">
-            <span className="text-[13px] font-medium text-ink tabular-nums">
-              {place.visits}번
-            </span>
-            <span className="text-[11px] text-muted tabular-nums">
-              {formatWon(place.total)}
-            </span>
-          </span>
-        </button>
-      </li>
-    ))}
+          </button>
+        </li>
+      );
+    })}
   </ol>
 );
 
@@ -317,6 +355,9 @@ export const DateMapPage = () => {
   const queryClient = useQueryClient();
   const [period, setPeriod] = useQueryStates(periodParsers, { history: "push" });
   const [selectedKey, setSelectedKey] = useQueryState("place", placeParser);
+  const [list, setList] = useQueryStates(listParsers, { history: "replace" });
+  // 장소가 많아도 글자를 칠 때 입력창이 밀리지 않게 거르기는 한 박자 늦게 한다.
+  const query = useDeferredValue(list.q.trim());
   // 기간에 쓰지 않는 값(예: 전체인데 남은 from)은 API에 보내지 않는다.
   const search = toMapSearchParams(period);
 
@@ -368,7 +409,15 @@ export const DateMapPage = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hasSelection, setSelectedKey]);
 
-  const places = data?.places ?? [];
+  const places = useMemo(() => data?.places ?? [], [data]);
+  // 검색·리뷰 필터로 거른 장소. 지도 핀과 목록이 함께 따른다.
+  const shown = useMemo(
+    () => filterMapPlaces(places, { query, sort: list.sort, rated: list.rated }),
+    [places, query, list.sort, list.rated]
+  );
+  const filtering = Boolean(query) || list.rated !== "all";
+  const clearFilters = () => void setList({ q: null, rated: null });
+  // 걸러져 목록에 없는 장소도 카드는 계속 열어 둔다(보고 있던 것이 갑자기 닫히지 않게).
   const selected = places.find((place) => place.key === selectedKey) ?? null;
   const totalVisits = places.reduce((sum, place) => sum + place.visits, 0);
   const totalSpent = places.reduce((sum, place) => sum + place.total, 0);
@@ -473,11 +522,7 @@ export const DateMapPage = () => {
               ref={mapBoxRef}
               className="h-[58vh] min-h-[320px] scroll-mt-4 overflow-hidden rounded-2xl ring-1 ring-hairline md:sticky md:top-4 md:h-[calc(100dvh-180px)]"
             >
-              <PlaceMap
-                places={places}
-                selectedKey={selectedKey}
-                onSelect={selectPlace}
-              />
+              <PlaceMap places={shown} selectedKey={selectedKey} onSelect={selectPlace} />
             </div>
             <div className="flex flex-col gap-4">
               {/*
@@ -491,11 +536,43 @@ export const DateMapPage = () => {
                   <PlaceDetail place={selected} onClose={clearPlace} />
                 </div>
               )}
-              <PlaceList
-                places={places}
-                selectedKey={selectedKey}
-                onSelect={selectFromList}
+              <PlaceListControls
+                query={list.q}
+                onQueryChange={(value) => void setList({ q: value || null })}
+                sort={list.sort}
+                onSortChange={(value) => void setList({ sort: value })}
+                rated={list.rated}
+                onRatedChange={(value) => void setList({ rated: value })}
               />
+              {filtering && (
+                <p
+                  className="-mt-2 flex items-center justify-between gap-2 px-1 text-[12px] text-muted tabular-nums"
+                  aria-live="polite"
+                >
+                  <span>
+                    {places.length}곳 중 {shown.length}곳
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="rounded-md px-1 text-primary hover:underline"
+                  >
+                    검색·필터 지우기
+                  </button>
+                </p>
+              )}
+              {shown.length > 0 ? (
+                <PlaceList
+                  places={shown}
+                  query={query}
+                  selectedKey={selectedKey}
+                  onSelect={selectFromList}
+                />
+              ) : (
+                <p className="rounded-xl border border-dashed border-hairline px-4 py-8 text-center text-[13px] text-muted">
+                  조건에 맞는 곳이 없어요.
+                </p>
+              )}
             </div>
           </div>
         )}
