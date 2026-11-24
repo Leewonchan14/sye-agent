@@ -390,11 +390,19 @@ const ReviewItem = ({
       aria-label={`${author} 리뷰`}
       className={cn(
         "flex items-start gap-2 text-[13px] leading-snug",
-        compact && "gap-1.5 text-[12px]"
+        // 목록 줄 안에서는 시각·분류 줄(11px)과 같은 크기로 둔다.
+        compact && "gap-1.5 text-[11px]"
       )}
     >
-      <span className="shrink-0 font-medium text-ink">{author}</span>
-      <RatingStars rating={review.rating} className="mt-0.5" />
+      <span
+        className={cn(
+          "shrink-0 font-medium text-ink",
+          compact && "font-normal text-body"
+        )}
+      >
+        {author}
+      </span>
+      <RatingStars rating={review.rating} className={cn("mt-0.5", compact && "mt-px")} />
       <span className="min-w-0 flex-1 break-words text-body">
         {review.review}
         {showDate && (
@@ -407,9 +415,12 @@ const ReviewItem = ({
         type="button"
         aria-label={`${author} 리뷰 고치기`}
         onClick={() => setEditing(true)}
-        className="-mt-0.5 shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-soft hover:text-ink"
+        className={cn(
+          "-mt-0.5 shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-soft hover:text-ink",
+          compact && "-mt-1"
+        )}
       >
-        <Pencil className="size-3.5" />
+        <Pencil className={cn("size-3.5", compact && "size-3")} />
       </button>
     </li>
   );
