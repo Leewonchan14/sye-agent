@@ -885,12 +885,17 @@ test("가계부 내역 창에서 둘이 각자 리뷰를 남기고, 목록 줄�
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "취소" }).click();
 
-  // 리뷰는 바로 저장되어 내역 줄에 둘 다 보인다.
-  const lunchRow = row("파스타 점심");
-  await expect(lunchRow.getByText("면이 쫄깃")).toBeVisible();
-  await expect(lunchRow.getByText("또 오자")).toBeVisible();
-  await expect(lunchRow.getByRole("img", { name: "별 4개" })).toBeVisible();
-  await expect(lunchRow.getByRole("img", { name: "별 5개" })).toBeVisible();
+  // 리뷰는 바로 저장되어 내역 줄 아래에 둘 다 보인다.
+  await expect(dialog).toBeHidden();
+  const lunchReviews = page.getByRole("main").getByRole("list", { name: "리뷰" });
+  await expect(lunchReviews.getByRole("listitem", { name: "원찬 리뷰" })).toContainText(
+    "면이 쫄깃"
+  );
+  await expect(lunchReviews.getByRole("listitem", { name: "예은 리뷰" })).toContainText(
+    "또 오자"
+  );
+  await expect(lunchReviews.getByRole("img", { name: "별 4개" })).toBeVisible();
+  await expect(lunchReviews.getByRole("img", { name: "별 5개" })).toBeVisible();
 
   // 데이트 지도에도 같은 리뷰와 평균이 보인다.
   await page.goto("/map?place=2001");
@@ -901,6 +906,50 @@ test("가계부 내역 창에서 둘이 각자 리뷰를 남기고, 목록 줄�
   await expect(detail.getByRole("listitem", { name: "예은 리뷰" })).toContainText(
     "또 오자"
   );
+});
+
+test("가계부 목록 줄에서 내역 창을 열지 않고 리뷰를 쓰고 고친다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  await createEntry(request, { memo: "편의점", amount: 3_000 });
+
+  await openLedger(page, token);
+  // 지도 링크가 없는 내역 줄에는 리뷰 쓰기가 없다.
+  await expect(page.getByRole("button", { name: "편의점 리뷰 쓰기" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "파스타 점심 리뷰 쓰기" }).click();
+  const editor = page.getByRole("group", { name: "리뷰 쓰기" });
+  await editor
+    .getByRole("group", { name: "쓴 사람" })
+    .getByRole("button", { name: "예은" })
+    .click();
+  await editor.getByRole("radio", { name: "별 4.5개" }).click();
+  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("소스가 진해");
+  await editor.getByRole("button", { name: "저장" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  const item = page.getByRole("listitem", { name: "예은 리뷰" });
+  await expect(item).toContainText("소스가 진해");
+  await expect(item.getByRole("img", { name: "별 4.5개" })).toBeVisible();
+
+  // 연필로 목록에서 바로 고친다.
+  await item.getByRole("button", { name: "예은 리뷰 고치기" }).click();
+  const fix = page.getByRole("group", { name: "리뷰 고치기" });
+  await fix.getByRole("radio", { name: "별 3개" }).click();
+  await fix.getByRole("button", { name: "저장" }).click();
+  await expect(
+    page.getByRole("listitem", { name: "예은 리뷰" }).getByRole("img", { name: "별 3개" })
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(
+    (await pool.query("select author, rating, review from place_reviews")).rows
+  ).toEqual([{ author: "yeeun", rating: 3, review: "소스가 진해" }]);
 });
 
 test("새 내역을 추가하면서 지도 링크와 리뷰 하나를 같이 남긴다", async ({ page }) => {
