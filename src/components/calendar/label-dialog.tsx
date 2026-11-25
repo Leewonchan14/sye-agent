@@ -5,31 +5,37 @@ import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SHEET_CONTENT_CLASS } from "@/components/calendar/calendar-ui";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/lib/auth-store";
 import { calendarRequest } from "@/lib/calendar/client";
+import { useInvalidateCalendar } from "@/lib/calendar/hooks";
 import { LABEL_COLORS, labelColor, type LabelColorKey } from "@/lib/calendar/labels";
 import type { CalendarLabel } from "@/lib/calendar/types";
 import { cn } from "@/lib/utils";
-
-const SHEET_CONTENT_CLASS =
-  "flex max-h-[85dvh] flex-col overflow-hidden left-0 right-0 top-auto bottom-0 max-w-none translate-x-0 translate-y-0 rounded-t-3xl rounded-b-none sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:right-auto sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   labels: CalendarLabel[];
-  onChanged: () => void;
 }
 
-/** 라벨 목록 조회·이름 수정·삭제·추가를 다룬다. 변경되면 `onChanged`로 상위가 갱신한다. */
-export const LabelDialog = ({ open, onOpenChange, labels, onChanged }: Props) => {
+/** 라벨 이름 수정·삭제·추가. 바뀌면 캘린더 쿼리를 다시 불러와 일정 색도 함께 바뀐다. */
+export const LabelDialog = ({ open, onOpenChange, labels }: Props) => {
   const token = useAuthStore((s) => s.token);
+  const onChanged = useInvalidateCalendar();
   const [name, setName] = useState("");
   const [color, setColor] = useState<LabelColorKey>(LABEL_COLORS[0].key);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+
+  const clearDraft = (id: number) =>
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
 
   const addLabel = useMutation({
     mutationFn: () =>
@@ -40,7 +46,7 @@ export const LabelDialog = ({ open, onOpenChange, labels, onChanged }: Props) =>
     onSuccess: () => {
       toast.success("라벨을 추가했어요.");
       setName("");
-      onChanged();
+      void onChanged();
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -52,12 +58,8 @@ export const LabelDialog = ({ open, onOpenChange, labels, onChanged }: Props) =>
         body: JSON.stringify({ id, name: next }),
       }),
     onSuccess: (_data, variables) => {
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[variables.id];
-        return next;
-      });
-      onChanged();
+      clearDraft(variables.id);
+      void onChanged();
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -69,29 +71,17 @@ export const LabelDialog = ({ open, onOpenChange, labels, onChanged }: Props) =>
       }),
     onSuccess: () => {
       toast.success("라벨을 지웠어요.");
-      onChanged();
+      void onChanged();
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
   const commitRename = (id: number) => {
-    const label = labels.find((item) => item.id === id);
-    const value = (drafts[id] ?? label?.name ?? "").trim();
-    if (!value) {
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      toast.error("라벨 이름을 입력해 주세요.");
-      return;
-    }
-    if (value === (label?.name ?? "").trim()) {
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+    const current = (labels.find((item) => item.id === id)?.name ?? "").trim();
+    const value = (drafts[id] ?? current).trim();
+    if (!value) toast.error("라벨 이름을 입력해 주세요.");
+    if (!value || value === current) {
+      clearDraft(id);
       return;
     }
     renameLabel.mutate({ id, name: value });

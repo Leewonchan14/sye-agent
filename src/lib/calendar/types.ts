@@ -2,7 +2,7 @@ export type CalendarOwner = "wonchan" | "yeeun" | "together";
 export type CalendarViewer = "wonchan" | "yeeun";
 export type CalendarRecurrence =
   "none" | "daily" | "weekly" | "biweekly" | "monthly" | "yearly";
-export type CalendarView = "month" | "twoweek" | "couple" | "diary";
+export type CalendarView = "month" | "twoweek" | "couple";
 
 export type LunarDate = { year: number; month: number; day: number; leap: boolean };
 
@@ -70,7 +70,6 @@ export type CalendarDiary = {
   date: string;
   author: CalendarViewer;
   body: string;
-  mood: string;
   photos: DiaryPhoto[];
   createdAt: string;
   updatedAt: string;
@@ -80,7 +79,6 @@ export type CalendarDiarySummary = {
   id: number;
   date: string;
   author: CalendarViewer;
-  mood: string;
   excerpt: string;
   thumbs: string[];
   updatedAt: string;
@@ -139,6 +137,5 @@ export type CalendarDiaryInput = {
   date: string;
   author: CalendarViewer;
   body: string;
-  mood: string;
   photos: DiaryPhoto[];
 };

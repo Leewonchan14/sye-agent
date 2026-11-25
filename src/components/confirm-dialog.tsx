@@ -63,10 +63,11 @@ export const useConfirmDialog = () => {
           )}
         </DialogHeader>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={() => handleClose(false)}>
+          <Button type="button" variant="outline" onClick={() => handleClose(false)}>
             {options.cancelLabel ?? "취소"}
           </Button>
           <Button
+            type="button"
             variant={options.destructive ? "destructive" : "default"}
             onClick={() => handleClose(true)}
           >

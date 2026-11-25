@@ -77,7 +77,6 @@ test.describe("우리 캘린더", () => {
         "trable-auth",
         JSON.stringify({ state: { token: value }, version: 0 })
       );
-      localStorage.setItem("sye-calendar-viewer", JSON.stringify("wonchan"));
     }, token);
   });
 
@@ -114,7 +113,7 @@ test.describe("우리 캘린더", () => {
     await page.getByTestId("btn-save-event").click();
     await expect(page.getByTestId("event-dialog")).toBeHidden();
     await expect(page.getByTestId("day-sheet")).toContainText("테스트 데이트");
-    await expect(page.getByTestId("day-sheet")).toContainText("함께");
+    await expect(page.getByTestId("day-sheet")).toContainText("둘 다");
 
     const found = await apiGet<{
       results: Array<{ event: { title: string; labelId: number } }>;
@@ -148,6 +147,45 @@ test.describe("우리 캘린더", () => {
     const groups = new Set(rows.rows.map((row) => row.group_id));
     expect(groups.size).toBe(1);
     expect([...groups][0]).toBeTruthy();
+  });
+
+  test("EVT-MULTI 여러 날 일정은 칸을 가로질러 한 줄로 이어진다", async ({
+    page,
+    request,
+  }) => {
+    const monthStart = kst(today).startOf("month");
+    let firstMonday = monthStart;
+    while (firstMonday.day() !== 1) firstMonday = firstMonday.add(1, "day");
+    const startDate = firstMonday.format("YYYY-MM-DD");
+    const endDate = firstMonday.add(2, "day").format("YYYY-MM-DD");
+
+    const created = await createEvent(request, token, {
+      title: "이어지는 일정",
+      owner: "together",
+      allDay: true,
+      startDate,
+      endDate,
+      recurrence: "none",
+    });
+    const id = created.events[0].id;
+
+    await openCalendar(page);
+    const bar = page.locator(`[data-testid="event-bar"][data-event-id="${id}"]`);
+    await expect(bar).toHaveCount(1);
+    await expect(bar).toContainText("이어지는 일정");
+
+    const startCell = await page.getByTestId(`day-cell-${startDate}`).boundingBox();
+    const endCell = await page.getByTestId(`day-cell-${endDate}`).boundingBox();
+    const barBox = await bar.boundingBox();
+    expect(startCell).not.toBeNull();
+    expect(endCell).not.toBeNull();
+    expect(barBox).not.toBeNull();
+    // 한 주 안의 3일 일정은 칸 3개 폭을 한 줄로 덮는다.
+    expect(barBox!.width).toBeGreaterThan(startCell!.width * 2.5);
+    expect(Math.abs(barBox!.x - startCell!.x)).toBeLessThan(3);
+    expect(
+      Math.abs(barBox!.x + barBox!.width - (endCell!.x + endCell!.width))
+    ).toBeLessThan(3);
   });
 
   test("EVT-07/16 반복 일정은 월간에 여러 회차로 나오고 수정·삭제는 시리즈 전체", async ({
@@ -207,6 +245,10 @@ test.describe("우리 캘린더", () => {
       .first()
       .click();
     await page.getByTestId("btn-delete-event").click();
+    await expect(page.getByText("일정을 지울까요?").first()).toBeVisible();
+    await page.getByRole("button", { name: "취소" }).last().click();
+    await expect(page.getByTestId("event-dialog")).toBeVisible();
+    await page.getByTestId("btn-delete-event").click();
     await page.getByRole("button", { name: "지우기" }).click();
     await expect(page.getByTestId("event-dialog")).toBeHidden();
     const rows = await pool.query("select 1 from calendar_events where id = $1", [id]);
@@ -240,11 +282,11 @@ test.describe("우리 캘린더", () => {
     await expect(page.getByTestId("day-sheet")).toContainText("음 ");
   });
 
-  test("CAL-09 표시 필터가 함께/개인 일정을 가린다", async ({ page, request }) => {
+  test("CAL-09 참여자 필터 없이 모든 일정이 함께 보인다", async ({ page, request }) => {
     for (const [title, owner] of [
       ["원찬 개인 일정", "wonchan"],
       ["예은 개인 일정", "yeeun"],
-      ["함께 일정", "together"],
+      ["둘 다 일정", "together"],
     ] as const) {
       await createEvent(request, token, {
         title,
@@ -257,13 +299,11 @@ test.describe("우리 캘린더", () => {
     }
 
     await openCalendar(page);
-    await page.getByTestId("filter-menu").click();
-    await page.getByTestId("filter-wonchan").click();
-    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("filter-menu")).toHaveCount(0);
     await openTodaySheet(page);
-    await expect(page.getByTestId("day-sheet")).toContainText("함께 일정");
+    await expect(page.getByTestId("day-sheet")).toContainText("원찬 개인 일정");
     await expect(page.getByTestId("day-sheet")).toContainText("예은 개인 일정");
-    await expect(page.getByTestId("day-sheet")).not.toContainText("원찬 개인 일정");
+    await expect(page.getByTestId("day-sheet")).toContainText("둘 다 일정");
   });
 
   test("CAL-02/03/04/05 뷰 전환과 월·구간 이동", async ({ page }) => {
@@ -286,10 +326,7 @@ test.describe("우리 캘린더", () => {
     await page.getByTestId("view-tab-couple").click();
     await expect(page.getByTestId("couple-column-wonchan")).toBeVisible();
     await expect(page.getByTestId("couple-column-yeeun")).toBeVisible();
-    await expect(page.getByText("함께", { exact: true }).first()).toBeVisible();
-
-    await page.getByTestId("view-tab-diary").click();
-    await expect(page.getByTestId(`diary-day-${today}`)).toBeVisible();
+    await expect(page.getByText("둘 다", { exact: true }).first()).toBeVisible();
 
     await page.getByTestId("view-tab-month").click();
     const title = page.getByTestId("calendar-title");
@@ -350,17 +387,19 @@ test.describe("우리 캘린더", () => {
     expect(year.settings.minuteStep).toBe(30);
   });
 
-  test("DIA-02/03/04/05/06 일기를 쓰면 월간 썸네일과 모아보기에 나온다", async ({
+  test("DIA-02/03/04/05/06 일기를 쓰면 월간에 폴라로이드로 나온다", async ({
     page,
     request,
   }) => {
     await page.goto("/calendar");
-    await page.getByTestId("view-tab-diary").click();
-    await page.getByTestId(`diary-day-${today}`).click();
-    await page.getByTestId("day-sheet").getByRole("button", { name: "일기" }).click();
+    await openTodaySheet(page);
+    await page
+      .getByTestId("day-sheet")
+      .getByRole("button", { name: "일기", exact: true })
+      .click();
     await expect(page.getByTestId("diary-dialog")).toBeVisible();
+    await page.getByTestId("diary-author-yeeun").click();
     await page.getByTestId("field-diary-body").fill("오늘의 테스트 일기");
-    await page.getByTestId("diary-dialog").getByRole("button", { name: "설렘" }).click();
     await page
       .getByTestId("field-diary-photo")
       .setInputFiles("e2e/fixtures/calendar-photo.png");
@@ -371,18 +410,23 @@ test.describe("우리 캘린더", () => {
     await expect(page.getByTestId("day-sheet")).toBeHidden();
 
     const day = await apiGet<{
-      diaries: Array<{ id: number; body: string; photos: Array<{ thumb: string }> }>;
+      diaries: Array<{
+        id: number;
+        author: string;
+        body: string;
+        photos: Array<{ thumb: string }>;
+      }>;
     }>(request, token, `/api/calendar/day?date=${today}`);
     expect(day.diaries).toHaveLength(1);
+    expect(day.diaries[0].author).toBe("yeeun");
     expect(day.diaries[0].body).toBe("오늘의 테스트 일기");
     expect(day.diaries[0].photos).toHaveLength(1);
     expect(day.diaries[0].photos[0].thumb.startsWith("data:image/jpeg")).toBe(true);
     const diaryId = day.diaries[0].id;
 
-    await page.getByTestId("view-tab-month").click();
+    // 일기 탭 대신 월간 칸에 폴라로이드로 보인다.
+    await expect(page.getByTestId("view-tab-diary")).toHaveCount(0);
     await expect(page.getByTestId(`day-cell-${today}`).locator("img")).toHaveCount(1);
-    await page.getByTestId("view-tab-diary").click();
-    await expect(page.getByTestId(`diary-card-${diaryId}`)).toBeVisible();
 
     await page.goto("/calendar/diary");
     await expect(page.getByRole("heading", { name: "일기 페이지" })).toBeVisible();
@@ -395,17 +439,41 @@ test.describe("우리 캘린더", () => {
     );
     await page.getByRole("tab", { name: "4컷 하루" }).click();
     await expect(page.getByTestId("diary-page-fourcut").locator("img")).toHaveCount(1);
+
+    // 삭제는 확인 모달을 거친다. 취소하면 남고, 확인하면 지워진다.
+    await page.goto("/calendar");
+    await openTodaySheet(page);
+    await page
+      .getByTestId("day-sheet")
+      .getByRole("button", { name: "일기", exact: true })
+      .click();
+    await page.getByTestId("diary-dialog").waitFor();
+    await page.getByTestId("diary-author-yeeun").click();
+    await page
+      .getByTestId("diary-dialog")
+      .getByRole("button", { name: "삭제", exact: true })
+      .click();
+    await expect(page.getByText("일기를 지울까요?")).toBeVisible();
+    await page.getByRole("button", { name: "취소" }).last().click();
+    await expect(page.getByTestId("diary-dialog")).toBeVisible();
+    await page
+      .getByTestId("diary-dialog")
+      .getByRole("button", { name: "삭제", exact: true })
+      .click();
+    await page.getByRole("button", { name: "지우기" }).click();
+    await expect(page.getByTestId("diary-dialog")).toBeHidden();
+    const remaining = await apiGet<{ diaries: Array<{ id: number }> }>(
+      request,
+      token,
+      `/api/calendar/day?date=${today}`
+    );
+    expect(remaining.diaries.find((diary) => diary.id === diaryId)).toBeUndefined();
   });
 
-  test("DIA-06/07 Plus가 꺼지면 일기 모아보기와 일기 페이지가 잠긴다", async ({
-    page,
-    request,
-  }) => {
+  test("DIA-06/07 Plus가 꺼지면 일기 페이지가 잠긴다", async ({ page, request }) => {
     await patchSettings(request, token, { plus: false });
     await page.goto("/calendar");
-    await page.getByTestId("view-tab-diary").click();
-    await expect(page.getByText("Plus 전용").first()).toBeVisible();
-    await expect(page.getByTestId(`diary-day-${today}`)).toHaveCount(0);
+    await expect(page.getByTestId("view-tab-diary")).toHaveCount(0);
 
     await page.goto("/calendar/diary");
     await expect(page.getByText("Plus 전용").first()).toBeVisible();
@@ -423,7 +491,6 @@ test.describe("우리 캘린더", () => {
   test("DIA-08 같은 날 두 사람이 각자 일기를 쓸 수 있다", async ({ request }) => {
     const base = {
       date: today,
-      mood: "happy",
       photos: [] as Array<Record<string, unknown>>,
     };
     for (const [author, body] of [
@@ -475,7 +542,7 @@ test.describe("우리 캘린더", () => {
     ).toBeVisible();
 
     await page.getByRole("combobox", { name: "검색 범위" }).click();
-    await page.getByRole("option", { name: "함께" }).click();
+    await page.getByRole("option", { name: "둘 다" }).click();
     await expect(
       page.getByTestId("search-panel").getByText("검색 결과가 없어요.")
     ).toBeVisible();
@@ -544,8 +611,6 @@ test.describe("우리 캘린더", () => {
     await check("twoweek");
     await page.getByTestId("view-tab-couple").click();
     await check("couple");
-    await page.getByTestId("view-tab-diary").click();
-    await check("diary");
     await page.getByTestId("view-tab-month").click();
     await openTodaySheet(page);
     await check("day-sheet");

@@ -2,12 +2,13 @@
 
 import { format, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isIsoDate } from "@/lib/calendar/view";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,6 +22,7 @@ export const DateField = ({
   label,
   min,
   max,
+  invalid = false,
   className,
   testId,
 }: {
@@ -29,11 +31,12 @@ export const DateField = ({
   label?: string;
   min?: string;
   max?: string;
+  invalid?: boolean;
   className?: string;
   testId?: string;
 }) => {
   const [open, setOpen] = useState(false);
-  const selected = /^\d{4}-\d{2}-\d{2}$/.test(value) ? parseISO(value) : undefined;
+  const selected = isIsoDate(value) ? parseISO(value) : undefined;
   const from = min ? parseISO(min) : undefined;
   const to = max ? parseISO(max) : undefined;
   const disabled: Array<{ before: Date } | { after: Date }> = [];
@@ -49,24 +52,30 @@ export const DateField = ({
             variant="outline"
             data-testid={testId}
             aria-label={label ? `${label} 날짜` : "날짜"}
+            aria-invalid={invalid}
             className={cn(
-              "h-9 w-full justify-start gap-2 px-2.5 text-left text-[13px] font-normal text-ink",
+              "h-9 w-full min-w-0 justify-between gap-1 px-2.5 text-left text-[13px] font-normal text-ink",
               className
             )}
           />
         }
       >
-        <CalendarDays className="size-3.5 shrink-0 text-muted" />
-        <span className="truncate tabular-nums">
-          {selected ? format(selected, "yyyy. M. d. (EEE)", { locale: ko }) : "날짜 선택"}
+        <span className="flex min-w-0 items-center gap-2">
+          <CalendarDays className="size-3.5 shrink-0 text-muted" />
+          <span className="truncate tabular-nums">
+            {selected
+              ? format(selected, "yyyy. M. d. (EEE)", { locale: ko })
+              : "날짜 선택"}
+          </span>
         </span>
+        <ChevronDown className="size-3.5 shrink-0 text-muted" />
       </PopoverTrigger>
       <PopoverContent className="w-auto overflow-hidden p-0" align="start">
         <Calendar
           mode="single"
           locale={ko}
           selected={selected}
-          defaultMonth={selected}
+          defaultMonth={selected ?? from}
           captionLayout="dropdown"
           startMonth={new Date(2015, 0)}
           endMonth={new Date(new Date().getFullYear() + 5, 11)}

@@ -1,10 +1,17 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImagePlus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  SHEET_BODY_CLASS,
+  SHEET_CONTENT_CLASS,
+  SHEET_FOOTER_CLASS,
+  Segmented,
+} from "@/components/calendar/calendar-ui";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,8 +22,9 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/lib/auth-store";
-import { calendarRequest } from "@/lib/calendar/client";
-import { MOODS, VIEWER_NAME } from "@/lib/calendar/format";
+import { calendarKeys, calendarRequest } from "@/lib/calendar/client";
+import { VIEWER_NAME } from "@/lib/calendar/format";
+import { useInvalidateCalendar } from "@/lib/calendar/hooks";
 import type {
   CalendarDiary,
   CalendarDiaryInput,
@@ -24,7 +32,6 @@ import type {
   DiaryPhoto,
 } from "@/lib/calendar/types";
 import { kst } from "@/lib/kst";
-import { cn } from "@/lib/utils";
 
 const MAX_PHOTOS = 4;
 const FULL_MAX_PX = 1600;
@@ -32,10 +39,7 @@ const FULL_QUALITY = 0.82;
 const THUMB_MAX_PX = 480;
 const THUMB_QUALITY = 0.7;
 
-const SHEET_CONTENT_CLASS =
-  "flex max-h-[85dvh] flex-col overflow-hidden left-0 right-0 top-auto bottom-0 max-w-none translate-x-0 translate-y-0 rounded-t-3xl rounded-b-none sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:right-auto sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl";
-
-const diaryDateKey = (date: string) => ["calendar", "diaries", "date", date] as const;
+const AUTHORS = ["wonchan", "yeeun"] as const;
 
 const compressImage = (
   file: File,
@@ -73,40 +77,35 @@ const compressImage = (
   return promise;
 };
 
+const AUTHOR_OPTIONS = AUTHORS.map((key) => ({
+  value: key,
+  label: VIEWER_NAME[key],
+  testId: `diary-author-${key}`,
+}));
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   date: string;
-  viewer: CalendarViewer;
-  onSaved: () => void;
 }
 
-export const DiaryEditor = ({ open, onOpenChange, date, viewer, onSaved }: Props) => (
+export const DiaryEditor = ({ open, onOpenChange, date }: Props) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent data-testid="diary-dialog" className={SHEET_CONTENT_CLASS}>
       <DialogHeader>
         <DialogTitle>{kst(date).format("M월 D일 dddd")}</DialogTitle>
-        <DialogDescription>작성자 · {VIEWER_NAME[viewer]}</DialogDescription>
+        <DialogDescription>오늘의 기록을 남겨 보세요.</DialogDescription>
       </DialogHeader>
-      <DiaryForm
-        date={date}
-        viewer={viewer}
-        onSaved={onSaved}
-        onOpenChange={onOpenChange}
-      />
+      <DiaryForm date={date} onOpenChange={onOpenChange} />
     </DialogContent>
   </Dialog>
 );
 
-const DiaryForm = ({
-  date,
-  viewer,
-  onSaved,
-  onOpenChange,
-}: Pick<Props, "date" | "viewer" | "onSaved" | "onOpenChange">) => {
+const DiaryForm = ({ date, onOpenChange }: Pick<Props, "date" | "onOpenChange">) => {
   const token = useAuthStore((s) => s.token);
+  const [author, setAuthor] = useState<CalendarViewer>("wonchan");
   const { data: diaries, isPending } = useQuery({
-    queryKey: diaryDateKey(date),
+    queryKey: calendarKeys.diariesDate(date),
     queryFn: async () => {
       const res = await calendarRequest<{ diaries: CalendarDiary[] }>(
         token,
@@ -125,14 +124,14 @@ const DiaryForm = ({
     );
   }
 
-  const existing = (diaries ?? []).find((diary) => diary.author === viewer) ?? null;
+  const existing = (diaries ?? []).find((diary) => diary.author === author) ?? null;
   return (
     <DiaryFields
-      key={existing?.id ?? `new-${date}-${viewer}`}
+      key={`${author}:${existing?.id ?? "new"}`}
       date={date}
-      viewer={viewer}
+      author={author}
+      onAuthorChange={setAuthor}
       existing={existing}
-      onSaved={onSaved}
       onOpenChange={onOpenChange}
     />
   );
@@ -140,32 +139,30 @@ const DiaryForm = ({
 
 const DiaryFields = ({
   date,
-  viewer,
+  author,
+  onAuthorChange,
   existing,
-  onSaved,
   onOpenChange,
 }: {
   date: string;
-  viewer: CalendarViewer;
+  author: CalendarViewer;
+  onAuthorChange: (author: CalendarViewer) => void;
   existing: CalendarDiary | null;
-  onSaved: () => void;
   onOpenChange: (open: boolean) => void;
 }) => {
   const token = useAuthStore((s) => s.token);
-  const queryClient = useQueryClient();
+  const invalidate = useInvalidateCalendar();
+  const { confirm, dialog } = useConfirmDialog();
 
   const [body, setBody] = useState(existing?.body ?? "");
-  const [mood, setMood] = useState(existing?.mood ?? "");
   const [photos, setPhotos] = useState<DiaryPhoto[]>(existing?.photos ?? []);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const saveDiary = useMutation({
     mutationFn: async () => {
       const payload: CalendarDiaryInput = {
         date,
-        author: viewer,
+        author,
         body: body.trim(),
-        mood,
         photos,
       };
       const res = await calendarRequest<{ diary: CalendarDiary }>(
@@ -177,8 +174,7 @@ const DiaryFields = ({
     },
     onSuccess: () => {
       toast.success("일기를 저장했어요.");
-      queryClient.invalidateQueries({ queryKey: ["calendar", "diaries"] });
-      onSaved();
+      void invalidate();
       onOpenChange(false);
     },
     onError: (error: Error) => toast.error(error.message),
@@ -191,8 +187,7 @@ const DiaryFields = ({
       }),
     onSuccess: () => {
       toast.success("일기를 지웠어요.");
-      queryClient.invalidateQueries({ queryKey: ["calendar", "diaries"] });
-      onSaved();
+      void invalidate();
       onOpenChange(false);
     },
     onError: (error: Error) => toast.error(error.message),
@@ -226,163 +221,136 @@ const DiaryFields = ({
     }
   };
 
-  const isEmpty = body.trim() === "" && mood === "" && photos.length === 0;
+  const isEmpty = body.trim() === "" && photos.length === 0;
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (isEmpty) return;
-        saveDiary.mutate();
-      }}
-      className="flex min-h-0 flex-1 flex-col"
-    >
-      <div className="-mx-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4">
-        <div>
-          <p className="text-[12px] font-medium text-muted">오늘의 기분</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {MOODS.map((item) => {
-              const selected = mood === item.key;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setMood(selected ? "" : item.key)}
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 rounded-xl border px-2.5 py-1.5 text-[12px] transition-colors",
-                    selected
-                      ? "border-primary bg-canvas-card text-ink ring-1 ring-primary"
-                      : "border-hairline bg-surface text-body hover:bg-canvas-soft"
-                  )}
+    <>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (isEmpty) return;
+          saveDiary.mutate();
+        }}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className={SHEET_BODY_CLASS}>
+          <div>
+            <p className="text-[12px] font-medium text-muted">작성자</p>
+            <div className="mt-1">
+              <Segmented
+                ariaLabel="작성자"
+                options={AUTHOR_OPTIONS}
+                value={author}
+                onChange={onAuthorChange}
+                className="bg-surface"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted" htmlFor="diary-body">
+              내용
+            </label>
+            <Textarea
+              id="diary-body"
+              data-testid="field-diary-body"
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              placeholder="어떤 일이 있었나요?"
+              rows={5}
+              maxLength={10000}
+              className="mt-1"
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] font-medium text-muted">사진</p>
+              <span className="text-[11px] text-muted">
+                {photos.length}/{MAX_PHOTOS}
+              </span>
+            </div>
+            <div className="mt-1 grid grid-cols-4 gap-2">
+              {photos.map((photo) => (
+                <div
+                  key={photo.id}
+                  className="relative aspect-square overflow-hidden rounded-xl border border-hairline bg-canvas-soft"
                 >
-                  <span className="text-lg leading-none">{item.emoji}</span>
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photo.thumb}
+                    alt="일기 사진"
+                    className="size-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    aria-label="사진 삭제"
+                    onClick={() =>
+                      setPhotos((prev) => prev.filter((item) => item.id !== photo.id))
+                    }
+                    className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-black/50 text-white"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <label className="grid aspect-square cursor-pointer place-items-center rounded-xl border border-dashed border-hairline bg-canvas-soft text-muted hover:bg-canvas-card">
+                  <ImagePlus className="size-5" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    data-testid="field-diary-photo"
+                    className="sr-only"
+                    onChange={(event) => {
+                      void addFiles(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
           </div>
         </div>
 
-        <div>
-          <label className="text-[12px] font-medium text-muted" htmlFor="diary-body">
-            내용
-          </label>
-          <Textarea
-            id="diary-body"
-            data-testid="field-diary-body"
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            placeholder="어떤 일이 있었나요?"
-            rows={5}
-            maxLength={10000}
-            className="mt-1"
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] font-medium text-muted">사진</p>
-            <span className="text-[11px] text-muted">
-              {photos.length}/{MAX_PHOTOS}
-            </span>
-          </div>
-          <div className="mt-1 grid grid-cols-4 gap-2">
-            {photos.map((photo) => (
-              <div
-                key={photo.id}
-                className="relative aspect-square overflow-hidden rounded-xl border border-hairline bg-canvas-soft"
+        <div className={SHEET_FOOTER_CLASS}>
+          <div>
+            {existing && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "일기를 지울까요?",
+                    description: `${kst(date).format("M월 D일 dddd")} · ${VIEWER_NAME[author]}`,
+                    confirmLabel: "지우기",
+                    destructive: true,
+                  });
+                  if (ok) removeDiary.mutate();
+                }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photo.thumb}
-                  alt="일기 사진"
-                  className="size-full object-cover"
-                />
-                <button
-                  type="button"
-                  aria-label="사진 삭제"
-                  onClick={() =>
-                    setPhotos((prev) => prev.filter((item) => item.id !== photo.id))
-                  }
-                  className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-black/50 text-white"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-            {photos.length < MAX_PHOTOS && (
-              <label className="grid aspect-square cursor-pointer place-items-center rounded-xl border border-dashed border-hairline bg-canvas-soft text-muted hover:bg-canvas-card">
-                <ImagePlus className="size-5" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  data-testid="field-diary-photo"
-                  className="sr-only"
-                  onChange={(event) => {
-                    void addFiles(event.target.files);
-                    event.target.value = "";
-                  }}
-                />
-              </label>
+                삭제
+              </Button>
             )}
           </div>
-        </div>
-      </div>
-
-      <div className="-mx-4 -mb-4 flex shrink-0 items-center justify-between gap-2 border-t border-hairline bg-popover px-4 py-3">
-        {existing && confirmDelete ? (
-          <div className="flex w-full items-center gap-2 text-[12px] text-destructive">
-            <span className="flex-1">정말 지울까요?</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setConfirmDelete(false)}
-            >
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               취소
             </Button>
             <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={() => removeDiary.mutate()}
-              disabled={removeDiary.isPending}
+              type="submit"
+              data-testid="btn-save-diary"
+              disabled={isEmpty || saveDiary.isPending}
             >
-              지우기
+              {saveDiary.isPending ? "저장 중..." : "저장"}
             </Button>
           </div>
-        ) : (
-          <>
-            <div>
-              {existing && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  삭제
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                취소
-              </Button>
-              <Button
-                type="submit"
-                data-testid="btn-save-diary"
-                disabled={isEmpty || saveDiary.isPending}
-              >
-                {saveDiary.isPending ? "저장 중..." : "저장"}
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-    </form>
+        </div>
+      </form>
+      {dialog}
+    </>
   );
 };

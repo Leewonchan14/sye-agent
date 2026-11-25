@@ -831,7 +831,6 @@ export const calendarDiaries = pgTable(
     date: text("date").notNull(), // YYYY-MM-DD
     author: text("author").notNull(), // wonchan | yeeun
     body: text("body").notNull().default(""),
-    mood: text("mood").notNull().default(""),
     photos: jsonb("photos").$type<DiaryPhoto[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

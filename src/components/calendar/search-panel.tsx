@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
+import { LabelDot } from "@/components/calendar/calendar-ui";
 import {
   Dialog,
   DialogContent,
@@ -21,19 +22,22 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStore } from "@/lib/auth-store";
 import { calendarKeys, calendarRequest } from "@/lib/calendar/client";
-import { ownerName } from "@/lib/calendar/format";
-import { labelColor } from "@/lib/calendar/labels";
-import type { CalendarEvent, CalendarLabel, CalendarViewer } from "@/lib/calendar/types";
+import { VIEWER_NAME, ownerName } from "@/lib/calendar/format";
+import type { CalendarEvent, CalendarLabel, CalendarOwner } from "@/lib/calendar/types";
+import { labelColorResolver } from "@/lib/calendar/view";
 import { kst } from "@/lib/kst";
 
-type SearchScope = "all" | "wonchan" | "yeeun" | "together";
+type SearchScope = "all" | CalendarOwner;
 
 const SCOPE_OPTIONS: { value: SearchScope; label: string }[] = [
   { value: "all", label: "전체" },
-  { value: "wonchan", label: "원찬" },
-  { value: "yeeun", label: "예은" },
-  { value: "together", label: "함께" },
+  { value: "wonchan", label: VIEWER_NAME.wonchan },
+  { value: "yeeun", label: VIEWER_NAME.yeeun },
+  { value: "together", label: ownerName("together") },
 ];
+
+/** 검색어는 두 글자부터 서버에 보낸다. */
+const MIN_QUERY_LENGTH = 2;
 
 const useDebouncedValue = (value: string, delay: number): string => {
   const [debounced, setDebounced] = useState(value);
@@ -47,13 +51,11 @@ const useDebouncedValue = (value: string, delay: number): string => {
 export const SearchPanel = ({
   open,
   onOpenChange,
-  viewer,
   labels,
   onSelectDate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  viewer: CalendarViewer;
   labels: CalendarLabel[];
   onSelectDate: (date: string) => void;
 }) => {
@@ -61,6 +63,7 @@ export const SearchPanel = ({
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>("all");
   const debounced = useDebouncedValue(query, 250);
+  const hasQuery = debounced.trim().length >= MIN_QUERY_LENGTH;
 
   const { data, isPending, isFetching } = useQuery({
     queryKey: calendarKeys.search(debounced, scope),
@@ -69,17 +72,11 @@ export const SearchPanel = ({
         token,
         `/api/calendar/search?q=${encodeURIComponent(debounced)}&scope=${scope}`
       ),
-    enabled: Boolean(token) && debounced.trim().length >= 2,
+    enabled: Boolean(token) && hasQuery,
   });
 
-  const labelById = (labelId: number | null): string => {
-    if (labelId == null) return "var(--color-primary)";
-    const label = labels.find((item) => item.id === labelId);
-    return label ? labelColor(label.color) : "var(--color-primary)";
-  };
-
+  const colorOf = labelColorResolver(labels);
   const results = data?.results ?? [];
-  const hasQuery = debounced.trim().length >= 2;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,10 +95,7 @@ export const SearchPanel = ({
             onChange={(event) => setQuery(event.target.value)}
           />
           <Select
-            items={SCOPE_OPTIONS.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
+            items={SCOPE_OPTIONS}
             value={scope}
             onValueChange={(value) => {
               if (value) setScope(value as SearchScope);
@@ -150,18 +144,13 @@ export const SearchPanel = ({
                     }}
                     className="flex w-full items-center gap-2 px-1 py-2 text-left transition-colors hover:bg-canvas-soft/60"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="size-1.5 shrink-0 rounded-full"
-                      style={{ background: labelById(result.event.labelId) }}
-                    />
+                    <LabelDot color={colorOf(result.event.labelId)} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] text-ink">
                         {result.event.title}
                       </p>
                       <p className="truncate text-[11px] text-muted-soft tabular-nums">
-                        {kst(date).format("YYYY.MM.DD")} ·{" "}
-                        {ownerName(result.event.owner, viewer)}
+                        {kst(date).format("YYYY.MM.DD")} · {ownerName(result.event.owner)}
                         {time && ` · ${time}`}
                       </p>
                     </div>
