@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
@@ -23,7 +25,7 @@ interface Suggestion {
 }
 
 const fetchSuggestions = async (token: string) => {
-  const res = await fetch("/api/suggestions", {
+  const res = await fetch(withBasePath("/api/suggestions"), {
     headers: { "x-auth-token": token },
   });
   if (!res.ok) throw new Error("불러오기 실패");
@@ -43,7 +45,7 @@ const saveData = async ({
   id?: number;
   sortOrder?: number;
 }) => {
-  const res = await fetch("/api/suggestions", {
+  const res = await fetch(withBasePath("/api/suggestions"), {
     method: "POST",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ id, label, prompt, sortOrder }),
@@ -54,7 +56,7 @@ const saveData = async ({
 };
 
 const deleteData = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch("/api/suggestions", {
+  const res = await fetch(withBasePath("/api/suggestions"), {
     method: "DELETE",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
@@ -108,7 +110,7 @@ const SuggestionsContent = () => {
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/suggestions", {
+      const res = await fetch(withBasePath("/api/suggestions"), {
         method: "PATCH",
         headers: { "x-auth-token": token! },
       });
@@ -184,7 +186,7 @@ const SuggestionsContent = () => {
         <Tooltip>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <img
-              src="/munjackgui-thinking.png"
+              src={withBasePath("/munjackgui-thinking.png")}
               alt="하치와레"
               className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
               style={{ backgroundColor: "var(--color-canvas-soft)" }}
@@ -192,7 +194,7 @@ const SuggestionsContent = () => {
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={8} align="center">
             <img
-              src="/munjackgui-thinking.png"
+              src={withBasePath("/munjackgui-thinking.png")}
               alt=""
               className="size-36 rounded-md bg-background object-cover"
             />

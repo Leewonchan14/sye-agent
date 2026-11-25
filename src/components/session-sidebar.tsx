@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useEffect, useRef } from "react";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -203,7 +205,7 @@ export const SessionSidebar = ({
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (pageParam) params.set("cursor", pageParam);
-      const r = await fetch(`/api/sessions?${params}`, {
+      const r = await fetch(withBasePath(`/api/sessions?${params}`), {
         headers: { "x-auth-token": tk },
       });
       const d = await r.json();
@@ -245,7 +247,7 @@ export const SessionSidebar = ({
           <div className="flex h-14 items-center gap-1 pr-2 pl-4">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <Avatar size="sm">
-                <AvatarImage src="/munjackgui.png" alt="하치와레" />
+                <AvatarImage src={withBasePath("/munjackgui.png")} alt="하치와레" />
               </Avatar>
               <span className="truncate text-sm font-medium">하치와레 메이트</span>
             </div>

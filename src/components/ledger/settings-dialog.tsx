@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChartPie,
@@ -568,7 +570,7 @@ const DataTab = () => {
 
   const download = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/ledger/export", {
+      const res = await fetch(withBasePath("/api/ledger/export"), {
         headers: { "x-auth-token": token },
       });
       if (!res.ok) throw new Error("내보내지 못했어요.");
