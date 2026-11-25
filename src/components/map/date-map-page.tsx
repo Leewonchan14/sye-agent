@@ -244,7 +244,7 @@ const PlaceDetail = ({
               <ReviewList
                 key={`${place.key}:${visit.date}`}
                 reviews={visit.reviews}
-                className="pl-23"
+                variant="block"
               />
             </li>
           );

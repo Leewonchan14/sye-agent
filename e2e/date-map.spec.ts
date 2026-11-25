@@ -665,7 +665,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   await expect(editor.getByRole("button", { name: "저장" })).toBeDisabled();
   await editor.getByRole("radio", { name: "별 4개" }).click();
   // 긴 리뷰는 옆으로 밀리지 않고 칸 너비에서 줄이 바뀌어 다 보인다. 글씨는 카드 글씨에 맞춰 작다.
-  const reviewBox = editor.getByRole("textbox", { name: "한 줄 리뷰" });
+  const reviewBox = editor.getByRole("textbox", { name: "리뷰" });
   await expect(reviewBox).toHaveCSS(
     "font-size",
     test.info().project.name === "mobile" ? "14px" : "13px"
@@ -680,7 +680,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   expect(await reviewBox.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(
     true
   );
-  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("면이 쫄깃");
+  await editor.getByRole("textbox", { name: "리뷰" }).fill("면이 쫄깃");
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(days.first().getByRole("listitem", { name: "원찬 리뷰" })).toContainText(
     "면이 쫄깃"
@@ -700,8 +700,8 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
     .click();
   await editor.getByRole("radio", { name: "별 5개" }).click();
   // Enter로도 저장한다.
-  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("소스가 진해");
-  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).press("Enter");
+  await editor.getByRole("textbox", { name: "리뷰" }).fill("소스가 진해");
+  await editor.getByRole("textbox", { name: "리뷰" }).press("Enter");
   await expect(days.first().getByRole("listitem", { name: "예은 리뷰" })).toContainText(
     "소스가 진해"
   );
@@ -748,9 +748,7 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   await page.reload();
   await days.first().getByRole("button", { name: "원찬 리뷰 고치기" }).click();
   editor = days.first().getByRole("group", { name: "리뷰 고치기" });
-  await expect(editor.getByRole("textbox", { name: "한 줄 리뷰" })).toHaveValue(
-    "면이 쫄깃"
-  );
+  await expect(editor.getByRole("textbox", { name: "리뷰" })).toHaveValue("면이 쫄깃");
   await editor.getByRole("radio", { name: "별 2개" }).click();
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(
@@ -767,6 +765,75 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   await expect(
     detail.getByRole("img", { name: "별점 평균 3.5, 리뷰 2개" })
   ).toBeVisible();
+});
+
+test("Shift+Enter는 리뷰에 줄을 바꾸고 Enter는 저장하며, 장소 카드의 리뷰 블록은 넘치지 않고 두 줄을 다 보여 준다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 12_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+  });
+  const created = await request.post("/api/places/reviews", {
+    headers: authHeaders(token),
+    data: {
+      entryId: await entryIdOf("파스타 점심"),
+      author: "wonchan",
+      rating: 4,
+      review: "면이 쫄깃",
+    },
+  });
+  expect(created.ok()).toBe(true);
+
+  await openMap(page, "/map?place=2001");
+  const detail = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  await detail.getByRole("button", { name: "원찬 리뷰 고치기" }).click();
+  const editor = detail.getByRole("group", { name: "리뷰 고치기" });
+  const box = editor.getByRole("textbox", { name: "리뷰" });
+
+  // 수정 카드의 별점 줄: 좁은 폰 너비에서도 별 5개와 값이 카드 안에 다 들어온다.
+  if (test.info().project.name === "mobile") {
+    const picker = editor.getByRole("radiogroup", { name: "별점" });
+    expect(await picker.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(
+      true
+    );
+    const lastStar = picker.getByRole("radio", { name: "별 5개" });
+    const value = picker.getByText("4.0");
+    await expect(lastStar).toBeVisible();
+    await expect(value).toBeVisible();
+    const [groupBox, starBox, valueBox] = await Promise.all([
+      picker.boundingBox(),
+      lastStar.boundingBox(),
+      value.boundingBox(),
+    ]);
+    expect(starBox!.x + starBox!.width).toBeLessThanOrEqual(
+      groupBox!.x + groupBox!.width + 1
+    );
+    expect(valueBox!.x + valueBox!.width).toBeLessThanOrEqual(
+      groupBox!.x + groupBox!.width + 1
+    );
+  }
+
+  // Shift+Enter는 저장하지 않고 줄만 바꾼다.
+  await box.fill("첫 줄");
+  await box.press("Shift+Enter");
+  await box.pressSequentially("둘째 줄");
+  await expect(box).toHaveValue("첫 줄\n둘째 줄");
+  await expect(editor).toBeVisible();
+  await expect(detail.getByRole("listitem", { name: "원찬 리뷰" })).toHaveCount(0);
+
+  // Enter는 줄바꿈을 그대로 둔 채 저장한다.
+  await box.press("Enter");
+  const item = detail.getByRole("listitem", { name: "원찬 리뷰" });
+  await expect(editor).toHaveCount(0);
+  await expect(item).toContainText("첫 줄");
+  await expect(item).toContainText("둘째 줄");
+  expect(await item.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  expect((await pool.query("select review from place_reviews")).rows).toEqual([
+    { review: "첫 줄\n둘째 줄" },
+  ]);
 });
 
 test("리뷰 API는 잘못된 값과 리뷰를 남길 수 없는 내역을 막는다", async ({ request }) => {
@@ -906,8 +973,8 @@ test("가계부 내역 창에서 둘이 각자 리뷰를 남기고, 목록 줄�
       .click();
     await editor.getByRole("radio", { name: stars }).click();
     // Enter는 리뷰만 저장하고 내역 창은 그대로 둔다.
-    await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill(text);
-    await editor.getByRole("textbox", { name: "한 줄 리뷰" }).press("Enter");
+    await editor.getByRole("textbox", { name: "리뷰" }).fill(text);
+    await editor.getByRole("textbox", { name: "리뷰" }).press("Enter");
     await expect(reviews.getByRole("listitem", { name: `${author} 리뷰` })).toContainText(
       text
     );
@@ -960,7 +1027,7 @@ test("가계부 목록 줄에서 내역 창을 열지 않고 리뷰를 쓰고 �
     .getByRole("button", { name: "예은" })
     .click();
   await editor.getByRole("radio", { name: "별 4.5개" }).click();
-  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("소스가 진해");
+  await editor.getByRole("textbox", { name: "리뷰" }).fill("소스가 진해");
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -1004,7 +1071,7 @@ test("통계 탭 내역에서도 내역 창을 열지 않고 리뷰를 쓴다", 
     .getByRole("button", { name: "원찬" })
     .click();
   await editor.getByRole("radio", { name: "별 3.5개" }).click();
-  await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("양이 많아");
+  await editor.getByRole("textbox", { name: "리뷰" }).fill("양이 많아");
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -1034,7 +1101,7 @@ test("새 내역을 추가하면서 지도 링크와 리뷰 하나를 같이 남
     .getByRole("button", { name: "예은" })
     .click();
   // 리뷰만 쓰고 별을 안 고르면 저장하지 않는다.
-  await review.getByRole("textbox", { name: "한 줄 리뷰" }).fill("자리가 넓어");
+  await review.getByRole("textbox", { name: "리뷰" }).fill("자리가 넓어");
   await dialog.getByRole("button", { name: "저장" }).click();
   await expect(page.getByText("리뷰를 남기려면 별점도 골라 주세요.")).toBeVisible();
   await review.getByRole("radio", { name: "별 3개" }).click();
