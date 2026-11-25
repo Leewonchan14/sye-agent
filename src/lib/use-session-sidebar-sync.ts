@@ -1,7 +1,5 @@
 "use client";
 
-import { withBasePath } from "@/lib/base-path";
-
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useCallback } from "react";
@@ -24,7 +22,7 @@ export const useSessionSidebarSync = ({
 
   const saveSessionMutation = useMutation({
     mutationFn: async (messages: UIMessage[]) => {
-      const r = await fetch(withBasePath("/api/sessions"), {
+      const r = await fetch("/api/sessions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

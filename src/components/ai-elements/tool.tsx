@@ -1,7 +1,5 @@
 "use client";
 
-import { withBasePath } from "@/lib/base-path";
-
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
@@ -144,14 +142,14 @@ export const ToolHeader = ({
         <Tooltip>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <img
-              src={withBasePath("/munjackgui-thinking.png")}
+              src="/munjackgui-thinking.png"
               alt=""
               className="size-7 rounded-full object-cover"
             />
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={8} align="start">
             <img
-              src={withBasePath("/munjackgui-thinking.png")}
+              src="/munjackgui-thinking.png"
               alt=""
               className="w-36 rounded-md bg-background object-cover"
             />

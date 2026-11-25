@@ -1,7 +1,5 @@
 "use client";
 
-import { withBasePath } from "@/lib/base-path";
-
 import { kst } from "@/lib/kst";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -144,7 +142,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const { data: initialMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", sessionId],
     queryFn: async () => {
-      const r = await fetch(withBasePath(`/api/messages?sessionId=${sessionId}`), {
+      const r = await fetch(`/api/messages?sessionId=${sessionId}`, {
         headers: { "x-auth-token": tk },
       });
       const d = await r.json();
@@ -319,7 +317,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
   const recoverAfterStall = useCallback(async () => {
     stop();
     try {
-      const r = await fetch(withBasePath(`/api/chat/${sessionId}/turn`), {
+      const r = await fetch(`/api/chat/${sessionId}/turn`, {
         headers: { "x-auth-token": tk ?? "" },
       });
       const turn = r.ok
@@ -394,7 +392,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
         let turn: { runId: string; userText: string | null } | null = null;
         setRecovering(true);
         for (let attempt = 0; attempt < attempts; attempt++) {
-          const r = await fetch(withBasePath(`/api/chat/${sessionId}/turn`), {
+          const r = await fetch(`/api/chat/${sessionId}/turn`, {
             headers: { "x-auth-token": tk ?? "" },
           });
           if (r.ok) {
@@ -473,7 +471,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
     lastOffsetRef.current = -1;
     setMessages((prev) => markLastInterrupted(prev, "사용자가 멈췄어요."));
     clearError();
-    void fetch(withBasePath(`/api/chat/${sessionId}/cancel`), {
+    void fetch(`/api/chat/${sessionId}/cancel`, {
       method: "POST",
       headers: { "x-auth-token": tk ?? "" },
     }).catch(() => {});
@@ -503,8 +501,8 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
    * shallow replaceState라 라우트 재렌더(스트리밍 중단) 없이 URL만 바뀐다.
    */
   const promoteToSessionUrl = useCallback(() => {
-    if (window.location.pathname !== withBasePath("/")) return;
-    window.history.replaceState(null, "", withBasePath(`/${sessionId}`));
+    if (window.location.pathname !== "/") return;
+    window.history.replaceState(null, "", `/${sessionId}`);
   }, [sessionId]);
 
   /**
@@ -689,7 +687,7 @@ const ChatInner = ({ sessionId }: { sessionId: string }) => {
                 {showLoader && (
                   <div className="flex animate-bounce items-center gap-2 px-3 py-2">
                     <Avatar size="sm" className="inline-flex md:hidden">
-                      <AvatarImage src={withBasePath("/munjackgui.png")} alt="하치와레" />
+                      <AvatarImage src="/munjackgui.png" alt="하치와레" />
                     </Avatar>
                     <span className="text-sm text-muted-foreground">생각 중이에요…♪</span>
                   </div>
@@ -757,7 +755,7 @@ const ChatLoading = () => {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4">
       <img
-        src={withBasePath("/munjackgui.png")}
+        src="/munjackgui.png"
         alt="하치와레"
         className="size-20 animate-bounce rounded-full object-cover"
         style={{ backgroundColor: "var(--color-canvas-soft)" }}
@@ -821,7 +819,7 @@ const RotatingPhrase = () => {
       style={{ color: "var(--color-muted)" }}
     >
       <img
-        src={withBasePath("/munjackgui.png")}
+        src="/munjackgui.png"
         alt="하치와레"
         className="size-5 rounded-full object-cover"
         draggable={false}
@@ -878,7 +876,7 @@ const EmptyState = ({ onQuestionClick }: { onQuestionClick: (q: string) => void 
       {/* Character icon */}
       <div className="mb-5">
         <img
-          src={withBasePath("/munjackgui.png")}
+          src="/munjackgui.png"
           alt="하치와레"
           className="size-16 rounded-full object-cover"
           style={{ backgroundColor: "var(--color-canvas-soft)" }}
