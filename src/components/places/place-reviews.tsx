@@ -3,7 +3,7 @@
 import { Pencil, Plus, Star, StarHalf } from "lucide-react";
 import { toast } from "sonner";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -113,7 +113,7 @@ export const StarPicker = ({
     <div
       role="radiogroup"
       aria-label="별점"
-      className="flex items-center gap-2"
+      className="flex min-w-0 items-center gap-2"
       onMouseLeave={() => setHover(null)}
     >
       <div className="flex items-center">
@@ -151,7 +151,10 @@ export const StarPicker = ({
           </span>
         ))}
       </div>
-      <span aria-hidden className="w-7 text-[13px] font-medium text-ink tabular-nums">
+      <span
+        aria-hidden
+        className="w-7 shrink-0 text-[13px] font-medium text-ink tabular-nums"
+      >
         {shown?.toFixed(1)}
       </span>
     </div>
@@ -221,7 +224,7 @@ export const newReviewDraft = (): ReviewDraft => ({
   review: "",
 });
 
-/** 쓴 사람·별·한 줄 리뷰 입력칸. 저장은 부르는 쪽이 한다. */
+/** 쓴 사람·별·리뷰 입력칸. 저장은 부르는 쪽이 한다. */
 export const ReviewFields = ({
   draft,
   onChange,
@@ -253,8 +256,8 @@ export const ReviewFields = ({
 );
 
 /**
- * 한 줄 리뷰 입력. 줄을 나누지는 않지만 길면 칸 너비에서 접어 다 보이게 하고, 글이 늘면 높이도 따라 는다.
- * Enter는 줄바꿈 대신 저장이다(붙여 넣은 줄바꿈은 띄어쓰기로 바꾼다).
+ * 리뷰 입력. Shift+Enter로 줄을 바꾸고 Enter로 저장한다. 칸 높이는 `field-sizing-content`가 글에 맞춰
+ * 늘리고, 아주 길어지면 `max-h-32` 안에서 스크롤한다(폭이 바뀌어도 다시 잴 필요가 없다).
  */
 const ReviewTextarea = ({
   value,
@@ -265,30 +268,23 @@ const ReviewTextarea = ({
   onChange: (value: string) => void;
   onEnter?: () => void;
 }) => {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  // field-sizing을 못 쓰는 브라우저도 글 높이에 맞춘다.
-  useLayoutEffect(() => {
-    const box = ref.current;
-    if (!box) return;
-    box.style.height = "auto";
-    box.style.height = `${box.scrollHeight + box.offsetHeight - box.clientHeight}px`;
-  }, [value]);
   return (
     <Textarea
-      ref={ref}
       rows={1}
-      aria-label="한 줄 리뷰"
-      placeholder="한 줄 리뷰 (안 써도 돼요)"
+      aria-label="리뷰"
+      placeholder="리뷰 (안 써도 돼요)"
       maxLength={MAX_REVIEW_LENGTH}
       value={value}
-      onChange={(event) => onChange(event.target.value.replace(/\s*\n\s*/g, " "))}
+      onChange={(event) => onChange(event.target.value)}
       onKeyDown={(event) => {
         // 가계부 내역 창처럼 바깥 폼 안에 있어도 Enter가 바깥 폼을 저장하지 않게 한다.
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+        // Shift+Enter는 줄바꿈이다.
+        if (event.shiftKey) return;
         event.preventDefault();
         onEnter?.();
       }}
-      className="min-h-0 resize-none py-1.5 text-[14px] leading-snug break-keep md:text-[13px]"
+      className="max-h-32 min-h-0 resize-none overflow-y-auto bg-surface py-1.5 text-[14px] leading-snug break-keep md:text-[13px]"
     />
   );
 };
@@ -342,7 +338,7 @@ const ReviewEditor = ({
     <div
       role="group"
       aria-label={review ? "리뷰 고치기" : "리뷰 쓰기"}
-      className="flex flex-col gap-2 rounded-xl bg-canvas-soft p-3"
+      className="flex flex-col gap-2 rounded-xl border border-hairline bg-canvas-soft p-3"
     >
       <ReviewFields draft={draft} onChange={setDraft} onEnter={save} />
       <div className="flex items-center gap-2">
@@ -400,10 +396,12 @@ const ReviewItem = ({
   review,
   showDate,
   compact,
+  variant,
 }: {
   review: PlaceReview;
   showDate: boolean;
   compact: boolean;
+  variant: ReviewVariant;
 }) => {
   const [editing, setEditing] = useState(false);
   const author = REVIEW_AUTHOR_LABEL[review.author];
@@ -415,6 +413,37 @@ const ReviewItem = ({
           review={review}
           onDone={() => setEditing(false)}
         />
+      </li>
+    );
+  }
+  if (variant === "block") {
+    return (
+      <li
+        aria-label={`${author} 리뷰`}
+        className="rounded-lg border border-hairline bg-canvas-soft/50 px-2.5 py-2"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-medium text-ink">{author}</span>
+          <RatingStars rating={review.rating} className="mt-px" />
+          {showDate && (
+            <span className="text-[11px] text-muted tabular-nums">
+              {reviewDate(review.entryDate)}
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label={`${author} 리뷰 고치기`}
+            onClick={() => setEditing(true)}
+            className="-my-1 ml-auto shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-soft hover:text-ink"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        </div>
+        {review.review && (
+          <p className="mt-1 text-[13px] leading-snug break-words whitespace-pre-line text-body">
+            {review.review}
+          </p>
+        )}
       </li>
     );
   }
@@ -436,7 +465,7 @@ const ReviewItem = ({
         {author}
       </span>
       <RatingStars rating={review.rating} className={cn("mt-0.5", compact && "mt-px")} />
-      <span className="min-w-0 flex-1 break-words text-body">
+      <span className="min-w-0 flex-1 break-words whitespace-pre-line text-body">
         {review.review}
         {showDate && (
           <span className="ml-1.5 text-[11px] text-muted tabular-nums">
@@ -459,16 +488,22 @@ const ReviewItem = ({
   );
 };
 
+/** 리뷰 한 줄 모양. `block`은 장소 카드에서 테두리 있는 블록으로 그린다. */
+type ReviewVariant = "inline" | "block";
+
 export const ReviewList = ({
   reviews,
   showDate = false,
   compact = false,
+  variant = "inline",
   className,
 }: {
   reviews: PlaceReview[];
   showDate?: boolean;
   /** 가계부 목록 줄처럼 좁은 곳에서 글자를 줄인다. */
   compact?: boolean;
+  /** 장소 카드처럼 넓은 곳에서는 `block`으로 리뷰마다 테두리를 두른다. */
+  variant?: ReviewVariant;
   className?: string;
 }) =>
   reviews.length ? (
@@ -482,6 +517,7 @@ export const ReviewList = ({
           review={review}
           showDate={showDate}
           compact={compact}
+          variant={variant}
         />
       ))}
     </ul>
