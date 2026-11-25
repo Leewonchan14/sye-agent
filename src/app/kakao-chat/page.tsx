@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useCallback, useRef, useState } from "react";
 
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -63,7 +65,7 @@ const KakaoChatPage = () => {
       formData.append("file", file);
 
       try {
-        const res = await fetch("/api/kakao-chat/upload", {
+        const res = await fetch(withBasePath("/api/kakao-chat/upload"), {
           method: "POST",
           headers: { "x-auth-token": token },
           body: formData,
@@ -194,7 +196,7 @@ const KakaoChatPage = () => {
           <Tooltip>
             <TooltipTrigger render={<span className="inline-flex" />}>
               <img
-                src="/munjackgui-thinking.png"
+                src={withBasePath("/munjackgui-thinking.png")}
                 alt="하치와레"
                 className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
                 style={{ backgroundColor: "var(--color-canvas-soft)" }}
@@ -202,7 +204,7 @@ const KakaoChatPage = () => {
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={8} align="center">
               <img
-                src="/munjackgui-thinking.png"
+                src={withBasePath("/munjackgui-thinking.png")}
                 alt=""
                 className="size-36 rounded-md bg-background object-cover"
               />

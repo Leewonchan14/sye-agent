@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import {
   CalendarHeart,
   Footprints,
@@ -285,7 +287,7 @@ export const DateSpotsPage = () => {
             {digest?.note && (
               <div className="flex items-start gap-2.5">
                 <Avatar size="sm">
-                  <AvatarImage src="/munjackgui.png" alt="하치와레" />
+                  <AvatarImage src={withBasePath("/munjackgui.png")} alt="하치와레" />
                 </Avatar>
                 <p className="rounded-2xl rounded-tl-sm bg-canvas-card px-3.5 py-2.5 text-sm leading-relaxed text-body">
                   {digest.note}

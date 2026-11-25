@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { Providers } from "@/components/providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { withBasePath } from "@/lib/base-path";
 
 import "./globals.css";
 
@@ -29,8 +30,8 @@ export const metadata: Metadata = {
   title: "하치와레 메이트",
   description: "작고 귀여운 하치와레가 메이트로 도와줄게요♪",
   icons: {
-    icon: [{ url: "/munjackgui.png", sizes: "384x384", type: "image/png" }],
-    apple: { url: "/munjackgui.png", sizes: "384x384", type: "image/png" },
+    icon: [{ url: withBasePath("/munjackgui.png"), sizes: "384x384", type: "image/png" }],
+    apple: { url: withBasePath("/munjackgui.png"), sizes: "384x384", type: "image/png" },
   },
   openGraph: {
     url: SITE_URL,
@@ -38,13 +39,13 @@ export const metadata: Metadata = {
     description: "하치와레 메이트가 도와줄게요♪",
     images: [
       {
-        url: "/munjackgui.png",
+        url: withBasePath("/munjackgui.png"),
         width: 384,
         height: 384,
         alt: "하치와레",
       },
       {
-        url: "/munjackgui-thinking.png",
+        url: withBasePath("/munjackgui-thinking.png"),
         width: 200,
         height: 200,
         alt: "하치와레 생각중",
@@ -57,7 +58,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "하치와레 메이트",
     description: "하치와레 메이트가 도와줄게요♪",
-    images: ["/munjackgui.png"],
+    images: [withBasePath("/munjackgui.png")],
   },
 };
 

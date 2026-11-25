@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogOut, Menu, Plus } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
@@ -54,7 +56,7 @@ export const SidebarLayout = ({
     queryKey: ["auth-validate", token ?? ""],
     queryFn: async () => {
       if (!token) return await new Promise((res) => setTimeout(() => res(false), 3000));
-      const r = await fetch("/api/auth", {
+      const r = await fetch(withBasePath("/api/auth"), {
         headers: { "x-auth-token": token },
       });
       const d = await r.json();
@@ -125,7 +127,7 @@ export const SidebarLayout = ({
           <Menu className="h-5 w-5" />
         </Button>
         <Avatar size="sm">
-          <AvatarImage src="/munjackgui.png" alt="하치와레" />
+          <AvatarImage src={withBasePath("/munjackgui.png")} alt="하치와레" />
         </Avatar>
         <span
           className="flex-1 text-sm font-medium"

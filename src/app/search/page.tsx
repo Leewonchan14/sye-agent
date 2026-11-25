@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useInfiniteQuery } from "@tanstack/react-query";
 
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -55,7 +57,7 @@ const SearchPage = () => {
       queryFn: async ({ pageParam }) => {
         const params = new URLSearchParams({ q: debouncedQuery });
         if (pageParam) params.set("cursor", pageParam);
-        const r = await fetch(`/api/sessions/search?${params}`, {
+        const r = await fetch(withBasePath(`/api/sessions/search?${params}`), {
           headers: { "x-auth-token": token },
         });
         const d = (await r.json()) as SearchPageResponse;
@@ -117,7 +119,7 @@ const SearchPage = () => {
           <Tooltip>
             <TooltipTrigger render={<span className="inline-flex" />}>
               <img
-                src="/munjackgui-thinking.png"
+                src={withBasePath("/munjackgui-thinking.png")}
                 alt="하치와레"
                 className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
                 style={{ backgroundColor: "var(--color-canvas-soft)" }}
@@ -125,7 +127,7 @@ const SearchPage = () => {
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={8} align="center">
               <img
-                src="/munjackgui-thinking.png"
+                src={withBasePath("/munjackgui-thinking.png")}
                 alt=""
                 className="size-36 rounded-md bg-background object-cover"
               />

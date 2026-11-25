@@ -1,5 +1,7 @@
 "use client";
 
+import { withBasePath } from "@/lib/base-path";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
@@ -22,7 +24,7 @@ interface Instructions {
 }
 
 const fetchData = async (token: string) => {
-  const res = await fetch("/api/instructions", {
+  const res = await fetch(withBasePath("/api/instructions"), {
     headers: { "x-auth-token": token },
   });
   if (!res.ok) throw new Error("불러오기 실패");
@@ -40,7 +42,7 @@ const saveData = async ({
   content: string;
   id?: number;
 }) => {
-  const res = await fetch("/api/instructions", {
+  const res = await fetch(withBasePath("/api/instructions"), {
     method: "POST",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ id, label, content }),
@@ -51,7 +53,7 @@ const saveData = async ({
 };
 
 const toggleActive = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch("/api/instructions", {
+  const res = await fetch(withBasePath("/api/instructions"), {
     method: "PATCH",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
@@ -62,7 +64,7 @@ const toggleActive = async ({ token, id }: { token: string; id: number }) => {
 };
 
 const deleteInstruction = async ({ token, id }: { token: string; id: number }) => {
-  const res = await fetch("/api/instructions", {
+  const res = await fetch(withBasePath("/api/instructions"), {
     method: "DELETE",
     headers: { "x-auth-token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
@@ -192,7 +194,7 @@ const InstructionsContent = () => {
         <Tooltip>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <img
-              src="/munjackgui-thinking.png"
+              src={withBasePath("/munjackgui-thinking.png")}
               alt="하치와레"
               className="mx-auto mb-4 size-20 cursor-pointer rounded-full object-cover"
               style={{ backgroundColor: "var(--color-canvas-soft)" }}
@@ -200,7 +202,7 @@ const InstructionsContent = () => {
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={8} align="center">
             <img
-              src="/munjackgui-thinking.png"
+              src={withBasePath("/munjackgui-thinking.png")}
               alt=""
               className="size-36 rounded-md bg-background object-cover"
             />
