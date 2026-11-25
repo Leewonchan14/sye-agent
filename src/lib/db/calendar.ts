@@ -167,7 +167,6 @@ const toCalendarDiary = (row: DiaryRow): CalendarDiary => ({
   date: row.date,
   author: row.author as CalendarViewer,
   body: row.body,
-  mood: row.mood,
   photos: row.photos,
   createdAt: toIso(row.createdAt),
   updatedAt: toIso(row.updatedAt),
@@ -177,7 +176,6 @@ const toDiarySummary = (row: DiaryRow): CalendarDiarySummary => ({
   id: row.id,
   date: row.date,
   author: row.author as CalendarViewer,
-  mood: row.mood,
   excerpt: row.body.slice(0, 80),
   thumbs: row.photos.map((photo) => photo.thumb),
   updatedAt: toIso(row.updatedAt),
@@ -962,16 +960,15 @@ export const upsertCalendarDiary = async (
   if (body.length > MAX_DIARY_BODY) {
     throw new CalendarError("일기 본문은 10,000자 이하여야 해요.");
   }
-  const mood = typeof input.mood === "string" ? input.mood : "";
   const photos = normalizePhotos(input.photos);
   const now = kst().toDate();
 
   const [row] = await getDb()
     .insert(schema.calendarDiaries)
-    .values({ date, author, body, mood, photos, updatedAt: now })
+    .values({ date, author, body, photos, updatedAt: now })
     .onConflictDoUpdate({
       target: [schema.calendarDiaries.date, schema.calendarDiaries.author],
-      set: { body, mood, photos, updatedAt: now },
+      set: { body, photos, updatedAt: now },
     })
     .returning();
   return toCalendarDiary(row);

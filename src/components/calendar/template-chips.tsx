@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/lib/auth-store";
-import { calendarRequest } from "@/lib/calendar/client";
+import { calendarKeys, calendarRequest } from "@/lib/calendar/client";
 import type { CalendarOwner, CalendarTemplate } from "@/lib/calendar/types";
 
 export interface TemplateSnapshot {
@@ -21,8 +21,6 @@ export interface TemplateSnapshot {
   memo: string;
   durationMinutes: number;
 }
-
-const templatesKey = ["calendar", "templates"] as const;
 
 interface Props {
   onApply: (template: CalendarTemplate) => void;
@@ -37,7 +35,7 @@ export const TemplateChips = ({ onApply, getSnapshot }: Props) => {
   const [name, setName] = useState("");
 
   const { data: templates = [] } = useQuery({
-    queryKey: templatesKey,
+    queryKey: calendarKeys.templates,
     queryFn: async () => {
       const res = await calendarRequest<{ templates: CalendarTemplate[] }>(
         token,
@@ -62,7 +60,7 @@ export const TemplateChips = ({ onApply, getSnapshot }: Props) => {
       toast.success("템플릿을 저장했어요.");
       setName("");
       setSaveOpen(false);
-      queryClient.invalidateQueries({ queryKey: templatesKey });
+      queryClient.invalidateQueries({ queryKey: calendarKeys.templates });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -74,7 +72,7 @@ export const TemplateChips = ({ onApply, getSnapshot }: Props) => {
       }),
     onSuccess: () => {
       toast.success("템플릿을 지웠어요.");
-      queryClient.invalidateQueries({ queryKey: templatesKey });
+      queryClient.invalidateQueries({ queryKey: calendarKeys.templates });
     },
     onError: (error: Error) => toast.error(error.message),
   });

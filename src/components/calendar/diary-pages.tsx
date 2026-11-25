@@ -1,30 +1,23 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronLeft, ChevronRight, Lock } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import useLocalStorageState from "use-local-storage-state";
 
+import { Stepper } from "@/components/calendar/calendar-ui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthStore } from "@/lib/auth-store";
-import { calendarRequest } from "@/lib/calendar/client";
-import { moodEmoji, ownerName } from "@/lib/calendar/format";
-import type {
-  CalendarDiary,
-  CalendarSettings,
-  CalendarViewer,
-} from "@/lib/calendar/types";
+import { calendarKeys, calendarRequest } from "@/lib/calendar/client";
+import { ownerName } from "@/lib/calendar/format";
+import { useCalendarSettings } from "@/lib/calendar/hooks";
+import type { CalendarDiary, CalendarSettings } from "@/lib/calendar/types";
 import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
 
 type DiaryTab = "daily" | "monthly" | "fourcut";
-
-const settingsKey = ["calendar", "settings"] as const;
-const diariesMonthKey = (month: string) =>
-  ["calendar", "diaries", "month", month] as const;
 
 const dayDiariesOf = (diaries: CalendarDiary[], date: string) =>
   diaries.filter((diary) => diary.date === date);
@@ -32,24 +25,16 @@ const dayDiariesOf = (diaries: CalendarDiary[], date: string) =>
 export const DiaryPages = () => {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
-  const [viewer] = useLocalStorageState<CalendarViewer>("sye-calendar-viewer", {
-    defaultValue: "wonchan",
-  });
   const [tab, setTab] = useState<DiaryTab>("daily");
   const [date, setDate] = useState(() => kst().format("YYYY-MM-DD"));
 
   const month = date.slice(0, 7);
 
-  const { data: settingsData } = useQuery({
-    queryKey: settingsKey,
-    queryFn: () =>
-      calendarRequest<{ settings: CalendarSettings }>(token, "/api/calendar/settings"),
-    enabled: Boolean(token),
-  });
-  const plus = settingsData?.settings.plus ?? true;
+  const { data: settings } = useCalendarSettings();
+  const plus = settings?.plus ?? true;
 
   const { data: diaries = [] } = useQuery({
-    queryKey: diariesMonthKey(month),
+    queryKey: calendarKeys.diariesMonth(month),
     queryFn: async () => {
       const res = await calendarRequest<{ diaries: CalendarDiary[] }>(
         token,
@@ -68,7 +53,7 @@ export const DiaryPages = () => {
       }),
     onSuccess: () => {
       toast.success("Plus를 켰어요.");
-      queryClient.invalidateQueries({ queryKey: settingsKey });
+      queryClient.invalidateQueries({ queryKey: calendarKeys.settings });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -134,7 +119,7 @@ export const DiaryPages = () => {
               value="daily"
               className="flex-none px-1 text-[13px] after:bg-primary"
             >
-              데일리 무드
+              하루 기록
             </TabsTrigger>
             <TabsTrigger
               value="monthly"
@@ -151,27 +136,17 @@ export const DiaryPages = () => {
           </TabsList>
 
           <TabsContent value="daily" data-testid="diary-page-daily">
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="이전 날"
-                onClick={() => goDate(-1)}
-              >
-                <ChevronLeft />
-              </Button>
+            <Stepper
+              className="mt-4"
+              prevLabel="이전 날"
+              nextLabel="다음 날"
+              onPrev={() => goDate(-1)}
+              onNext={() => goDate(1)}
+            >
               <span className="text-sm font-medium text-ink">
                 {kst(date).format("M월 D일 dddd")}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="다음 날"
-                onClick={() => goDate(1)}
-              >
-                <ChevronRight />
-              </Button>
-            </div>
+            </Stepper>
             <div className="mt-3 space-y-3">
               {dayDiaries.length === 0 ? (
                 <p className="py-10 text-center text-[12px] text-muted">
@@ -183,14 +158,9 @@ export const DiaryPages = () => {
                     key={diary.id}
                     className="rounded-2xl border border-hairline bg-surface p-4"
                   >
-                    <div className="flex items-center gap-2">
-                      {diary.mood && (
-                        <span className="text-3xl">{moodEmoji(diary.mood)}</span>
-                      )}
-                      <p className="text-[13px] font-medium text-ink">
-                        {ownerName(diary.author, viewer)}
-                      </p>
-                    </div>
+                    <p className="text-[13px] font-medium text-ink">
+                      {ownerName(diary.author)}
+                    </p>
                     {diary.body && (
                       <p className="mt-2 text-[13px] leading-relaxed whitespace-pre-wrap text-body">
                         {diary.body}
@@ -216,27 +186,17 @@ export const DiaryPages = () => {
           </TabsContent>
 
           <TabsContent value="monthly" data-testid="diary-page-monthly">
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="이전 달"
-                onClick={() => goMonth(-1)}
-              >
-                <ChevronLeft />
-              </Button>
+            <Stepper
+              className="mt-4"
+              prevLabel="이전 달"
+              nextLabel="다음 달"
+              onPrev={() => goMonth(-1)}
+              onNext={() => goMonth(1)}
+            >
               <span className="text-sm font-medium text-ink">
                 {kst(`${month}-01`).format("YYYY년 M월")}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="다음 달"
-                onClick={() => goMonth(1)}
-              >
-                <ChevronRight />
-              </Button>
-            </div>
+            </Stepper>
             <div className="mt-4 space-y-4">
               {sorted.length === 0 ? (
                 <p className="py-10 text-center text-[12px] text-muted">
@@ -254,14 +214,9 @@ export const DiaryPages = () => {
                       </p>
                     </div>
                     <div className="min-w-0 flex-1 rounded-2xl border border-hairline bg-surface p-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[12px] font-medium text-ink">
-                          {ownerName(diary.author, viewer)}
-                        </span>
-                        {diary.mood && (
-                          <span className="text-sm">{moodEmoji(diary.mood)}</span>
-                        )}
-                      </div>
+                      <span className="text-[12px] font-medium text-ink">
+                        {ownerName(diary.author)}
+                      </span>
                       {diary.body && (
                         <p className="mt-1 line-clamp-3 text-[12px] whitespace-pre-wrap text-body">
                           {diary.body}
@@ -288,27 +243,17 @@ export const DiaryPages = () => {
           </TabsContent>
 
           <TabsContent value="fourcut" data-testid="diary-page-fourcut">
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="이전 날"
-                onClick={() => goDate(-1)}
-              >
-                <ChevronLeft />
-              </Button>
+            <Stepper
+              className="mt-4"
+              prevLabel="이전 날"
+              nextLabel="다음 날"
+              onPrev={() => goDate(-1)}
+              onNext={() => goDate(1)}
+            >
               <span className="text-sm font-medium text-ink">
                 {kst(date).format("M월 D일 dddd")}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="다음 날"
-                onClick={() => goDate(1)}
-              >
-                <ChevronRight />
-              </Button>
-            </div>
+            </Stepper>
             <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-hairline bg-surface p-3">
               {[0, 1, 2, 3].map((index) => {
                 const photo = fourPhotos[index];

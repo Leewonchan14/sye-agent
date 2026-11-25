@@ -1,8 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { Segmented, Switch } from "@/components/calendar/calendar-ui";
 import {
   Dialog,
   DialogContent,
@@ -19,9 +20,9 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStore } from "@/lib/auth-store";
-import { calendarKeys, calendarRequest } from "@/lib/calendar/client";
+import { calendarRequest } from "@/lib/calendar/client";
+import { useCalendarSettings, useInvalidateCalendar } from "@/lib/calendar/hooks";
 import type { CalendarSettings } from "@/lib/calendar/types";
-import { cn } from "@/lib/utils";
 
 const MINUTE_STEPS = [1, 5, 10, 15, 30, 60];
 
@@ -43,25 +44,7 @@ const SwitchRow = ({
       <p className="text-[13px] text-ink">{label}</p>
       {hint && <p className="text-[11px] text-muted-soft">{hint}</p>}
     </div>
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      data-testid={testId}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative h-5 w-9 shrink-0 rounded-full border transition-colors",
-        checked ? "border-primary bg-primary" : "border-hairline bg-canvas-strong"
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute top-0.5 size-4 rounded-full bg-white shadow transition-all",
-          checked ? "left-4" : "left-0.5"
-        )}
-      />
-    </button>
+    <Switch checked={checked} onCheckedChange={onChange} label={label} testId={testId} />
   </div>
 );
 
@@ -78,32 +61,18 @@ export const SettingsDialog = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   const token = useAuthStore((s) => s.token);
-  const queryClient = useQueryClient();
-
-  const { data, isPending, isError } = useQuery({
-    queryKey: calendarKeys.settings,
-    queryFn: async () => {
-      const res = await calendarRequest<{ settings: CalendarSettings }>(
-        token,
-        "/api/calendar/settings"
-      );
-      return res.settings;
-    },
-    enabled: open && Boolean(token),
-  });
+  const invalidate = useInvalidateCalendar();
+  const { data: settings, isPending, isError } = useCalendarSettings({ enabled: open });
 
   const patch = useMutation({
     mutationFn: (partial: Partial<CalendarSettings>) =>
       calendarRequest<{ settings: CalendarSettings }>(token, "/api/calendar/settings", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(partial),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+    onSuccess: invalidate,
     onError: () => toast.error("설정을 저장하지 못했어요"),
   });
-
-  const settings = data;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -141,28 +110,13 @@ export const SettingsDialog = ({
 
             <div className="flex items-center justify-between gap-3 rounded-xl border border-hairline bg-surface px-3 py-2.5">
               <p className="text-[13px] text-ink">시작 요일</p>
-              <div
-                data-testid="setting-week-start"
-                role="group"
-                className="flex items-center rounded-lg border border-hairline bg-canvas-soft p-0.5"
-              >
-                {WEEK_START_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={settings.weekStart === option.value}
-                    onClick={() => patch.mutate({ weekStart: option.value })}
-                    className={cn(
-                      "rounded-md px-2 py-1 text-[12px] font-medium transition-colors",
-                      settings.weekStart === option.value &&
-                        "bg-primary text-primary-foreground",
-                      settings.weekStart !== option.value && "text-muted hover:text-ink"
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                testId="setting-week-start"
+                options={WEEK_START_OPTIONS}
+                value={settings.weekStart}
+                onChange={(weekStart) => patch.mutate({ weekStart })}
+                className="bg-canvas-soft"
+              />
             </div>
 
             <SwitchRow
@@ -222,7 +176,7 @@ export const SettingsDialog = ({
 
             <SwitchRow
               label="Plus 기능"
-              hint="일기 모아보기·일기 페이지"
+              hint="일기 페이지"
               checked={settings.plus}
               testId="setting-plus"
               onChange={(value) => patch.mutate({ plus: value })}

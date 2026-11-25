@@ -8,45 +8,38 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-import { FilterMenu, type CalendarFilter } from "@/components/calendar/filter-menu";
+import { Segmented } from "@/components/calendar/calendar-ui";
+import { MonthPicker } from "@/components/ledger/period-picker";
 import { Button } from "@/components/ui/button";
-import { VIEWER_NAME } from "@/lib/calendar/format";
-import type { CalendarView, CalendarViewer } from "@/lib/calendar/types";
-import { cn } from "@/lib/utils";
+import type { CalendarView } from "@/lib/calendar/types";
 
-const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
-  { id: "month", label: "월간" },
-  { id: "twoweek", label: "2주" },
-  { id: "couple", label: "커플" },
-  { id: "diary", label: "일기" },
+const VIEW_OPTIONS: { value: CalendarView; label: string; testId: string }[] = [
+  { value: "month", label: "월간", testId: "view-tab-month" },
+  { value: "twoweek", label: "2주", testId: "view-tab-twoweek" },
+  { value: "couple", label: "커플", testId: "view-tab-couple" },
 ];
-
-const VIEWERS: CalendarViewer[] = ["wonchan", "yeeun"];
 
 export const CalendarHeader = ({
   title,
+  month,
   view,
-  viewer,
-  filter,
-  onFilterChange,
   onPrev,
   onNext,
   onToday,
   onViewChange,
-  onViewerChange,
+  onMonthChange,
   onSearch,
   onSettings,
 }: {
   title: string;
+  /** YYYY-MM */
+  month: string;
   view: CalendarView;
-  viewer: CalendarViewer;
-  filter: CalendarFilter;
-  onFilterChange: (filter: CalendarFilter) => void;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
   onViewChange: (view: CalendarView) => void;
-  onViewerChange: (viewer: CalendarViewer) => void;
+  onMonthChange: (month: string) => void;
   onSearch: () => void;
   onSettings: () => void;
 }) => {
@@ -99,12 +92,16 @@ export const CalendarHeader = ({
           >
             <ChevronLeft />
           </Button>
-          <span
+          <div
             data-testid="calendar-title"
             className="min-w-32 text-center text-[15px] font-semibold text-ink tabular-nums"
           >
-            {title}
-          </span>
+            {view === "month" ? (
+              <MonthPicker month={month} onChange={onMonthChange} />
+            ) : (
+              title
+            )}
+          </div>
           <Button
             type="button"
             variant="ghost"
@@ -118,54 +115,15 @@ export const CalendarHeader = ({
             오늘
           </Button>
         </div>
-        <div
-          role="group"
-          aria-label="보는 사람"
-          className="flex items-center rounded-lg border border-hairline bg-surface p-0.5"
-        >
-          {VIEWERS.map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={viewer === v}
-              onClick={() => onViewerChange(v)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
-                viewer === v && "bg-primary text-primary-foreground",
-                viewer !== v && "text-muted hover:text-ink"
-              )}
-            >
-              {VIEWER_NAME[v]}
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div
-          role="group"
-          aria-label="보기 방식"
-          className="flex items-center rounded-lg border border-hairline bg-surface p-0.5"
-        >
-          {VIEW_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={view === option.id}
-              data-testid={`view-tab-${option.id}`}
-              onClick={() => onViewChange(option.id)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
-                view === option.id && "bg-primary text-primary-foreground",
-                view !== option.id && "text-muted hover:text-ink"
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <FilterMenu filter={filter} onChange={onFilterChange} />
-      </div>
+      <Segmented
+        ariaLabel="보기 방식"
+        options={VIEW_OPTIONS}
+        value={view}
+        onChange={onViewChange}
+        className="self-start bg-surface"
+      />
     </header>
   );
 };

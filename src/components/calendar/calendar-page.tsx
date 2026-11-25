@@ -1,16 +1,13 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import useLocalStorageState from "use-local-storage-state";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { CalendarHeader } from "@/components/calendar/calendar-header";
 import { CoupleView } from "@/components/calendar/couple-view";
 import { DaySheet } from "@/components/calendar/day-sheet";
-import { DiaryCalendarView } from "@/components/calendar/diary-calendar-view";
 import { DiaryEditor } from "@/components/calendar/diary-editor";
 import { EventDialog } from "@/components/calendar/event-dialog";
-import type { CalendarFilter } from "@/components/calendar/filter-menu";
 import { MonthView } from "@/components/calendar/month-view";
 import { SearchPanel } from "@/components/calendar/search-panel";
 import { SettingsDialog } from "@/components/calendar/settings-dialog";
@@ -19,17 +16,19 @@ import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStore } from "@/lib/auth-store";
-import { calendarKeys, calendarRequest } from "@/lib/calendar/client";
+import {
+  CALENDAR_LIVE_QUERY,
+  calendarKeys,
+  calendarRequest,
+} from "@/lib/calendar/client";
+import { useCalendarSettings } from "@/lib/calendar/hooks";
 import type {
   CalendarOccurrence,
   CalendarPayload,
-  CalendarSettings,
   CalendarView,
-  CalendarViewer,
 } from "@/lib/calendar/types";
+import { DEFAULT_CALENDAR_SETTINGS, todayKst } from "@/lib/calendar/view";
 import { kst } from "@/lib/kst";
-
-const todayKstStr = (): string => kst().format("YYYY-MM-DD");
 
 const anchorRange = (
   view: CalendarView,
@@ -74,38 +73,10 @@ const titleOf = (
   return kst(anchorDate).format("YYYY년 M월");
 };
 
-const DEFAULT_FILTER: CalendarFilter = { together: true, wonchan: true, yeeun: true };
-
-const DEFAULT_SETTINGS: CalendarSettings = {
-  showHolidays: true,
-  showPhotos: true,
-  weekStart: 0,
-  highlightWeekend: true,
-  lunarDetail: true,
-  lunarMonth: false,
-  lunarEvent: true,
-  minuteStep: 10,
-  plus: true,
-};
-
 export const CalendarPage = () => {
   const token = useAuthStore((s) => s.token);
-  const queryClient = useQueryClient();
-
   const [view, setView] = useState<CalendarView>("month");
-  const [anchorDate, setAnchorDate] = useState<string>(todayKstStr);
-  const [viewer, setViewer] = useLocalStorageState<CalendarViewer>(
-    "sye-calendar-viewer",
-    {
-      defaultValue: "wonchan",
-    }
-  );
-  const [filter, setFilter] = useLocalStorageState<CalendarFilter>(
-    "sye-calendar-filter",
-    {
-      defaultValue: DEFAULT_FILTER,
-    }
-  );
+  const [anchorDate, setAnchorDate] = useState<string>(todayKst);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -116,18 +87,8 @@ export const CalendarPage = () => {
   const [eventOpen, setEventOpen] = useState(false);
   const [diaryDate, setDiaryDate] = useState<string | null>(null);
 
-  // 2주 격자의 시작 요일은 설정에서 읽는다. 설정 다이얼로그와 같은 캐시 모양(CalendarSettings)을 쓴다.
-  const settingsQuery = useQuery({
-    queryKey: calendarKeys.settings,
-    queryFn: async () => {
-      const res = await calendarRequest<{ settings: CalendarSettings }>(
-        token,
-        "/api/calendar/settings"
-      );
-      return res.settings;
-    },
-    enabled: Boolean(token),
-  });
+  // 2주 격자의 열이 요일과 맞도록 범위를 잡기 전에 시작 요일을 읽는다.
+  const settingsQuery = useCalendarSettings();
   const weekStart = settingsQuery.data?.weekStart ?? 0;
 
   const { from, to } = anchorRange(view, anchorDate, weekStart);
@@ -137,14 +98,8 @@ export const CalendarPage = () => {
     queryFn: () =>
       calendarRequest<CalendarPayload>(token, `/api/calendar?from=${from}&to=${to}`),
     enabled: Boolean(token),
+    ...CALENDAR_LIVE_QUERY,
   });
-
-  const visibleEvents = useMemo(() => {
-    if (!data) return [];
-    return data.events.filter((event) => filter[event.owner]);
-  }, [data, filter]);
-
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["calendar"] });
 
   const openNewEvent = (initialDate?: string) => {
     setEventState({ event: null, initialDate });
@@ -157,21 +112,21 @@ export const CalendarPage = () => {
   };
 
   const title = titleOf(view, from, to, anchorDate);
+  const settings = data?.settings ?? settingsQuery.data ?? DEFAULT_CALENDAR_SETTINGS;
+  const labels = data?.labels ?? [];
 
   return (
     <SidebarLayout activeNav="calendar">
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 md:px-8 md:py-8">
         <CalendarHeader
           title={title}
+          month={anchorDate.slice(0, 7)}
           view={view}
-          viewer={viewer}
-          filter={filter}
-          onFilterChange={setFilter}
           onPrev={() => setAnchorDate((d) => shiftAnchor(view, d, -1))}
           onNext={() => setAnchorDate((d) => shiftAnchor(view, d, 1))}
-          onToday={() => setAnchorDate(todayKstStr())}
+          onToday={() => setAnchorDate(todayKst())}
           onViewChange={setView}
-          onViewerChange={setViewer}
+          onMonthChange={(month) => setAnchorDate(`${month}-01`)}
           onSearch={() => setSearchOpen(true)}
           onSettings={() => setSettingsOpen(true)}
         />
@@ -196,7 +151,7 @@ export const CalendarPage = () => {
           ) : view === "month" ? (
             <MonthView
               days={data.days}
-              events={visibleEvents}
+              events={data.events}
               diaries={data.diaries}
               labels={data.labels}
               settings={data.settings}
@@ -206,23 +161,15 @@ export const CalendarPage = () => {
           ) : view === "twoweek" ? (
             <TwoWeekView
               days={data.days}
-              events={visibleEvents}
+              events={data.events}
+              diaries={data.diaries}
               labels={data.labels}
               settings={data.settings}
               selectedDate={selectedDate}
               onSelectDay={setSelectedDate}
             />
-          ) : view === "couple" ? (
-            <CoupleView events={visibleEvents} labels={data.labels} />
           ) : (
-            <DiaryCalendarView
-              days={data.days}
-              diaries={data.diaries}
-              settings={data.settings}
-              selectedDate={selectedDate}
-              onSelectDay={setSelectedDate}
-              onOpenDiary={(date) => setDiaryDate(date)}
-            />
+            <CoupleView events={data.events} labels={data.labels} />
           )}
         </div>
       </main>
@@ -233,10 +180,8 @@ export const CalendarPage = () => {
         onOpenChange={(open) => {
           if (!open) setSelectedDate(null);
         }}
-        viewer={viewer}
-        settings={data?.settings ?? DEFAULT_SETTINGS}
-        labels={data?.labels ?? []}
-        filter={filter}
+        settings={settings}
+        labels={labels}
         onEditEvent={openEditEvent}
         onAddEvent={(date) => openNewEvent(date)}
         onOpenDiary={(date) => setDiaryDate(date)}
@@ -245,13 +190,10 @@ export const CalendarPage = () => {
       <EventDialog
         open={eventOpen}
         onOpenChange={setEventOpen}
-        viewer={viewer}
-        settings={data?.settings ?? DEFAULT_SETTINGS}
-        labels={data?.labels ?? []}
+        settings={settings}
+        labels={labels}
         initialDate={eventState.initialDate}
         event={eventState.event}
-        onSaved={invalidate}
-        onLabelsChanged={invalidate}
       />
 
       <DiaryEditor
@@ -260,15 +202,12 @@ export const CalendarPage = () => {
           if (!open) setDiaryDate(null);
         }}
         date={diaryDate ?? ""}
-        viewer={viewer}
-        onSaved={invalidate}
       />
 
       <SearchPanel
         open={searchOpen}
         onOpenChange={setSearchOpen}
-        viewer={viewer}
-        labels={data?.labels ?? []}
+        labels={labels}
         onSelectDate={(date) => setSelectedDate(date)}
       />
 

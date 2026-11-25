@@ -1,0 +1,1 @@
+ALTER TABLE "calendar_diaries" DROP COLUMN "mood";
