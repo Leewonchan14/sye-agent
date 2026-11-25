@@ -1,7 +1,5 @@
 "use client";
 
-import { withBasePath } from "@/lib/base-path";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Image from "next/image";
@@ -60,7 +58,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
       setError("");
 
       try {
-        const res = await fetch(withBasePath("/api/auth"), {
+        const res = await fetch("/api/auth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: value }),
@@ -105,7 +103,7 @@ export const PasswordGate = ({ onSuccess }: PasswordGateProps) => {
         }}
       >
         <Image
-          src={withBasePath("/munjackgui.png")}
+          src="/munjackgui.png"
           alt="munjackgu"
           width={80}
           height={80}

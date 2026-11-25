@@ -1,7 +1,5 @@
 "use client";
 
-import { withBasePath } from "@/lib/base-path";
-
 import { useCallback } from "react";
 
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +20,7 @@ interface Props {
 }
 
 const fetchSuggestions = async (token: string) => {
-  const res = await fetch(withBasePath("/api/suggestions"), {
+  const res = await fetch("/api/suggestions", {
     headers: { "x-auth-token": token },
   });
   if (!res.ok) throw new Error("불러오기 실패");
