@@ -1,3 +1,4 @@
+import type { DiaryPhoto } from "@/lib/calendar/types";
 import type { UIMessageChunk } from "ai";
 import { sql } from "drizzle-orm";
 import {
@@ -765,3 +766,94 @@ export const placeReviews = pgTable(
     entryIdx: index("place_reviews_entry_idx").on(t.entryId),
   })
 );
+
+/* ───────────────────────── 우리 캘린더 (일정·일기) ───────────────────────── */
+
+/** 캘린더 표시 설정. 한 줄(id = 1)만 쓴다. */
+export const calendarSettings = pgTable("calendar_settings", {
+  id: integer("id").primaryKey().default(1),
+  showHolidays: boolean("show_holidays").notNull().default(true),
+  showPhotos: boolean("show_photos").notNull().default(true),
+  weekStart: integer("week_start").notNull().default(0), // 0=일요일, 1=월요일
+  highlightWeekend: boolean("highlight_weekend").notNull().default(true),
+  lunarDetail: boolean("lunar_detail").notNull().default(true),
+  lunarMonth: boolean("lunar_month").notNull().default(false),
+  lunarEvent: boolean("lunar_event").notNull().default(true),
+  minuteStep: integer("minute_step").notNull().default(10),
+  plus: boolean("plus").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+/** 일정 라벨. 비어 있으면 LABEL_COLORS 10색으로 기본 라벨을 만든다. */
+export const calendarLabels = pgTable("calendar_labels", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  color: text("color").notNull(), // LABEL_COLORS key
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const calendarEvents = pgTable(
+  "calendar_events",
+  {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    owner: text("owner").notNull(), // wonchan | yeeun | together
+    allDay: boolean("all_day").notNull().default(false),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+    isLunar: boolean("is_lunar").notNull().default(false),
+    lunarYear: integer("lunar_year"),
+    lunarMonth: integer("lunar_month"),
+    lunarDay: integer("lunar_day"),
+    lunarLeap: boolean("lunar_leap").notNull().default(false),
+    recurrence: text("recurrence").notNull().default("none"),
+    recurrenceUntil: text("recurrence_until"), // YYYY-MM-DD
+    labelId: integer("label_id").references(() => calendarLabels.id, {
+      onDelete: "set null",
+    }),
+    location: text("location").notNull().default(""),
+    memo: text("memo").notNull().default(""),
+    groupId: text("group_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    startIdx: index("calendar_events_start_idx").on(table.startAt),
+    ownerIdx: index("calendar_events_owner_idx").on(table.owner),
+  })
+);
+
+export const calendarDiaries = pgTable(
+  "calendar_diaries",
+  {
+    id: serial("id").primaryKey(),
+    date: text("date").notNull(), // YYYY-MM-DD
+    author: text("author").notNull(), // wonchan | yeeun
+    body: text("body").notNull().default(""),
+    mood: text("mood").notNull().default(""),
+    photos: jsonb("photos").$type<DiaryPhoto[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    dateAuthorIdx: uniqueIndex("calendar_diaries_date_author_idx").on(
+      table.date,
+      table.author
+    ),
+    dateIdx: index("calendar_diaries_date_idx").on(table.date),
+  })
+);
+
+export const calendarTemplates = pgTable("calendar_templates", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  title: text("title").notNull(),
+  owner: text("owner").notNull(),
+  allDay: boolean("all_day").notNull().default(false),
+  labelId: integer("label_id"),
+  location: text("location").notNull().default(""),
+  memo: text("memo").notNull().default(""),
+  durationMinutes: integer("duration_minutes").notNull().default(60),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
