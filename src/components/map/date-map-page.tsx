@@ -195,11 +195,11 @@ const PlaceDetail = ({
         }))}
         defaultWriting={startWriting}
       />
-      {/* 간 날이 많으면 이 목록만 스크롤한다. 장소 이름과 지도 링크는 늘 보인다. */}
-      <ul
-        aria-label="간 날"
-        className="-mr-2 flex max-h-72 flex-col divide-y divide-hairline-soft overflow-y-auto overscroll-contain pr-2"
-      >
+      {/*
+        간 날 목록은 따로 스크롤하지 않는다. 화면 스크롤 안에 스크롤 칸이 또 있으면 그 위에서 쓸어 넘길 때
+        목록만 움직이고 화면이 안 내려가, 스크롤이 걸리는 느낌이 든다. 넓은 화면에서는 카드가 통째로 스크롤한다.
+      */}
+      <ul aria-label="간 날" className="flex flex-col divide-y divide-hairline-soft">
         {place.entries.map((visit) => {
           const several = visit.payments.length > 1;
           return (
@@ -684,7 +684,7 @@ export const DateMapPage = () => {
                 높이를 줄이고 카드 안에서 스크롤한다.
               */}
               {(selected || selectedSpot) && (
-                <div className="md:sticky md:top-0 md:z-10 md:-mt-4 md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto md:overscroll-contain md:bg-canvas md:pt-4">
+                <div className="md:sticky md:top-0 md:z-10 md:-mt-4 md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto md:bg-canvas md:pt-4">
                   {selected && (
                     <PlaceDetail
                       place={selected}

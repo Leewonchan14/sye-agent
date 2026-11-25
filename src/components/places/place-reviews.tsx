@@ -3,10 +3,9 @@
 import { Pencil, Plus, Star, StarHalf } from "lucide-react";
 import { toast } from "sonner";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -15,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { kst } from "@/lib/kst";
 import { useReviewMutations } from "@/lib/places/client";
 import {
@@ -244,21 +244,54 @@ export const ReviewFields = ({
       onChange={(rating) => onChange({ ...draft, rating })}
       onEnter={onEnter}
     />
-    <Input
+    <ReviewTextarea
+      value={draft.review}
+      onChange={(review) => onChange({ ...draft, review })}
+      onEnter={onEnter}
+    />
+  </>
+);
+
+/**
+ * 한 줄 리뷰 입력. 줄을 나누지는 않지만 길면 칸 너비에서 접어 다 보이게 하고, 글이 늘면 높이도 따라 는다.
+ * Enter는 줄바꿈 대신 저장이다(붙여 넣은 줄바꿈은 띄어쓰기로 바꾼다).
+ */
+const ReviewTextarea = ({
+  value,
+  onChange,
+  onEnter,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onEnter?: () => void;
+}) => {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  // field-sizing을 못 쓰는 브라우저도 글 높이에 맞춘다.
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${box.scrollHeight + box.offsetHeight - box.clientHeight}px`;
+  }, [value]);
+  return (
+    <Textarea
+      ref={ref}
+      rows={1}
       aria-label="한 줄 리뷰"
       placeholder="한 줄 리뷰 (안 써도 돼요)"
       maxLength={MAX_REVIEW_LENGTH}
-      value={draft.review}
-      onChange={(event) => onChange({ ...draft, review: event.target.value })}
+      value={value}
+      onChange={(event) => onChange(event.target.value.replace(/\s*\n\s*/g, " "))}
       onKeyDown={(event) => {
         // 가계부 내역 창처럼 바깥 폼 안에 있어도 Enter가 바깥 폼을 저장하지 않게 한다.
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
         event.preventDefault();
         onEnter?.();
       }}
+      className="min-h-0 resize-none py-1.5 text-[14px] leading-snug break-keep md:text-[13px]"
     />
-  </>
-);
+  );
+};
 
 /**
  * 리뷰 하나 쓰기·고치기. 폼 대신 그룹으로 두어 가계부 내역 창(폼) 안에도 넣을 수 있다.
