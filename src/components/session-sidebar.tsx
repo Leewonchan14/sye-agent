@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   Activity,
+  CalendarDays,
   CalendarHeart,
   ChevronUp,
   Dices,
@@ -47,6 +48,7 @@ const MONITOR_URL = "https://monitor.성예은.shop";
 /** Sidebar entry that the current page belongs to. */
 export type SidebarNav =
   | "ledger"
+  | "calendar"
   | "monitor"
   | "dates"
   | "map"
@@ -75,6 +77,7 @@ interface Props {
 /** Frequently used in-app features, always visible. */
 const APP_NAV = [
   { key: "ledger", href: "/ledger", label: "가계부", icon: Wallet },
+  { key: "calendar", href: "/calendar", label: "우리 캘린더", icon: CalendarDays },
   { key: "dates", href: "/dates", label: "데이트 추천", icon: CalendarHeart },
   { key: "map", href: "/map", label: "데이트 지도", icon: MapPinned },
   { key: "pick", href: "/pick", label: "골라 줘", icon: Dices },
