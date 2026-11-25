@@ -542,7 +542,7 @@ test("분류를 골라 그 분류 지출로 간 곳만 보고, 기간을 바꿔�
   await expect(items.first()).toContainText("망원 카페");
 });
 
-test("간 날이 많으면 장소 카드 안의 간 날 목록만 스크롤한다", async ({
+test("간 날이 많아도 간 날 목록은 따로 스크롤하지 않아 화면 스크롤이 걸리지 않는다", async ({
   page,
   request,
 }) => {
@@ -563,23 +563,18 @@ test("간 날이 많으면 장소 카드 안의 간 날 목록만 스크롤한�
   const photoFrame = detail.getByRole("region", { name: /사진 \d+장/ }).locator("..");
   await expect(photoFrame).toHaveCSS("border-bottom-style", "solid");
   const days = detail.getByRole("list", { name: "간 날" });
+  // 목록 자체는 스크롤 칸이 아니어서, 그 위에서 쓸어도 바깥(화면이나 넓은 화면의 카드)이 스크롤한다.
+  await expect(days).not.toHaveCSS("overflow-y", "auto");
   const { scrollHeight, clientHeight } = await days.evaluate((el) => ({
     scrollHeight: el.scrollHeight,
     clientHeight: el.clientHeight,
   }));
-  expect(scrollHeight).toBeGreaterThan(clientHeight);
-  // 목록을 끝까지 내리면 가장 오래된 날이 보이고, 지도 링크는 카드 안에 그대로 있다.
-  await days.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
-  await expect
-    .poll(async () => {
-      const box = await days.boundingBox();
-      const last = await days.getByText("파스타 16").boundingBox();
-      return Boolean(
-        box && last && last.y >= box.y && last.y + last.height <= box.y + box.height + 1
-      );
-    })
-    .toBe(true);
-  await expect(detail.getByRole("link", { name: "네이버 지도에서 열기" })).toBeVisible();
+  expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
+  // 바깥 스크롤로 끝까지 내리면 가장 오래된 날이 보인다.
+  const oldest = days.getByText("파스타 16");
+  await oldest.scrollIntoViewIfNeeded();
+  await expect(oldest).toBeInViewport();
+  await expect(detail.getByRole("link", { name: "네이버 지도에서 열기" })).toBeAttached();
 });
 
 test("좁은 모바일 화면에서도 데이트 지도가 좌우로 넘치지 않는다", async ({
@@ -669,6 +664,22 @@ test("데이트 지도의 간 날마다 원찬·예은이 각자 리뷰를 남�
   // 별을 고르기 전에는 저장할 수 없다.
   await expect(editor.getByRole("button", { name: "저장" })).toBeDisabled();
   await editor.getByRole("radio", { name: "별 4개" }).click();
+  // 긴 리뷰는 옆으로 밀리지 않고 칸 너비에서 줄이 바뀌어 다 보인다. 글씨는 카드 글씨에 맞춰 작다.
+  const reviewBox = editor.getByRole("textbox", { name: "한 줄 리뷰" });
+  await expect(reviewBox).toHaveCSS(
+    "font-size",
+    test.info().project.name === "mobile" ? "14px" : "13px"
+  );
+  const oneLine = (await reviewBox.boundingBox())!.height;
+  await reviewBox.fill(
+    "밥 먹을 때 예은이 화장실에 빨리 가야 하는 게 보여서 웃겼는데 음식은 다 맛있었어"
+  );
+  await expect
+    .poll(async () => (await reviewBox.boundingBox())!.height)
+    .toBeGreaterThan(oneLine * 1.5);
+  expect(await reviewBox.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(
+    true
+  );
   await editor.getByRole("textbox", { name: "한 줄 리뷰" }).fill("면이 쫄깃");
   await editor.getByRole("button", { name: "저장" }).click();
   await expect(days.first().getByRole("listitem", { name: "원찬 리뷰" })).toContainText(
