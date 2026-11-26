@@ -65,12 +65,20 @@ export type DiaryPhoto = {
   height: number;
 };
 
+export type DiaryComment = {
+  id: string; // 최대 64자
+  author: CalendarViewer;
+  body: string; // 최대 2,000자
+  createdAt: string; // ISO 8601
+};
+
 export type CalendarDiary = {
   id: number;
   date: string;
   author: CalendarViewer;
   body: string;
   photos: DiaryPhoto[];
+  comments: DiaryComment[];
   createdAt: string;
   updatedAt: string;
 };
@@ -138,4 +146,6 @@ export type CalendarDiaryInput = {
   author: CalendarViewer;
   body: string;
   photos: DiaryPhoto[];
+  /** 없으면 기존 댓글을 보존한다. */
+  comments?: DiaryComment[];
 };

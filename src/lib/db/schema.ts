@@ -1,4 +1,4 @@
-import type { DiaryPhoto } from "@/lib/calendar/types";
+import type { DiaryComment, DiaryPhoto } from "@/lib/calendar/types";
 import type { UIMessageChunk } from "ai";
 import { sql } from "drizzle-orm";
 import {
@@ -832,6 +832,7 @@ export const calendarDiaries = pgTable(
     author: text("author").notNull(), // wonchan | yeeun
     body: text("body").notNull().default(""),
     photos: jsonb("photos").$type<DiaryPhoto[]>().notNull().default([]),
+    comments: jsonb("comments").$type<DiaryComment[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },

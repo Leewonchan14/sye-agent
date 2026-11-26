@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Polaroid } from "@/components/calendar/calendar-ui";
+import { DiaryComments } from "@/components/calendar/diary-comments";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -224,6 +225,7 @@ export const DaySheet = ({
                             ))}
                           </div>
                         )}
+                        <DiaryComments comments={diary.comments} />
                       </button>
                     ))}
                   </div>
