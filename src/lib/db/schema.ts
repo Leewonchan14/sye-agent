@@ -201,6 +201,8 @@ export const ledgerEntries = pgTable(
     id: serial("id").primaryKey(),
     entryDate: text("entry_date").notNull(), // YYYY-MM-DD (KST)
     entryTime: text("entry_time"), // HH:mm (KST), 모르면 null
+    // 실제로 간 날 YYYY-MM-DD (KST). 비어 있으면 결제일(entry_date)과 같은 날
+    visitDate: text("visit_date").notNull().default(""),
     kind: text("kind").notNull().default("expense"), // expense | income
     amount: integer("amount").notNull(),
     categoryId: integer("category_id").references(() => ledgerCategories.id, {

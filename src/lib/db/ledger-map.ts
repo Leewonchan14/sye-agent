@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNotNull, isNull, lte, ne } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db/db";
 import {
@@ -131,16 +131,25 @@ export const getLedgerMapPlaces = async (
   );
   const { range, from, to, trip } = resolveRange(query, trips);
   const entries = schema.ledgerEntries;
-  // 여행은 날짜가 아니라 가계부에서 그 여행에 묶은 지출로 고른다.
-  const period = trip
-    ? eq(entries.tripId, trip.id)
-    : and(lte(entries.entryDate, to), from ? gte(entries.entryDate, from) : undefined);
+  const today = kst().format("YYYY-MM-DD");
+  /** 방문일. 예매했으면 결제일이 아니라 방문일(visit_date)에 간 것으로 본다. */
+  const visitDay = (row: { visitDate: string; entryDate: string }) =>
+    row.visitDate || row.entryDate;
+  // 기간은 방문일 기준으로 자른다. 전체는 기간 값이 없고, 여행은 가계부에서 그 여행에 묶은 지출로 고른다.
+  const dayOf = sql`coalesce(nullif(${entries.visitDate}, ''), ${entries.entryDate})`;
+  const period =
+    trip != null
+      ? eq(entries.tripId, trip.id)
+      : range === "all"
+        ? undefined
+        : and(lte(dayOf, to), from ? gte(dayOf, from) : undefined);
 
   const [rows, unresolved] = await Promise.all([
     getDb()
       .select({
         id: entries.id,
         entryDate: entries.entryDate,
+        visitDate: entries.visitDate,
         entryTime: entries.entryTime,
         amount: entries.amount,
         memo: entries.memo,
@@ -185,10 +194,10 @@ export const getLedgerMapPlaces = async (
   const picked =
     category === null ? rows : rows.filter((row) => row.categoryId === category);
 
-  // 최신 기록이 먼저 오게 정렬해 두면 장소의 이름·사진은 가장 최근에 읽은 값을 쓴다.
+  // 최신 방문이 먼저 오게 정렬해 두면 장소의 이름·사진은 가장 최근에 읽은 값을 쓴다.
   picked.sort(
     (a, b) =>
-      b.entryDate.localeCompare(a.entryDate) ||
+      visitDay(b).localeCompare(visitDay(a)) ||
       (b.entryTime ?? "").localeCompare(a.entryTime ?? "") ||
       b.id - a.id
   );
@@ -197,6 +206,7 @@ export const getLedgerMapPlaces = async (
   for (const row of picked) {
     if (row.mapLat === null || row.mapLng === null) continue;
     const key = toPlaceKey(row);
+    const date = visitDay(row);
     const payment: LedgerMapPayment = {
       id: row.id,
       time: row.entryTime,
@@ -205,7 +215,10 @@ export const getLedgerMapPlaces = async (
       categoryName: row.categoryName,
     };
     const visit: LedgerMapVisit = {
-      date: row.entryDate,
+      date,
+      // 결제일과 방문일이 다르면 목록에 언제 예매했는지 함께 보여 준다.
+      paidOn: row.entryDate === date ? null : row.entryDate,
+      planned: date > today,
       amount: row.amount,
       payments: [payment],
       reviews: [],
@@ -213,15 +226,18 @@ export const getLedgerMapPlaces = async (
     const place = byKey.get(key);
     if (place) {
       place.total += row.amount;
-      place.firstDate = row.entryDate;
-      // 날짜순으로 읽으므로 같은 날 결제는 바로 앞 방문에 붙는다. 하루에 여러 번 결제해도 한 번 간 것이다.
+      place.firstDate = date;
+      // 방문일순으로 읽으므로 같은 날 결제는 바로 앞 방문에 붙는다. 하루에 여러 번 결제해도 한 번 간 것이다.
       const last = place.entries.at(-1);
-      if (last?.date === row.entryDate) {
+      if (last?.date === date) {
         last.amount += row.amount;
         last.payments.unshift(payment);
+        // 결제일이 여러 날이면 가장 이른 날을 예매일로 둔다.
+        if (row.entryDate !== date && (!last.paidOn || row.entryDate < last.paidOn)) {
+          last.paidOn = row.entryDate;
+        }
         continue;
       }
-      place.visits += 1;
       place.entries.push(visit);
       continue;
     }
@@ -238,10 +254,12 @@ export const getLedgerMapPlaces = async (
         : row.mapUrl,
       imageUrl: row.mapImageUrls[0] ?? null,
       imageUrls: row.mapImageUrls,
-      visits: 1,
+      visits: 0,
+      plannedVisits: 0,
       total: row.amount,
-      firstDate: row.entryDate,
-      lastDate: row.entryDate,
+      firstDate: date,
+      lastDate: "",
+      nextDate: null,
       entries: [visit],
       rating: null,
     });
@@ -260,6 +278,21 @@ export const getLedgerMapPlaces = async (
         .filter((review) => ids.has(review.entryId))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
+    // 예정 방문은 "간 날" 수에 세지 않고, 지난 방문 중 가장 최근 날을 마지막 방문일로 둔다.
+    const past = place.entries.filter((visit) => !visit.planned);
+    place.visits = past.length;
+    place.plannedVisits = place.entries.length - past.length;
+    place.lastDate = past[0]?.date ?? "";
+    // 예정 방문 중 가장 이른 날. entries는 최신순이라 예정만 골라 다시 비교한다.
+    place.nextDate = place.entries.reduce<string | null>(
+      (earliest, visit) =>
+        !visit.planned
+          ? earliest
+          : earliest === null || visit.date < earliest
+            ? visit.date
+            : earliest,
+      null
+    );
   }
 
   const places = [...byKey.values()].sort(

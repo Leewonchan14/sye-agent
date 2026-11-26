@@ -43,6 +43,7 @@ import {
   ReviewList,
 } from "@/components/places/place-reviews";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuthStore } from "@/lib/auth-store";
@@ -182,17 +183,31 @@ const PlaceDetail = ({
           </p>
         )}
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-body tabular-nums">
-          {place.visits}번 방문 · {formatWon(place.total)}
+          {/* 아직 가 보지 않고 예매만 했으면 0번 방문 대신 예정으로 읽히게 한다. */}
+          {place.visits > 0
+            ? `${place.visits}번 방문`
+            : `예정 ${place.plannedVisits}`} · {formatWon(place.total)}
+          {place.visits > 0 && place.plannedVisits > 0 && (
+            <Badge
+              variant="secondary"
+              className="h-[18px] shrink-0 px-1.5 text-[11px] font-normal text-muted-foreground"
+            >
+              예정 {place.plannedVisits}
+            </Badge>
+          )}
           {place.rating && <RatingSummary rating={place.rating} />}
         </p>
       </div>
       {/* 리뷰는 간 날에 붙는다. 쓸 때 간 날을 고르고(기본은 가장 최근), 고른 장소가 바뀌면 쓰던 리뷰를 닫는다. */}
       <PlaceReviewWriter
         key={`${place.key}:${startWriting}`}
-        visits={place.entries.map((visit) => ({
-          date: visit.date,
-          entryId: visit.payments[0].id,
-        }))}
+        // 예정 방문에는 아직 리뷰를 남길 수 없다.
+        visits={place.entries
+          .filter((visit) => !visit.planned)
+          .map((visit) => ({
+            date: visit.date,
+            entryId: visit.payments[0].id,
+          }))}
         defaultWriting={startWriting}
       />
       {/*
@@ -206,7 +221,23 @@ const PlaceDetail = ({
             <li key={visit.date} className="flex flex-col gap-1 py-1.5 text-[13px]">
               <div className="flex items-baseline gap-3">
                 <span className="w-20 shrink-0 text-muted tabular-nums">
-                  {visitDate(visit.date)}
+                  <span className="flex flex-wrap items-center gap-1">
+                    {visitDate(visit.date)}
+                    {visit.planned && (
+                      <Badge
+                        variant="secondary"
+                        className="h-[18px] shrink-0 px-1.5 text-[11px] font-normal text-muted-foreground"
+                      >
+                        예정
+                      </Badge>
+                    )}
+                  </span>
+                  {/* 예매한 날과 간 날이 다르면 언제 결제했는지 함께 남긴다. */}
+                  {visit.paidOn && (
+                    <span className="mt-0.5 block text-[11px] text-muted/80 tabular-nums">
+                      예매 {kst(visit.paidOn).format("M.D")}
+                    </span>
+                  )}
                 </span>
                 <span
                   className={cn(
@@ -240,12 +271,14 @@ const PlaceDetail = ({
                   ))}
                 </ul>
               )}
-              {/* 그날 남긴 리뷰. 연필로 고친다. 새 리뷰는 카드 위쪽 "리뷰 쓰기"에서 쓴다. */}
-              <ReviewList
-                key={`${place.key}:${visit.date}`}
-                reviews={visit.reviews}
-                variant="block"
-              />
+              {/* 그날 남긴 리뷰. 연필로 고친다. 새 리뷰는 카드 위쪽 "리뷰 쓰기"에서 쓴다. 예정 방문엔 아직 리뷰가 없다. */}
+              {!visit.planned && (
+                <ReviewList
+                  key={`${place.key}:${visit.date}`}
+                  reviews={visit.reviews}
+                  variant="block"
+                />
+              )}
             </li>
           );
         })}
@@ -328,7 +361,7 @@ const PlaceList = ({
             </span>
             <span className="flex shrink-0 flex-col items-end">
               <span className="text-[13px] font-medium text-ink tabular-nums">
-                {place.visits}번
+                {place.visits > 0 ? `${place.visits}번` : "예정"}
               </span>
               <span className="text-[11px] text-muted tabular-nums">
                 {formatWon(place.total)}

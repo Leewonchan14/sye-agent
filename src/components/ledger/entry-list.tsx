@@ -4,6 +4,7 @@ import { EntryIcon } from "@/components/ledger/category-icon";
 import { PlacePhotoStrip } from "@/components/ledger/place-photos";
 import { EntryReviews } from "@/components/places/place-reviews";
 import type { LedgerEntryView } from "@/lib/db/ledger";
+import { kst } from "@/lib/kst";
 import { formatWon } from "@/lib/ledger/format";
 
 export type { LedgerEntryView };
@@ -19,6 +20,10 @@ export const LedgerEntryRow = ({ entry, onEdit }: RowProps) => {
   const meta = [
     entry.entryTime,
     !isIncome && (entry.categoryName ?? "분류 없음"),
+    // 결제일과 실제로 간 날이 다르면 방문일도 함께 보여 준다.
+    entry.visitDate &&
+      entry.visitDate !== entry.entryDate &&
+      `방문 ${kst(entry.visitDate).format("M.D")}`,
     entry.tripName,
     entry.tags,
   ]

@@ -1,0 +1,1 @@
+ALTER TABLE "ledger_entries" ADD COLUMN IF NOT EXISTS "visit_date" text DEFAULT '' NOT NULL;

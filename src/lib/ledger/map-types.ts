@@ -62,7 +62,12 @@ export type LedgerMapPayment = {
 
 /** 한 장소에 간 하루. 같은 날 여러 번 결제해도 한 번 간 것으로 센다. */
 export type LedgerMapVisit = {
+  /** 간 날. 예매했으면 결제일이 아니라 방문일 */
   date: string;
+  /** 결제일이 방문일과 다르면 결제일(YYYY-MM-DD). 같으면 null. 여러 날이면 가장 이른 날 */
+  paidOn: string | null;
+  /** 방문일이 오늘(KST)보다 뒤인 예정 방문 */
+  planned: boolean;
   /** 그날 이 장소에서 쓴 돈 */
   amount: number;
   /** 그날 먼저 한 결제부터 */
@@ -83,11 +88,16 @@ export type LedgerMapPlace = {
   /** 대표 사진. 없으면 null */
   imageUrl: string | null;
   imageUrls: string[];
-  /** 간 날 수. 결제 건수가 아니다. */
+  /** 간 날 수. 결제 건수가 아니고, 예정 방문은 세지 않는다. */
   visits: number;
+  /** 예정 방문 수. 방문일이 오늘(KST)보다 뒤인 날 */
+  plannedVisits: number;
   total: number;
   firstDate: string;
+  /** 지난 방문 중 가장 최근 날. 지난 방문이 없으면 빈 문자열 */
   lastDate: string;
+  /** 가장 이른 예정 방문일. 없으면 null */
+  nextDate: string | null;
   /** 간 날별 기록. 최신순 */
   entries: LedgerMapVisit[];
   /** 이 장소 리뷰 전체(기간과 상관없이)의 별점 평균. 리뷰가 없으면 null */

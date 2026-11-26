@@ -26,6 +26,8 @@ export type LedgerEntryView = {
   id: number;
   entryDate: string;
   entryTime: string | null;
+  /** 실제로 간 날. 없으면 빈 문자열(결제일과 같다는 뜻) */
+  visitDate: string;
   kind: LedgerEntryKind;
   amount: number;
   categoryId: number | null;
@@ -131,6 +133,8 @@ export type LedgerMonthPayload = {
 export interface LedgerEntryInput {
   entryDate: string;
   entryTime?: string | null;
+  /** 실제로 간 날(YYYY-MM-DD). 생략하면 수정할 때 기존 값과 같고, 빈 문자열이면 지운다. */
+  visitDate?: string;
   kind: LedgerEntryKind;
   amount: number;
   categoryId?: number | null;
@@ -375,6 +379,16 @@ export const normalizeDate = (value: unknown): string => {
   return value;
 };
 
+/** 방문일. 비어 있으면 결제일과 같은 날로 본다. */
+export const normalizeVisitDate = (value: unknown): string => {
+  if (value == null || value === "") return "";
+  try {
+    return normalizeDate(value);
+  } catch {
+    throw new LedgerError("방문일 형식이 올바르지 않아요.");
+  }
+};
+
 const normalizeTime = (value: unknown): string | null => {
   if (value == null || value === "") return null;
   if (typeof value !== "string" || !TIME_RE.test(value)) {
@@ -431,6 +445,7 @@ export const toLedgerEntryView = (
   return {
     id: entry.id,
     entryDate: entry.entryDate,
+    visitDate: entry.visitDate,
     ...readEntryExtras(entry.entryTime, entry.tags),
     kind: toEntryKind(entry.kind),
     amount: entry.amount,
@@ -929,6 +944,7 @@ export const createLedgerEntry = async (
 ) => {
   const values = normalizeEntryFields(input);
   await assertCategoryKind(values.categoryId, values.kind);
+  const visitDate = values.kind === "income" ? "" : normalizeVisitDate(input.visitDate);
   const tripId = resolveTripId(
     input.tripId,
     values.entryDate,
@@ -941,7 +957,16 @@ export const createLedgerEntry = async (
   const mapPlace = await readMapPlace(mapUrl);
   const [entry] = await getDb()
     .insert(schema.ledgerEntries)
-    .values({ ...values, note, mapUrl, ...mapPlace, assetId, member: "joint", tripId })
+    .values({
+      ...values,
+      visitDate,
+      note,
+      mapUrl,
+      ...mapPlace,
+      assetId,
+      member: "joint",
+      tripId,
+    })
     .returning();
   await logEntryHistory(entry.id, "create", source, null, entry);
   return entry;
@@ -984,6 +1009,8 @@ export const createLedgerEntriesBulk = async (
       : undefined;
     return {
       ...fields,
+      // 예매(결제)일과 실제 방문일이 다를 수 있다. 입금에는 방문일이 없다.
+      visitDate: fields.kind === "income" ? "" : normalizeVisitDate(input.visitDate),
       categoryId: fields.categoryId ?? named ?? suggested ?? null,
       tripId: resolveTripId(input.tripId, fields.entryDate, fields.kind, trips),
     };
@@ -1090,6 +1117,13 @@ export const updateLedgerEntry = async (
     input.note === undefined ? {} : { note: normalizeEntryNote(input.note) };
   const mapUrl =
     input.mapUrl === undefined ? undefined : normalizeEntryMapUrl(input.mapUrl);
+  // 방문일을 보내지 않으면 기존 값을 그대로 둔다. 입금은 방문일을 두지 않는다.
+  const visitDatePatch: { visitDate?: string } =
+    values.kind === "income"
+      ? { visitDate: "" }
+      : input.visitDate === undefined
+        ? {}
+        : { visitDate: normalizeVisitDate(input.visitDate) };
   const before = await findActiveEntry(entryId);
   // 링크가 바뀌었거나, 예전에 사진·좌표를 못 읽은 링크를 다시 저장하면 장소 정보를 새로 읽는다.
   const needsMapPlace =
@@ -1103,7 +1137,14 @@ export const updateLedgerEntry = async (
       : { mapUrl, ...(needsMapPlace ? await readMapPlace(mapUrl) : {}) };
   const [entry] = await getDb()
     .update(schema.ledgerEntries)
-    .set({ ...values, ...notePatch, ...mapUrlPatch, ...tripPatch, updatedAt: new Date() })
+    .set({
+      ...values,
+      ...visitDatePatch,
+      ...notePatch,
+      ...mapUrlPatch,
+      ...tripPatch,
+      updatedAt: new Date(),
+    })
     .where(and(eq(schema.ledgerEntries.id, entryId), activeEntry))
     .returning();
   if (!entry) throw new LedgerError("기록을 찾을 수 없어요.");
