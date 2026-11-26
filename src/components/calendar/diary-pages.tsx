@@ -46,6 +46,19 @@ export const DiaryPages = () => {
     enabled: Boolean(token) && plus,
   });
 
+  // 월 목록은 full을 비워 내려주므로 4컷은 선택한 하루치만 따로 조회한다.
+  const { data: fourcutDiaries = [] } = useQuery({
+    queryKey: calendarKeys.diariesDate(date),
+    queryFn: async () => {
+      const res = await calendarRequest<{ diaries: CalendarDiary[] }>(
+        token,
+        `/api/calendar/diaries?date=${date}`
+      );
+      return res.diaries;
+    },
+    enabled: Boolean(token) && plus && tab === "fourcut",
+  });
+
   const enablePlus = useMutation({
     mutationFn: () =>
       calendarRequest<{ settings: CalendarSettings }>(token, "/api/calendar/settings", {
@@ -72,7 +85,7 @@ export const DiaryPages = () => {
 
   const dayDiaries = dayDiariesOf(diaries, date);
   const sorted = [...diaries].sort((a, b) => a.date.localeCompare(b.date));
-  const fourPhotos = dayDiaries.flatMap((diary) => diary.photos).slice(0, 4);
+  const fourPhotos = fourcutDiaries.flatMap((diary) => diary.photos).slice(0, 4);
   const caption = dayDiaries
     .map((diary) => diary.body.trim())
     .filter(Boolean)

@@ -424,6 +424,19 @@ test.describe("우리 캘린더", () => {
     expect(day.diaries[0].photos[0].thumb.startsWith("data:image/jpeg")).toBe(true);
     const diaryId = day.diaries[0].id;
 
+    // 월 목록은 썸네일만, 일자 조회는 원본까지 내려준다.
+    const monthDiaries = await apiGet<{
+      diaries: Array<{ id: number; photos: Array<{ full: string }> }>;
+    }>(request, token, `/api/calendar/diaries?month=${today.slice(0, 7)}`);
+    const monthDiary = monthDiaries.diaries.find((item) => item.id === diaryId);
+    expect(monthDiary?.photos[0]?.full).toBe("");
+
+    const dateDiaries = await apiGet<{
+      diaries: Array<{ id: number; photos: Array<{ full: string }> }>;
+    }>(request, token, `/api/calendar/diaries?date=${today}`);
+    const dateDiary = dateDiaries.diaries.find((item) => item.id === diaryId);
+    expect(dateDiary?.photos[0]?.full?.startsWith("data:image/")).toBe(true);
+
     // 일기 탭 대신 월간 칸에 폴라로이드로 보인다.
     await expect(page.getByTestId("view-tab-diary")).toHaveCount(0);
     await expect(page.getByTestId(`day-cell-${today}`).locator("img")).toHaveCount(1);
