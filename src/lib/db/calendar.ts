@@ -11,6 +11,7 @@ import {
   max,
   ne,
   or,
+  sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -35,6 +36,7 @@ import type {
   CalendarTemplate,
   CalendarViewer,
   DiaryComment,
+  DiaryCommentInput,
   DiaryPhoto,
   LunarDate,
 } from "@/lib/calendar/types";
@@ -401,6 +403,23 @@ const normalizeComments = (value: unknown): DiaryComment[] => {
     });
   }
   return comments;
+};
+
+const normalizeCommentBody = (value: unknown): string => {
+  if (typeof value !== "string") throw new CalendarError("댓글을 입력해 주세요.");
+  const body = value.trim();
+  if (!body) throw new CalendarError("댓글을 입력해 주세요.");
+  if (body.length > MAX_COMMENT_BODY) {
+    throw new CalendarError("댓글은 2,000자 이하여야 해요.");
+  }
+  return body;
+};
+
+const normalizeCommentId = (value: unknown): string => {
+  if (typeof value !== "string" || !value || value.length > MAX_COMMENT_ID) {
+    throw new CalendarNotFoundError("댓글을 찾을 수 없어요.");
+  }
+  return value;
 };
 
 const normalizeDates = (raw: unknown, startDate: string): string[] => {
@@ -1058,4 +1077,77 @@ export const deleteCalendarDiary = async (idInput: unknown): Promise<void> => {
     .limit(1);
   if (!rows.length) throw new CalendarNotFoundError("일기를 찾을 수 없어요.");
   await getDb().delete(schema.calendarDiaries).where(eq(schema.calendarDiaries.id, id));
+};
+
+export const addCalendarDiaryComment = async (
+  diaryIdInput: unknown,
+  input: DiaryCommentInput
+): Promise<CalendarDiary> => {
+  const id = normalizeId(diaryIdInput, "일기");
+  const author = normalizeAuthor(input.author);
+  const body = normalizeCommentBody(input.body);
+  const comment: DiaryComment = {
+    id: crypto.randomUUID(),
+    author,
+    body,
+    createdAt: kst().format(),
+  };
+
+  const [row] = await getDb()
+    .update(schema.calendarDiaries)
+    .set({
+      comments: sql`${schema.calendarDiaries.comments} || ${JSON.stringify([comment])}::jsonb`,
+    })
+    .where(
+      and(
+        eq(schema.calendarDiaries.id, id),
+        sql`jsonb_array_length(${schema.calendarDiaries.comments}) < ${MAX_COMMENTS}`
+      )
+    )
+    .returning();
+  if (row) return toCalendarDiary(row);
+
+  const exists = await getDb()
+    .select({ id: schema.calendarDiaries.id })
+    .from(schema.calendarDiaries)
+    .where(eq(schema.calendarDiaries.id, id))
+    .limit(1);
+  if (!exists.length) throw new CalendarNotFoundError("일기를 찾을 수 없어요.");
+  throw new CalendarError("댓글은 최대 500개까지 등록할 수 있어요.");
+};
+
+export const deleteCalendarDiaryComment = async (
+  diaryIdInput: unknown,
+  commentIdInput: unknown
+): Promise<CalendarDiary> => {
+  const diaryId = normalizeId(diaryIdInput, "일기");
+  const commentId = normalizeCommentId(commentIdInput);
+
+  const [row] = await getDb()
+    .update(schema.calendarDiaries)
+    .set({
+      comments: sql`coalesce((
+        select jsonb_agg(comment order by ordinality)
+        from jsonb_array_elements(${schema.calendarDiaries.comments}) with ordinality as t(comment, ordinality)
+        where comment->>'id' <> ${commentId}
+      ), '[]'::jsonb)`,
+    })
+    .where(
+      and(
+        eq(schema.calendarDiaries.id, diaryId),
+        sql`${schema.calendarDiaries.comments} @> ${JSON.stringify([
+          { id: commentId },
+        ])}::jsonb`
+      )
+    )
+    .returning();
+  if (row) return toCalendarDiary(row);
+
+  const exists = await getDb()
+    .select({ id: schema.calendarDiaries.id })
+    .from(schema.calendarDiaries)
+    .where(eq(schema.calendarDiaries.id, diaryId))
+    .limit(1);
+  if (!exists.length) throw new CalendarNotFoundError("일기를 찾을 수 없어요.");
+  throw new CalendarNotFoundError("댓글을 찾을 수 없어요.");
 };

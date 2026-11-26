@@ -72,6 +72,11 @@ export type DiaryComment = {
   createdAt: string; // ISO 8601
 };
 
+export type DiaryCommentInput = {
+  author: CalendarViewer;
+  body: string;
+};
+
 export type CalendarDiary = {
   id: number;
   date: string;

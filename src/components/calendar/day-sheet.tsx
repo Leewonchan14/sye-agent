@@ -196,37 +196,38 @@ export const DaySheet = ({
                 ) : (
                   <div className="space-y-2">
                     {data.diaries.map((diary) => (
-                      <button
-                        key={diary.id}
-                        type="button"
-                        onClick={() => onOpenDiary(data.date)}
-                        className="w-full rounded-xl border border-hairline bg-surface p-2.5 text-left transition-colors hover:bg-canvas-soft/60"
-                      >
-                        <span className="text-[11px] font-medium text-ink">
-                          {VIEWER_NAME[diary.author]}
-                        </span>
-                        {diary.body && (
-                          <p className="mt-1 text-[13px] leading-snug whitespace-pre-wrap text-body">
-                            {diary.body}
-                          </p>
-                        )}
-                        {diary.photos.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {diary.photos.map((photo, index) => (
-                              <Polaroid
-                                key={photo.id}
-                                src={photo.thumb}
-                                className={cn(
-                                  "w-16",
-                                  index % 2 === 0 && "-rotate-2",
-                                  index % 2 === 1 && "rotate-2"
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <DiaryComments comments={diary.comments} />
-                      </button>
+                      <div key={diary.id} className="space-y-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDiary(data.date)}
+                          className="w-full rounded-xl border border-hairline bg-surface p-2.5 text-left transition-colors hover:bg-canvas-soft/60"
+                        >
+                          <span className="text-[11px] font-medium text-ink">
+                            {VIEWER_NAME[diary.author]}
+                          </span>
+                          {diary.body && (
+                            <p className="mt-1 text-[13px] leading-snug whitespace-pre-wrap text-body">
+                              {diary.body}
+                            </p>
+                          )}
+                          {diary.photos.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {diary.photos.map((photo, index) => (
+                                <Polaroid
+                                  key={photo.id}
+                                  src={photo.thumb}
+                                  className={cn(
+                                    "w-16",
+                                    index % 2 === 0 && "-rotate-2",
+                                    index % 2 === 1 && "rotate-2"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                        <DiaryComments diary={diary} className="px-0.5" />
+                      </div>
                     ))}
                   </div>
                 )}

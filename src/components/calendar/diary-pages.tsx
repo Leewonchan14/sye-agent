@@ -193,7 +193,7 @@ export const DiaryPages = () => {
                         ))}
                       </div>
                     )}
-                    <DiaryComments comments={diary.comments} />
+                    <DiaryComments diary={diary} />
                   </article>
                 ))
               )}
