@@ -177,6 +177,12 @@ const toCalendarDiary = (row: DiaryRow): CalendarDiary => ({
   updatedAt: toIso(row.updatedAt),
 });
 
+/** 월 목록은 썸네일만 필요하므로 full을 비워 내려준다. (4컷은 일자 조회를 쓴다) */
+const toMonthDiary = (row: DiaryRow): CalendarDiary => {
+  const diary = toCalendarDiary(row);
+  return { ...diary, photos: diary.photos.map((photo) => ({ ...photo, full: "" })) };
+};
+
 const toDiarySummary = (row: DiaryRow): CalendarDiarySummary => ({
   id: row.id,
   date: row.date,
@@ -1028,7 +1034,7 @@ export const listCalendarDiariesByMonth = async (
     .from(schema.calendarDiaries)
     .where(like(schema.calendarDiaries.date, `${month}-%`))
     .orderBy(asc(schema.calendarDiaries.date), asc(schema.calendarDiaries.author));
-  return rows.map(toCalendarDiary);
+  return rows.map(toMonthDiary);
 };
 
 export const listCalendarDiariesByDate = async (
