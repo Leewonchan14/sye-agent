@@ -105,35 +105,39 @@ export const DiaryComments = ({ diary, className }: Props) => {
           </div>
         </div>
         {diary.comments.length > 0 && (
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 space-y-1.5">
             {diary.comments.map((comment) => (
-              <div key={comment.id} data-testid="diary-comment">
-                <div className="flex items-start justify-between gap-1">
-                  <p className="text-[10px] text-muted">
-                    {VIEWER_NAME[comment.author]} ·{" "}
+              <div
+                key={comment.id}
+                data-testid="diary-comment"
+                className="rounded-lg bg-canvas-soft/60 px-2.5 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-ink">
+                    {VIEWER_NAME[comment.author]}
+                  </span>
+                  <span className="text-[10px] text-muted tabular-nums">
                     {kst(comment.createdAt).format("M.D HH:mm")}
-                  </p>
-                  <Button
+                  </span>
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="icon-xs"
                     aria-label="댓글 삭제"
                     data-testid="diary-comment-delete"
                     disabled={deleteComment.isPending}
                     onClick={() => handleDelete(comment)}
-                    className="-my-1 -mr-1"
+                    className="-my-1 ml-auto shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-card hover:text-ink"
                   >
-                    <Trash2 />
-                  </Button>
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </div>
-                <p className="mt-0.5 text-[12px] leading-snug whitespace-pre-wrap text-body">
+                <p className="mt-1 text-[13px] leading-snug break-words whitespace-pre-wrap text-body">
                   {comment.body}
                 </p>
               </div>
             ))}
           </div>
         )}
-        <div className="mt-2 flex items-end gap-1.5">
+        <div className="mt-2.5 flex items-end gap-1.5">
           <Textarea
             rows={1}
             data-testid="diary-comment-input"
@@ -148,12 +152,13 @@ export const DiaryComments = ({ diary, className }: Props) => {
               event.preventDefault();
               submit();
             }}
-            className="field-sizing-content max-h-24 min-h-8 min-w-0 flex-1 resize-none text-[12px]"
+            className="field-sizing-content max-h-24 min-h-8 min-w-0 flex-1 resize-none px-2.5 py-1.5 text-[13px] leading-5"
           />
           <Button
             type="button"
             size="sm"
             data-testid="diary-comment-submit"
+            className="h-8 px-3"
             disabled={!body.trim() || addComment.isPending}
             onClick={submit}
           >
