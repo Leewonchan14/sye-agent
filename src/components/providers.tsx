@@ -5,6 +5,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 
 import { useState } from "react";
 
+import { ConfirmProvider } from "@/components/confirm-dialog";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
@@ -23,8 +24,10 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
   return (
     <NuqsAdapter>
       <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster />
+        <ConfirmProvider>
+          {children}
+          <Toaster />
+        </ConfirmProvider>
       </QueryClientProvider>
     </NuqsAdapter>
   );

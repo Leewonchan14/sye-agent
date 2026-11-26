@@ -176,7 +176,7 @@ export const CalendarPage = () => {
 
       <DaySheet
         date={selectedDate}
-        open={selectedDate !== null}
+        open={selectedDate !== null && diaryDate === null}
         onOpenChange={(open) => {
           if (!open) setSelectedDate(null);
         }}

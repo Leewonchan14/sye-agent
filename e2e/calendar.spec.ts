@@ -596,6 +596,55 @@ test.describe("우리 캘린더", () => {
     await expect(dailyComments).toContainText("첫 댓글");
   });
 
+  test("DIA-10 댓글을 쓰고 지우면 화면과 API에 반영된다", async ({ page, request }) => {
+    const created = await request.post("/api/calendar/diaries", {
+      headers: headers(token),
+      data: { date: today, author: "wonchan", body: "댓글 쓰기 일기", photos: [] },
+    });
+    expect(created.status(), await created.text()).toBe(200);
+
+    await openCalendar(page);
+    await openTodaySheet(page);
+    const sheetComments = page.getByTestId("day-sheet").getByTestId("diary-comments");
+    await expect(sheetComments).toContainText("댓글 0");
+
+    await sheetComments.getByTestId("diary-comment-input").fill("새 댓글");
+    await sheetComments.getByTestId("diary-comment-author-yeeun").click();
+    await sheetComments.getByTestId("diary-comment-submit").click();
+
+    await expect(sheetComments).toContainText("댓글 1");
+    await expect(sheetComments.getByTestId("diary-comment")).toContainText("새 댓글");
+    await expect(sheetComments.getByTestId("diary-comment")).toContainText("예은");
+
+    const afterCreate = await apiGet<{
+      diaries: Array<{
+        author: string;
+        comments: Array<{ author: string; body: string }>;
+      }>;
+    }>(request, token, `/api/calendar/diaries?date=${today}`);
+    const diary = afterCreate.diaries.find((item) => item.author === "wonchan");
+    expect(diary?.comments[0]?.author).toBe("yeeun");
+    expect(diary?.comments[0]?.body).toBe("새 댓글");
+
+    await page.reload();
+    await openTodaySheet(page);
+    const reloaded = page.getByTestId("day-sheet").getByTestId("diary-comments");
+    await expect(reloaded).toContainText("댓글 1");
+    await expect(reloaded.getByTestId("diary-comment")).toContainText("새 댓글");
+
+    await reloaded.getByTestId("diary-comment-delete").click();
+    await page.getByRole("button", { name: "지우기" }).click();
+    await expect(reloaded).toContainText("댓글 0");
+    await expect(reloaded.getByTestId("diary-comment")).toHaveCount(0);
+
+    const afterDelete = await apiGet<{
+      diaries: Array<{ author: string; comments: Array<{ body: string }> }>;
+    }>(request, token, `/api/calendar/diaries?date=${today}`);
+    expect(
+      afterDelete.diaries.find((item) => item.author === "wonchan")?.comments
+    ).toEqual([]);
+  });
+
   test("CAL-10 검색과 범위 필터, 결과에서 날짜 시트 열기", async ({ page, request }) => {
     const date = addDays(today, 4);
     await createEvent(request, token, {

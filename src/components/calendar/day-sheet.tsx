@@ -128,7 +128,7 @@ export const DaySheet = ({
 
               <div className="space-y-2">
                 {data.events.length === 0 ? (
-                  <p className="py-6 text-center text-[12px] text-muted">
+                  <p className="py-2 text-center text-[11px] text-muted">
                     이 날은 일정이 없어요
                   </p>
                 ) : (
@@ -196,37 +196,44 @@ export const DaySheet = ({
                 ) : (
                   <div className="space-y-2">
                     {data.diaries.map((diary) => (
-                      <button
+                      <div
                         key={diary.id}
-                        type="button"
-                        onClick={() => onOpenDiary(data.date)}
-                        className="w-full rounded-xl border border-hairline bg-surface p-2.5 text-left transition-colors hover:bg-canvas-soft/60"
+                        className="rounded-xl border border-hairline bg-surface p-2.5"
                       >
-                        <span className="text-[11px] font-medium text-ink">
-                          {VIEWER_NAME[diary.author]}
-                        </span>
-                        {diary.body && (
-                          <p className="mt-1 text-[13px] leading-snug whitespace-pre-wrap text-body">
-                            {diary.body}
-                          </p>
-                        )}
-                        {diary.photos.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {diary.photos.map((photo, index) => (
-                              <Polaroid
-                                key={photo.id}
-                                src={photo.thumb}
-                                className={cn(
-                                  "w-16",
-                                  index % 2 === 0 && "-rotate-2",
-                                  index % 2 === 1 && "rotate-2"
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <DiaryComments comments={diary.comments} />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenDiary(data.date)}
+                          className="block w-full rounded-lg text-left transition-colors hover:bg-canvas-soft/60"
+                        >
+                          <span className="text-[11px] font-medium text-ink">
+                            {VIEWER_NAME[diary.author]}
+                          </span>
+                          {diary.body && (
+                            <p className="mt-1 text-[13px] leading-snug whitespace-pre-wrap text-body">
+                              {diary.body}
+                            </p>
+                          )}
+                          {diary.photos.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {diary.photos.map((photo, index) => (
+                                <Polaroid
+                                  key={photo.id}
+                                  src={photo.thumb}
+                                  className={cn(
+                                    "w-16",
+                                    index % 2 === 0 && "-rotate-2",
+                                    index % 2 === 1 && "rotate-2"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                        <DiaryComments
+                          diary={diary}
+                          className="mt-2.5 border-t border-hairline pt-2.5"
+                        />
+                      </div>
                     ))}
                   </div>
                 )}

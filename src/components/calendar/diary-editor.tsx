@@ -259,7 +259,7 @@ const DiaryFields = ({
               placeholder="어떤 일이 있었나요?"
               rows={5}
               maxLength={10000}
-              className="mt-1"
+              className="mt-1 resize-none"
             />
           </div>
 

@@ -193,7 +193,10 @@ export const DiaryPages = () => {
                         ))}
                       </div>
                     )}
-                    <DiaryComments comments={diary.comments} />
+                    <DiaryComments
+                      diary={diary}
+                      className="mt-3 border-t border-hairline pt-3"
+                    />
                   </article>
                 ))
               )}
