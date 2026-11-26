@@ -100,7 +100,7 @@ export const SidebarLayout = ({
       style={{ backgroundColor: "var(--color-canvas)" }}
     >
       {/* Desktop sidebar */}
-      <div className="hidden md:block">
+      <div className="relative hidden md:block">
         <SessionSidebar
           activeSessionId={activeSessionId}
           activeNav={activeNav}
@@ -109,6 +109,21 @@ export const SidebarLayout = ({
           isOpen={sidebarOpen}
           onToggle={toggle}
         />
+        {/* Divide line — 클릭하면 접기/펴기 (claude.ai 처럼). aside 바깥에 둬서
+            overflow-hidden/스크롤바를 가리지 않는다. */}
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={sidebarOpen ? "사이드바 접기" : "사이드바 펼치기"}
+          aria-expanded={sidebarOpen}
+          title={sidebarOpen ? "클릭하면 접기" : "클릭하면 펼치기"}
+          className="group/rail absolute inset-y-0 -right-1.5 z-20 w-3 cursor-col-resize outline-none"
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-ink/20 opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100 group-focus-visible/rail:opacity-100 group-active/rail:opacity-100"
+          />
+        </button>
       </div>
 
       {/* Mobile top bar */}
