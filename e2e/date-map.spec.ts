@@ -173,6 +173,7 @@ const createEntry = async (
     amount: number;
     mapUrl?: string;
     entryDate?: string;
+    visitDate?: string;
     categoryId?: number;
   }
 ) => {
@@ -1246,4 +1247,163 @@ test("다녀온 곳을 검색·정렬하고 리뷰로 거르며, 목록 줄에�
   await expect(search).toHaveValue("");
   await expect(items).toHaveCount(4);
   await expect(page.getByText("4곳 중")).toHaveCount(0);
+});
+
+/** 기간 전체 지도 응답에서 장소 하나를 찾는다. */
+const mapPlace = async (
+  request: APIRequestContext,
+  key: string
+): Promise<{
+  visits: number;
+  plannedVisits: number;
+  lastDate: string;
+  nextDate: string | null;
+  entries: {
+    date: string;
+    paidOn: string | null;
+    planned: boolean;
+    amount: number;
+  }[];
+}> => {
+  const res = await request.get("/api/ledger/map?range=all", {
+    headers: authHeaders(token),
+  });
+  expect(res.ok()).toBe(true);
+  const data = (await res.json()) as {
+    places: {
+      key: string;
+      visits: number;
+      plannedVisits: number;
+      lastDate: string;
+      nextDate: string | null;
+      entries: {
+        date: string;
+        paidOn: string | null;
+        planned: boolean;
+        amount: number;
+      }[];
+    }[];
+  };
+  const place = data.places.find((item) => item.key === key);
+  expect(place).toBeTruthy();
+  return place!;
+};
+
+test("예매일과 방문일이 다르면 지도는 방문일에 남기고 결제일은 예매로 보여 준다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "파스타 예매",
+    amount: 20_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+    entryDate: daysAgo(3),
+    visitDate: daysAgo(1),
+  });
+
+  const place = await mapPlace(request, "2001");
+  // 결제일(D-3)이 아니라 방문일(D-1)에 간 것으로 센다.
+  expect(place.entries.map((visit) => visit.date)).toEqual([daysAgo(1)]);
+  expect(place.entries[0].paidOn).toBe(daysAgo(3));
+  expect(place.entries[0].planned).toBe(false);
+  expect(place.visits).toBe(1);
+  expect(place.plannedVisits).toBe(0);
+  expect(place.lastDate).toBe(daysAgo(1));
+
+  // 화면의 간 날도 방문일로 보이고, 그 아래 예매한 날을 함께 남긴다.
+  await openMap(page);
+  await placeRows(page).first().click();
+  const card = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  const visitList = card.getByRole("list", { name: "간 날" });
+  await expect(visitList).toContainText(kst(daysAgo(1)).format("M.D"));
+  await expect(visitList).toContainText(`예매 ${kst(daysAgo(3)).format("M.D")}`);
+  await expect(visitList).not.toContainText(kst(daysAgo(3)).format("M.D (dd)"));
+});
+
+test("방문일이 앞으로 남았으면 예정으로 보여 주고 간 날 수에 세지 않는다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "숙박 예약",
+    amount: 25_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2002",
+    visitDate: kst().add(7, "day").format("YYYY-MM-DD"),
+  });
+
+  const nextWeek = kst().add(7, "day").format("YYYY-MM-DD");
+  const place = await mapPlace(request, "2002");
+  expect(place.entries.map((visit) => visit.date)).toEqual([nextWeek]);
+  expect(place.entries[0].planned).toBe(true);
+  expect(place.entries[0].paidOn).toBe(today());
+  expect(place.visits).toBe(0);
+  expect(place.plannedVisits).toBe(1);
+  expect(place.lastDate).toBe("");
+  expect(place.nextDate).toBe(nextWeek);
+
+  await openMap(page);
+  const row = placeRows(page).first();
+  // 지난 방문이 없으면 간 날 수 대신 예정으로 보여 준다.
+  await expect(row).toContainText("예정");
+  await row.click();
+  const card = page.getByRole("region", { name: "망원 카페 방문 기록" });
+  await expect(card.getByText("예정 1")).toBeVisible();
+  const visitList = card.getByRole("list", { name: "간 날" });
+  await expect(visitList.getByText("예정", { exact: true })).toBeVisible();
+  // 예정 방문에는 아직 리뷰를 쓰지 않는다.
+  await expect(card.getByRole("button", { name: "리뷰 쓰기" })).toHaveCount(0);
+});
+
+test("방문일이 없는 지출은 지금처럼 결제일에 간 것으로 본다", async ({
+  page,
+  request,
+}) => {
+  await createEntry(request, {
+    memo: "파스타 점심",
+    amount: 20_000,
+    mapUrl: "https://map.naver.com/p/entry/place/2001",
+    entryDate: daysAgo(2),
+  });
+
+  const place = await mapPlace(request, "2001");
+  expect(place.entries.map((visit) => visit.date)).toEqual([daysAgo(2)]);
+  expect(place.entries[0].paidOn).toBeNull();
+  expect(place.entries[0].planned).toBe(false);
+  expect(place.visits).toBe(1);
+  expect(place.plannedVisits).toBe(0);
+  expect(place.lastDate).toBe(daysAgo(2));
+  expect(place.nextDate).toBeNull();
+
+  await openMap(page);
+  const row = placeRows(page).first();
+  await expect(row).toContainText("1번");
+  await expect(row).toContainText("20,000원");
+  await row.click();
+  const card = page.getByRole("region", { name: "성수 파스타집 방문 기록" });
+  await expect(card.getByText("1번 방문 · 20,000원")).toBeVisible();
+  await expect(card.getByText(/^예매 /)).toHaveCount(0);
+});
+
+test("예정과 지난 방문이 섞여도 다음 예정일은 가장 이른 날이다", async ({ request }) => {
+  const nextWeek = kst().add(7, "day").format("YYYY-MM-DD");
+  // 같은 장소에 지난 방문과 예정 방문을 함께 둔다.
+  await createEntry(request, {
+    memo: "지난 방문",
+    amount: 10_000,
+    mapUrl: "https://map.naver.com/p/entry/place/3001",
+    visitDate: daysAgo(2),
+  });
+  await createEntry(request, {
+    memo: "예정 방문",
+    amount: 30_000,
+    mapUrl: "https://map.naver.com/p/entry/place/3001",
+    visitDate: nextWeek,
+  });
+
+  const place = await mapPlace(request, "3001");
+  expect(place.visits).toBe(1);
+  expect(place.plannedVisits).toBe(1);
+  expect(place.lastDate).toBe(daysAgo(2));
+  // entries.at(-1)은 가장 오래된 지난 방문이라, 예정일은 따로 골라야 한다.
+  expect(place.nextDate).toBe(nextWeek);
 });

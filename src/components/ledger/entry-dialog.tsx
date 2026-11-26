@@ -53,6 +53,9 @@ const cleanDigits = (value: string) => value.replace(/\D/g, "").replace(/^0+(?=\
 
 const MAX_SUGGESTION_CHIPS = 8;
 
+/** 예매·예약으로 미리 결제한 내용이면 방문일을 바로 펼친다. */
+const BOOKING_MEMO_RE = /예매|예약|티켓|입장권|종일권|대실|숙박/;
+
 export const EntryDialog = ({
   open,
   onOpenChange,
@@ -89,6 +92,10 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
     entry ? (entry.entryTime ?? "") : defaultDate === todayKst() ? nowTimeKst() : ""
   );
   const [categoryId, setCategoryId] = useState<number | null>(entry?.categoryId ?? null);
+  const [visitDate, setVisitDate] = useState(entry?.visitDate ?? "");
+  // 방문일 줄은 기본으로 접어 두고, 예매 메모가 보이면 한 번만 펼친다.
+  const [visitOpen, setVisitOpen] = useState(Boolean(entry?.visitDate));
+  const [visitCollapsed, setVisitCollapsed] = useState(false);
   const [memo, setMemo] = useState(entry?.memo ?? "");
   const [note, setNote] = useState(entry?.note ?? "");
   const [mapUrl, setMapUrl] = useState(entry?.mapUrl ?? "");
@@ -124,6 +131,17 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         : null;
 
   const categories = ledger.categories.filter((category) => category.kind === kind);
+  // 메모에 예매·예약이 보이면 방문일 줄을 자동으로 펼친다. 사용자가 접은 뒤에는 다시 열지 않는다.
+  const showVisitDate = visitOpen || (BOOKING_MEMO_RE.test(memo) && !visitCollapsed);
+  const toggleVisitDate = () => {
+    if (showVisitDate) {
+      setVisitOpen(false);
+      setVisitCollapsed(true);
+      return;
+    }
+    setVisitOpen(true);
+    setVisitCollapsed(false);
+  };
 
   // 새 기록을 쓸 때만 자주 쓰는 내역을 칩으로 보여 준다.
   const { data: suggestions = [] } = useQuery({
@@ -176,6 +194,8 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
         kind,
         amount: Number(amount),
         categoryId,
+        // 예매(결제)일과 실제로 간 날이 다를 때만 채운다. 입금에는 방문일이 없다.
+        visitDate: kind === "expense" ? visitDate : "",
         memo: memo.trim(),
         note: note.trim(),
         // 지도 링크는 지출에만 둔다.
@@ -350,6 +370,44 @@ const EntryForm = ({ ledger, defaultDate, entry, onOpenChange }: Omit<Props, "op
             />
           </div>
         </div>
+
+        {kind === "expense" && (
+          <div>
+            <button
+              type="button"
+              aria-expanded={showVisitDate}
+              aria-controls="ledger-visit-date-panel"
+              onClick={toggleVisitDate}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "sm" }),
+                "-ml-2 h-7 px-2 text-[12px] font-normal text-muted"
+              )}
+            >
+              예매했어요 (간 날이 달라요)
+            </button>
+            {showVisitDate && (
+              <div
+                id="ledger-visit-date-panel"
+                className="mt-1 rounded-xl bg-canvas-soft p-3"
+              >
+                <label
+                  className="block text-[12px] font-medium text-muted"
+                  htmlFor="ledger-visit-date"
+                >
+                  방문일
+                </label>
+                <Input
+                  id="ledger-visit-date"
+                  type="date"
+                  value={visitDate}
+                  onChange={(event) => setVisitDate(event.target.value)}
+                  className="mt-1"
+                />
+                <p className="mt-1 text-[11px] text-muted">비우면 결제일과 같아요.</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {kind === "expense" && (
           <div>

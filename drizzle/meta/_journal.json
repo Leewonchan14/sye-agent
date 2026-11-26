@@ -344,6 +344,13 @@
       "when": 1795655063978,
       "tag": "0049_abnormal_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795686665779,
+      "tag": "0050_right_tombstone",
+      "breakpoints": true
     }
   ]
 }

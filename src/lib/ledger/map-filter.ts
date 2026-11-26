@@ -91,7 +91,9 @@ const byVisits = (a: LedgerMapPlace, b: LedgerMapPlace) =>
   b.visits - a.visits || b.lastDate.localeCompare(a.lastDate);
 
 const byRecent = (a: LedgerMapPlace, b: LedgerMapPlace) =>
-  b.lastDate.localeCompare(a.lastDate) || b.visits - a.visits;
+  // 예정만 있는 곳도 마지막으로 간 날(없으면 가장 이른 예정일)로 줄을 세운다.
+  (b.lastDate || b.nextDate || "").localeCompare(a.lastDate || a.nextDate || "") ||
+  b.visits - a.visits;
 
 /**
  * 별점 높은 순. 평균이 같으면 리뷰가 많은 곳을 위에 둬, 리뷰 하나짜리 5점이
