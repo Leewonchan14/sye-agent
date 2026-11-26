@@ -128,7 +128,7 @@ export const DaySheet = ({
 
               <div className="space-y-2">
                 {data.events.length === 0 ? (
-                  <p className="py-6 text-center text-[12px] text-muted">
+                  <p className="py-2 text-center text-[11px] text-muted">
                     이 날은 일정이 없어요
                   </p>
                 ) : (

@@ -125,7 +125,7 @@ export const DiaryComments = ({ diary, className }: Props) => {
                     data-testid="diary-comment-delete"
                     disabled={deleteComment.isPending}
                     onClick={() => handleDelete(comment)}
-                    className="-my-1 ml-auto shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-canvas-card hover:text-ink"
+                    className="-my-1.5 -mr-1.5 ml-auto shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-canvas-card hover:text-ink"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
