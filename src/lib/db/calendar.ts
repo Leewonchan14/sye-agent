@@ -34,6 +34,7 @@ import type {
   CalendarSettings,
   CalendarTemplate,
   CalendarViewer,
+  DiaryComment,
   DiaryPhoto,
   LunarDate,
 } from "@/lib/calendar/types";
@@ -84,6 +85,9 @@ const MINUTE_STEPS = new Set([1, 5, 10, 15, 30, 60]);
 const MAX_PHOTOS = 4;
 const MAX_PHOTO_JSON_LENGTH = 3_500_000;
 const MAX_DIARY_BODY = 10_000;
+const MAX_COMMENTS = 500;
+const MAX_COMMENT_ID = 64;
+const MAX_COMMENT_BODY = 2_000;
 
 type SettingsRow = typeof schema.calendarSettings.$inferSelect;
 type LabelRow = typeof schema.calendarLabels.$inferSelect;
@@ -168,6 +172,7 @@ const toCalendarDiary = (row: DiaryRow): CalendarDiary => ({
   author: row.author as CalendarViewer,
   body: row.body,
   photos: row.photos,
+  comments: row.comments ?? [],
   createdAt: toIso(row.createdAt),
   updatedAt: toIso(row.updatedAt),
 });
@@ -357,6 +362,39 @@ const normalizePhotos = (value: unknown): DiaryPhoto[] => {
     throw new CalendarError("사진 용량이 너무 커요.");
   }
   return photos;
+};
+
+const normalizeComments = (value: unknown): DiaryComment[] => {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new CalendarError("댓글 목록이 올바르지 않아요.");
+  if (value.length > MAX_COMMENTS) {
+    throw new CalendarError("댓글은 최대 500개까지 등록할 수 있어요.");
+  }
+  const comments: DiaryComment[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) {
+      throw new CalendarError("댓글 정보가 올바르지 않아요.");
+    }
+    const comment = item as Record<string, unknown>;
+    if (
+      typeof comment.id !== "string" ||
+      comment.id.length > MAX_COMMENT_ID ||
+      typeof comment.body !== "string" ||
+      !comment.body ||
+      comment.body.length > MAX_COMMENT_BODY ||
+      typeof comment.createdAt !== "string" ||
+      Number.isNaN(Date.parse(comment.createdAt))
+    ) {
+      throw new CalendarError("댓글 정보가 올바르지 않아요.");
+    }
+    comments.push({
+      id: comment.id,
+      author: normalizeAuthor(comment.author),
+      body: comment.body,
+      createdAt: comment.createdAt,
+    });
+  }
+  return comments;
 };
 
 const normalizeDates = (raw: unknown, startDate: string): string[] => {
@@ -961,14 +999,21 @@ export const upsertCalendarDiary = async (
     throw new CalendarError("일기 본문은 10,000자 이하여야 해요.");
   }
   const photos = normalizePhotos(input.photos);
+  const comments =
+    input.comments === undefined ? undefined : normalizeComments(input.comments);
   const now = kst().toDate();
 
   const [row] = await getDb()
     .insert(schema.calendarDiaries)
-    .values({ date, author, body, photos, updatedAt: now })
+    .values({ date, author, body, photos, comments: comments ?? [], updatedAt: now })
     .onConflictDoUpdate({
       target: [schema.calendarDiaries.date, schema.calendarDiaries.author],
-      set: { body, photos, updatedAt: now },
+      set: {
+        body,
+        photos,
+        updatedAt: now,
+        ...(comments !== undefined ? { comments } : {}),
+      },
     })
     .returning();
   return toCalendarDiary(row);

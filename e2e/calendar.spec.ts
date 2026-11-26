@@ -517,6 +517,72 @@ test.describe("우리 캘린더", () => {
     );
   });
 
+  test("DIA-09 일기 댓글이 표시되고 편집기 저장 후에도 남는다", async ({
+    page,
+    request,
+  }) => {
+    const comments = [
+      {
+        id: "comment-1",
+        author: "wonchan",
+        body: "첫 댓글",
+        createdAt: "2026-04-03T10:00:00+09:00",
+      },
+      {
+        id: "comment-2",
+        author: "yeeun",
+        body: "두 번째 댓글",
+        createdAt: "2026-04-03T11:30:00+09:00",
+      },
+    ];
+    const created = await request.post("/api/calendar/diaries", {
+      headers: headers(token),
+      data: {
+        date: today,
+        author: "wonchan",
+        body: "댓글 테스트 일기",
+        photos: [],
+        comments,
+      },
+    });
+    expect(created.status(), await created.text()).toBe(200);
+
+    await openCalendar(page);
+    await openTodaySheet(page);
+    const sheetComments = page.getByTestId("day-sheet").getByTestId("diary-comments");
+    await expect(sheetComments).toContainText("댓글 2");
+    await expect(sheetComments.getByTestId("diary-comment")).toHaveCount(2);
+    await expect(sheetComments).toContainText("첫 댓글");
+    await expect(sheetComments).toContainText("두 번째 댓글");
+
+    // 편집기는 comments 없이 저장한다. 기존 댓글은 지워지지 않아야 한다.
+    await page
+      .getByTestId("day-sheet")
+      .getByRole("button", { name: "일기", exact: true })
+      .click();
+    await expect(page.getByTestId("diary-dialog")).toBeVisible();
+    await page.getByTestId("field-diary-body").fill("댓글 테스트 일기 수정");
+    await page.getByTestId("btn-save-diary").click();
+    await expect(page.getByTestId("diary-dialog")).toBeHidden();
+
+    const day = await apiGet<{
+      diaries: Array<{ author: string; body: string; comments: Array<{ body: string }> }>;
+    }>(request, token, `/api/calendar/diaries?date=${today}`);
+    const diary = day.diaries.find((item) => item.author === "wonchan");
+    expect(diary?.body).toBe("댓글 테스트 일기 수정");
+    expect(diary?.comments.map((comment) => comment.body)).toEqual([
+      "첫 댓글",
+      "두 번째 댓글",
+    ]);
+
+    await page.goto("/calendar/diary");
+    const dailyComments = page
+      .getByTestId("diary-page-daily")
+      .getByTestId("diary-comments");
+    await expect(dailyComments.getByTestId("diary-comment")).toHaveCount(2);
+    await expect(dailyComments).toContainText("첫 댓글");
+  });
+
   test("CAL-10 검색과 범위 필터, 결과에서 날짜 시트 열기", async ({ page, request }) => {
     const date = addDays(today, 4);
     await createEvent(request, token, {

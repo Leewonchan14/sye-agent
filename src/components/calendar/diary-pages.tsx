@@ -7,6 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Stepper } from "@/components/calendar/calendar-ui";
+import { DiaryComments } from "@/components/calendar/diary-comments";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthStore } from "@/lib/auth-store";
@@ -179,6 +180,7 @@ export const DiaryPages = () => {
                         ))}
                       </div>
                     )}
+                    <DiaryComments comments={diary.comments} />
                   </article>
                 ))
               )}
