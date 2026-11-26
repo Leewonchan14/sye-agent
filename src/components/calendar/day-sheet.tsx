@@ -196,11 +196,14 @@ export const DaySheet = ({
                 ) : (
                   <div className="space-y-2">
                     {data.diaries.map((diary) => (
-                      <div key={diary.id} className="space-y-1.5">
+                      <div
+                        key={diary.id}
+                        className="rounded-xl border border-hairline bg-surface p-2.5"
+                      >
                         <button
                           type="button"
                           onClick={() => onOpenDiary(data.date)}
-                          className="w-full rounded-xl border border-hairline bg-surface p-2.5 text-left transition-colors hover:bg-canvas-soft/60"
+                          className="block w-full rounded-lg text-left transition-colors hover:bg-canvas-soft/60"
                         >
                           <span className="text-[11px] font-medium text-ink">
                             {VIEWER_NAME[diary.author]}
@@ -226,7 +229,10 @@ export const DaySheet = ({
                             </div>
                           )}
                         </button>
-                        <DiaryComments diary={diary} className="px-0.5" />
+                        <DiaryComments
+                          diary={diary}
+                          className="mt-2.5 border-t border-hairline pt-2.5"
+                        />
                       </div>
                     ))}
                   </div>

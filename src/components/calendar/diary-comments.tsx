@@ -5,7 +5,6 @@ import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Segmented } from "@/components/calendar/calendar-ui";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,12 +17,6 @@ import { kst } from "@/lib/kst";
 import { cn } from "@/lib/utils";
 
 const AUTHORS = ["wonchan", "yeeun"] as const;
-
-const AUTHOR_OPTIONS = AUTHORS.map((key) => ({
-  value: key,
-  label: VIEWER_NAME[key],
-  testId: `diary-comment-author-${key}`,
-}));
 
 interface Props {
   diary: Pick<CalendarDiary, "id" | "date" | "comments">;
@@ -79,83 +72,93 @@ export const DiaryComments = ({ diary, className }: Props) => {
 
   return (
     <>
-      <div
-        data-testid="diary-comments"
-        className={cn(
-          "mt-2 rounded-xl border border-hairline bg-canvas-soft/50 p-2.5",
-          className
-        )}
-      >
-        <p className="text-[11px] font-semibold text-ink">댓글 {diary.comments.length}</p>
+      <div data-testid="diary-comments" className={className}>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold text-ink">
+            댓글 {diary.comments.length}
+          </p>
+          <div
+            role="group"
+            aria-label="댓글 작성자"
+            className="flex items-center gap-0.5 rounded-md border border-hairline p-0.5"
+          >
+            {AUTHORS.map((key) => {
+              const selected = key === author;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={selected}
+                  data-testid={`diary-comment-author-${key}`}
+                  onClick={() => setAuthor(key)}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                    selected
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted hover:text-ink"
+                  )}
+                >
+                  {VIEWER_NAME[key]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {diary.comments.length > 0 && (
-          <div className="mt-1.5 space-y-1.5">
+          <div className="mt-2 space-y-2">
             {diary.comments.map((comment) => (
-              <div
-                key={comment.id}
-                data-testid="diary-comment"
-                className="flex items-start gap-1"
-              >
-                <div className="min-w-0 flex-1">
+              <div key={comment.id} data-testid="diary-comment">
+                <div className="flex items-start justify-between gap-1">
                   <p className="text-[10px] text-muted">
                     {VIEWER_NAME[comment.author]} ·{" "}
                     {kst(comment.createdAt).format("M.D HH:mm")}
                   </p>
-                  <p className="mt-0.5 text-[12px] leading-snug whitespace-pre-wrap text-body">
-                    {comment.body}
-                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="댓글 삭제"
+                    data-testid="diary-comment-delete"
+                    disabled={deleteComment.isPending}
+                    onClick={() => handleDelete(comment)}
+                    className="-my-1 -mr-1"
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label="댓글 삭제"
-                  data-testid="diary-comment-delete"
-                  disabled={deleteComment.isPending}
-                  onClick={() => handleDelete(comment)}
-                >
-                  <Trash2 />
-                </Button>
+                <p className="mt-0.5 text-[12px] leading-snug whitespace-pre-wrap text-body">
+                  {comment.body}
+                </p>
               </div>
             ))}
           </div>
         )}
-        <div className="mt-2 space-y-1.5">
-          <Segmented
-            ariaLabel="댓글 작성자"
-            options={AUTHOR_OPTIONS}
-            value={author}
-            onChange={setAuthor}
-            className="bg-surface"
+        <div className="mt-2 flex items-end gap-1.5">
+          <Textarea
+            rows={1}
+            data-testid="diary-comment-input"
+            placeholder="댓글을 남겨 보세요"
+            maxLength={2000}
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              if (event.nativeEvent.isComposing) return;
+              if (event.shiftKey) return;
+              event.preventDefault();
+              submit();
+            }}
+            className="field-sizing-content max-h-24 min-h-8 min-w-0 flex-1 resize-none text-[12px]"
           />
-          <div className="flex items-end gap-1.5">
-            <div className="min-w-0 flex-1">
-              <Textarea
-                rows={1}
-                data-testid="diary-comment-input"
-                placeholder="댓글을 남겨 보세요"
-                maxLength={2000}
-                value={body}
-                onChange={(event) => setBody(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  if (event.nativeEvent.isComposing) return;
-                  if (event.shiftKey) return;
-                  event.preventDefault();
-                  submit();
-                }}
-                className="field-sizing-content max-h-24 min-h-8 text-[12px]"
-              />
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              data-testid="diary-comment-submit"
-              disabled={!body.trim() || addComment.isPending}
-              onClick={submit}
-            >
-              등록
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            data-testid="diary-comment-submit"
+            disabled={!body.trim() || addComment.isPending}
+            onClick={submit}
+          >
+            등록
+          </Button>
         </div>
       </div>
       {dialog}
